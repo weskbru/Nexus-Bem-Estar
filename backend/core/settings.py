@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from datetime import timedelta
 from decouple import config
 
@@ -55,11 +56,11 @@ WSGI_APPLICATION = 'backend.core.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='sis_bem_estar'),
-        'USER': config('DB_USER', default='postgres'),
-        'PASSWORD': config('DB_PASSWORD', default=''),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
+        'NAME': os.getenv('DB_NAME', 'sis_bem_estar'),
+        'USER': os.getenv('DB_USER', 'postgres'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'sua-senha-aqui'),
+        'HOST': os.getenv('DB_HOST', 'db'),  # 'db' para Docker, 'localhost' para local
+        'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
 

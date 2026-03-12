@@ -1,0 +1,66 @@
+📄 Documentação de Arquitetura e Modelagem de Dados: Módulo de Agendamentos
+
+Visão Geral do Banco de Dados
+
+O sistema utiliza PostgreSQL. O banco de dados principal chama-se sis_bem_estar. Todas as tabelas deste módulo estão isoladas dentro do schema bem_estar.
+⚠️ É obrigatório que todas as consultas (queries) no backend especifiquem o schema (ex: SELECT * FROM bem_estar.agendamentos).
+
+A arquitetura foi desenhada para garantir a integridade das regras de negócio diretamente na base de dados, minimizando a necessidade de validações complexas no código.
+
+🔐 1. Autenticação e Tabela bem_estar.usuarios
+
+O sistema não gere palavras-passe localmente. A autenticação oficial deve ser feita via LDAP/Active Directory da empresa (Single Sign-On). A tabela de usuários serve apenas para controle de perfis de acesso e relacionamento com os agendamentos.
+
+Fluxo Esperado do Backend (Just-In-Time Provisioning):
+
+O usuário tenta o login com E-mail e Senha corporativos na interface.
+
+A API valida as credenciais contra o servidor LDAP da empresa. Se falhar, retorna erro 401 Unauthorized.
+
+Se o LDAP aprovar, a API faz um SELECT na tabela bem_estar.usuarios à procura daquele email.
+
+Se não existir: A API deve criar o registo de forma silenciosa e automática (inserindo Nome, E-mail e definindo o perfil padrão como 'colaborador').
+
+Se existir (ou após criar): A API gera o Token de sessão (ex: JWT) com o ID interno e o Perfil (admin ou colaborador) e devolve ao front-end.
+
+📅 2. Tabela bem_estar.eventos (A Configuração Matriz)
+
+Esta tabela armazena as regras gerais de um dia de atividades (ex: "Massoterapia - 24/05").
+
+Responsabilidade do Backend: Quando o endpoint de criação de evento for chamado, a API receberá os parâmetros da tela de administração (horário de início, término e a duração da sessão).
+
+Comunicação: O campo ev_corpo_email_convite armazenará o texto digitado pelo administrador. A API precisará ler este campo posteriormente para processar o disparo de notificações.
+
+🕒 3. Tabela bem_estar.slots_horario (Geração de Janelas de Tempo)
+
+Esta tabela fraciona o evento principal em horários agendáveis (as vagas).
+
+Responsabilidade do Backend (Geração): O banco de dados não cria as janelas de tempo automaticamente. Ao inserir um novo evento, o código backend deve calcular matematicamente os intervalos (usando o início, término e duração) e fazer um bulk insert (inserção em massa) nesta tabela, criando uma linha para cada horário disponível (ex: 09:00, 09:15, 09:30).
+
+Controle de Vagas (Overbooking): A tabela possui uma restrição CHECK (sl_vagas_ocupadas <= sl_vagas_totais). O backend deve incrementar o campo sl_vagas_ocupadas a cada novo agendamento. Se houver tentativa de estourar o limite, o banco rejeitará a transação de forma nativa.
+
+🤝 4. Tabela bem_estar.agendamentos e Regras de Negócio
+
+Esta é a tabela transacional onde a reserva de horário acontece. As chaves estrangeiras ag_colaborador_id e ag_agendado_por_admin_id estão configuradas com ON DELETE SET NULL. Isso garante que, se um utilizador for apagado do sistema no futuro, o histórico de relatórios de agendamentos não será perdido.
+
+Aqui residem as duas regras de negócio mais críticas, resolvidas em nível de banco de dados:
+
+Regra A: Limite de 1 Agendamento por Dia (Proteção de Agenda)
+
+Como o banco age: Existe um índice UNIQUE ag_colaborador_id, ag_data_agendamento) WHERE ag_colaborador_id IS NOT NULL.
+
+Como o backend deve lidar: Se um utilizador logado tentar agendar duas massagens no mesmo dia (mesmo que em horários diferentes), o banco lançará um erro de Unique Constraint Violation. O backend deve capturar este erro específico do PostgreSQL e retornar um Status 400 Bad Request com uma mensagem amigável para a interface (ex: "Você já possui um agendamento para esta data").
+
+Regra B: Agendamentos Manuais pelo Admin (Público Externo/Limpeza)
+
+O Cenário: O administrador precisa agendar horários para pessoas que não possuem login na rede corporativa/LDAP (ex: equipa de limpeza), podendo agendar várias pessoas para a mesma data.
+
+Como o backend deve lidar: A API deve aceitar um payload diferenciado quando a ação vier de um perfil admin.
+
+Para registar o convidado sem disparar o bloqueio de "1 por dia", a API deve enviar o campo ag_colaborador_id como NULL.
+
+O nome do prestador de serviço deve ser salvo no campo ag_nome_convidado_externo.
+
+O ID do administrador que realizou a ação deve ser salvo em ag_agendado_por_admin_id para auditoria.
+
+Por que funciona: O índice do banco é parcial. Ele ignora a verificação de duplicidade quando o ID do colaborador é nulo, permitindo múltiplos agendamentos de terceiros no mesmo dia sem travar a operação.
