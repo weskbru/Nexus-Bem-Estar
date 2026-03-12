@@ -1,0 +1,30 @@
+{
+  "name": "agenda-bem-estar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@google/genai": "^1.17.0",
+    "lucide-react": "^0.553.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-router-dom": "^7.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.11",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "9.39.1",
+    "tailwindcss": "4.1.11",
+    "typescript": "5.9.3",
+    "vite": "^6.1.0"
+  }
+}

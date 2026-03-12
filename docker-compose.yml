@@ -1,0 +1,61 @@
+services:
+
+  # ─── Banco de dados ───────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: sis_bem_estar_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-sis_bem_estar}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-sis_bem_estar}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend (Django) ─────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: sis_bem_estar_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py criar_admin &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  # ─── Frontend (Vite + React) ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: sis_bem_estar_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
