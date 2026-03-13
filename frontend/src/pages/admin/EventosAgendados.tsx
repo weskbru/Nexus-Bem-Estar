@@ -72,6 +72,14 @@ interface ConfirmDeleteProps {
   loading: boolean;
 }
 
+interface ConfirmActionProps {
+  evento: EventoDTO;
+  tipo: 'emails' | 'encerrar';
+  loading: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
 function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: ConfirmDeleteProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
@@ -109,6 +117,66 @@ function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: ConfirmDel
               </svg>
             )}
             Excluir
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmActionModal({ evento, tipo, loading, onConfirm, onCancel }: ConfirmActionProps) {
+  const titulo = tipo === 'emails' ? 'Enviar e-mails' : 'Encerrar evento';
+  const descricao = tipo === 'emails'
+    ? 'Deseja enviar e-mails para os colaboradores sobre este evento?'
+    : 'Deseja encerrar este evento? Após encerrar, ele não ficará mais disponível para novos agendamentos.';
+  const botao = tipo === 'emails' ? 'Enviar e-mails' : 'Encerrar evento';
+  const botaoClasse = tipo === 'emails'
+    ? 'bg-blue-600 hover:bg-blue-700'
+    : 'bg-amber-600 hover:bg-amber-700';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900">{titulo}</h3>
+              <p className="text-sm text-slate-500">Confirme a ação antes de continuar.</p>
+            </div>
+          </div>
+          <button onClick={onCancel} className="text-slate-400 hover:text-slate-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <p className="text-sm text-slate-700 mb-2">{descricao}</p>
+        <p className="text-sm text-slate-500 mb-6">
+          Evento: <span className="font-semibold text-slate-700">"{evento.titulo}"</span>
+        </p>
+
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${botaoClasse}`}
+          >
+            {loading && (
+              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+            )}
+            {botao}
           </button>
         </div>
       </div>
@@ -516,6 +584,11 @@ function SkeletonCard() {
 
 interface EventCardProps {
   evento: EventoDTO;
+  onOpen: () => void;
+}
+
+interface EventActionsModalProps {
+  evento: EventoDTO;
   isActing: boolean;
   isEmailActing: boolean;
   onPublicar: () => void;
@@ -524,13 +597,11 @@ interface EventCardProps {
   onEnviarEmails: () => void;
   onRegistrar: () => void;
   onListaPresenca: () => void;
+  onClose: () => void;
 }
 
-function EventCard({ evento, isActing, isEmailActing, onPublicar, onEncerrar, onDelete, onEnviarEmails, onRegistrar, onListaPresenca }: EventCardProps) {
-  const emoji = TIPO_EMOJI[evento.tipo] ?? '✨';
-  const gradient = TIPO_GRADIENT[evento.tipo] ?? 'from-blue-400 to-blue-600';
+function EventActionsModal({ evento, isActing, isEmailActing, onPublicar, onEncerrar, onDelete, onEnviarEmails, onRegistrar, onListaPresenca, onClose }: EventActionsModalProps) {
   const status = normalizeStatus(evento.status);
-  const statusCfg = STATUS_CONFIG[status];
 
   const Spinner = () => (
     <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -540,7 +611,93 @@ function EventCard({ evento, isActing, isEmailActing, onPublicar, onEncerrar, on
   );
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-slate-900">Ações do evento</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <p className="text-sm text-slate-500 mb-4 truncate">{evento.titulo}</p>
+
+        <div className="space-y-2">
+          {status === 'RASCUNHO' && (
+            <button onClick={onPublicar} disabled={isActing}
+              className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+              {isActing ? <Spinner /> : <CheckCircle2 className="w-4 h-4" />}
+              {isActing ? 'Publicando...' : 'Publicar Evento'}
+            </button>
+          )}
+
+          {status === 'ATIVO' && (
+            <>
+              <button onClick={onRegistrar}
+                className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+                <User className="w-4 h-4" />
+                Registrar Participante
+              </button>
+              <button onClick={onListaPresenca}
+                className="w-full py-2 px-4 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+                <ClipboardList className="w-4 h-4" />
+                Lista de Presença
+              </button>
+              <button onClick={onEnviarEmails} disabled={isEmailActing || isActing}
+                className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+                {isEmailActing ? <Spinner /> : <Mail className="w-4 h-4" />}
+                {isEmailActing ? 'Enviando...' : 'Enviar E-mails'}
+              </button>
+              <button onClick={onEncerrar} disabled={isActing || isEmailActing}
+                className="w-full py-2 px-4 bg-slate-100 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60 text-slate-600 rounded-lg font-medium text-sm border border-slate-200 hover:border-amber-200 transition-colors flex items-center justify-center gap-2">
+                {isActing ? <Spinner /> : <EyeOff className="w-4 h-4" />}
+                {isActing ? 'Encerrando...' : 'Encerrar Evento'}
+              </button>
+            </>
+          )}
+
+          {status === 'ENCERRADO' && (
+            <>
+              <button onClick={onListaPresenca}
+                className="w-full py-2 px-4 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+                <ClipboardList className="w-4 h-4" />
+                Lista de Presença
+              </button>
+              <div className="w-full py-2 px-4 bg-slate-50 text-slate-400 rounded-lg font-medium text-sm text-center border border-slate-200">
+                Encerrado
+              </div>
+            </>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Link to={`/admin/eventos/${evento.id}/editar`} className="flex-1">
+              <button className="w-full py-1.5 px-3 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5">
+                <Pencil className="w-3.5 h-3.5" />
+                Editar
+              </button>
+            </Link>
+            <button onClick={onDelete}
+              className="py-1.5 px-3 border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-400 rounded-lg text-sm transition-colors flex items-center gap-1.5">
+              <Trash2 className="w-3.5 h-3.5" />
+              Excluir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EventCard({ evento, onOpen }: EventCardProps) {
+  const emoji = TIPO_EMOJI[evento.tipo] ?? '✨';
+  const gradient = TIPO_GRADIENT[evento.tipo] ?? 'from-blue-400 to-blue-600';
+  const status = normalizeStatus(evento.status);
+  const statusCfg = STATUS_CONFIG[status];
+
+  return (
+    <button
+      onClick={onOpen}
+      className="w-full text-left bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col hover:shadow-md hover:border-blue-200 transition-all"
+    >
       {/* Imagem / gradiente */}
       <div className={`relative h-44 bg-gradient-to-br ${gradient} flex items-center justify-center overflow-hidden`}>
         {evento.imagem_url ? (
@@ -589,71 +746,13 @@ function EventCard({ evento, isActing, isEmailActing, onPublicar, onEncerrar, on
           )}
         </div>
 
-        {/* Botão principal */}
-        <div className="mt-auto space-y-2">
-          {status === 'RASCUNHO' && (
-            <button onClick={onPublicar} disabled={isActing}
-              className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
-              {isActing ? <Spinner /> : <CheckCircle2 className="w-4 h-4" />}
-              {isActing ? 'Publicando...' : 'Publicar Evento'}
-            </button>
-          )}
-
-          {status === 'ATIVO' && (
-            <>
-              <button onClick={onRegistrar}
-                className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
-                <User className="w-4 h-4" />
-                Registrar Participante
-              </button>
-              <button onClick={onListaPresenca}
-                className="w-full py-2 px-4 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
-                <ClipboardList className="w-4 h-4" />
-                Lista de Presença
-              </button>
-              <button onClick={onEnviarEmails} disabled={isEmailActing || isActing}
-                className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
-                {isEmailActing ? <Spinner /> : <Mail className="w-4 h-4" />}
-                {isEmailActing ? 'Enviando...' : 'Enviar E-mails'}
-              </button>
-              <button onClick={onEncerrar} disabled={isActing || isEmailActing}
-                className="w-full py-2 px-4 bg-slate-100 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60 text-slate-600 rounded-lg font-medium text-sm border border-slate-200 hover:border-amber-200 transition-colors flex items-center justify-center gap-2">
-                {isActing ? <Spinner /> : <EyeOff className="w-4 h-4" />}
-                {isActing ? 'Encerrando...' : 'Encerrar Evento'}
-              </button>
-            </>
-          )}
-
-          {status === 'ENCERRADO' && (
-            <>
-              <button onClick={onListaPresenca}
-                className="w-full py-2 px-4 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
-                <ClipboardList className="w-4 h-4" />
-                Lista de Presença
-              </button>
-              <div className="w-full py-2 px-4 bg-slate-50 text-slate-400 rounded-lg font-medium text-sm text-center border border-slate-200">
-                Encerrado
-              </div>
-            </>
-          )}
-
-          {/* Editar / Excluir */}
-          <div className="flex gap-2">
-            <Link to={`/admin/eventos/${evento.id}/editar`} className="flex-1">
-              <button className="w-full py-1.5 px-3 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5">
-                <Pencil className="w-3.5 h-3.5" />
-                Editar
-              </button>
-            </Link>
-            <button onClick={onDelete}
-              className="py-1.5 px-3 border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-400 rounded-lg text-sm transition-colors flex items-center gap-1.5">
-              <Trash2 className="w-3.5 h-3.5" />
-              Excluir
-            </button>
+        <div className="mt-auto pt-2">
+          <div className="inline-flex items-center text-sm font-medium text-blue-600">
+            Ver ações do evento
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -672,6 +771,8 @@ export default function AdminEventos() {
   const [publishEmailStatus, setPublishEmailStatus] = useState<'sent' | 'no_users' | 'error'>('sent');
   const [registrarTarget, setRegistrarTarget] = useState<EventoDTO | null>(null);
   const [listaPresencaId, setListaPresencaId] = useState<number | null>(null);
+  const [actionTarget, setActionTarget] = useState<EventoDTO | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ evento: EventoDTO; tipo: 'emails' | 'encerrar' } | null>(null);
 
   useEffect(() => { carregarEventos(); }, []);
 
@@ -818,17 +919,46 @@ export default function AdminEventos() {
             <EventCard
               key={evento.id}
               evento={evento}
-              isActing={actionLoadingId === evento.id}
-              isEmailActing={emailLoadingId === evento.id}
-              onPublicar={() => handlePublicar(evento)}
-              onEncerrar={() => handleEncerrar(evento)}
-              onDelete={() => setDeleteTarget(evento)}
-              onEnviarEmails={() => handleEnviarEmails(evento)}
-              onRegistrar={() => setRegistrarTarget(evento)}
-              onListaPresenca={() => setListaPresencaId(evento.id)}
+              onOpen={() => setActionTarget(evento)}
             />
           ))}
         </div>
+      )}
+
+      {actionTarget && (
+        <EventActionsModal
+          evento={actionTarget}
+          isActing={actionLoadingId === actionTarget.id}
+          isEmailActing={emailLoadingId === actionTarget.id}
+          onPublicar={() => handlePublicar(actionTarget)}
+          onEncerrar={() => { setConfirmAction({ evento: actionTarget, tipo: 'encerrar' }); setActionTarget(null); }}
+          onDelete={() => { setDeleteTarget(actionTarget); setActionTarget(null); }}
+          onEnviarEmails={() => { setConfirmAction({ evento: actionTarget, tipo: 'emails' }); setActionTarget(null); }}
+          onRegistrar={() => { setRegistrarTarget(actionTarget); setActionTarget(null); }}
+          onListaPresenca={() => { setListaPresencaId(actionTarget.id); setActionTarget(null); }}
+          onClose={() => setActionTarget(null)}
+        />
+      )}
+
+      {confirmAction && (
+        <ConfirmActionModal
+          evento={confirmAction.evento}
+          tipo={confirmAction.tipo}
+          loading={
+            confirmAction.tipo === 'emails'
+              ? emailLoadingId === confirmAction.evento.id
+              : actionLoadingId === confirmAction.evento.id
+          }
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={async () => {
+            if (confirmAction.tipo === 'emails') {
+              await handleEnviarEmails(confirmAction.evento);
+            } else {
+              await handleEncerrar(confirmAction.evento);
+            }
+            setConfirmAction(null);
+          }}
+        />
       )}
 
       {deleteTarget && (
