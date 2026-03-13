@@ -1,9 +1,111 @@
-# 🌟 Sis Bem-Estar - Sistema de Agendamento de Eventos Bem-Estar
+# Sis Bem-Estar - Sistema de Agendamento de Eventos Bem-Estar
 
-Uma plataforma moderna e intuitiva para gerenciar e agendar eventos de bem-estar como massagem, yoga, meditação, nutrição, pilates e acupuntura. O sistema permite que administradores criem eventos e enviem convites aos colaboradores, que por sua vez podem confirmar sua participação através de um link de acesso seguro.
+Uma plataforma para gerenciar e agendar eventos de bem-estar como massagem, yoga, meditação, nutrição, pilates e acupuntura. Administradores criam eventos e enviam convites aos colaboradores, que confirmam a participação via link seguro.
 
 ---
-Fluxo agora corrigido:
+
+## Primeiros Passos (novo desenvolvedor)
+
+Cada desenvolvedor roda o projeto localmente com seu próprio banco de dados. Siga os passos abaixo **uma única vez** após clonar o repositório.
+
+### 1. Pré-requisitos
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e rodando
+
+### 2. Clone o repositório
+
+```bash
+git clone <url-do-repositorio>
+cd sis-bem-estar
+```
+
+### 3. Crie o arquivo `.env` na raiz do projeto
+
+Crie o arquivo `.env` copiando o exemplo abaixo:
+
+```env
+SECRET_KEY=django-insecure-chave-local-dev
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+
+DB_NAME=sis_bem_estar
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_HOST=db
+DB_PORT=5432
+
+FRONTEND_URL=http://localhost:3000
+
+USE_EMAIL=False
+DEFAULT_FROM_EMAIL=noreply@aeb.gov.br
+```
+
+### 4. Suba os containers
+
+```bash
+docker compose up -d
+```
+
+> O comando `docker compose up` executa automaticamente:
+> - `python manage.py migrate` — aplica as migrações no banco
+> - `python manage.py criar_admin` — cria os usuários padrão abaixo
+
+### 5. Usuários criados automaticamente
+
+| Perfil | E-mail | Senha | Acesso |
+|---|---|---|---|
+| Admin de Eventos | `admin@aeb.gov.br` | `adminaeb` | Cria e gerencia eventos |
+| SuperAdmin (CTI) | `superadmin@aeb.gov.br` | `aeb@123` | Gerencia admins + tudo acima |
+
+### 6. Acesse o sistema
+
+| Serviço | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8001/api/ |
+
+---
+
+### Comandos úteis do dia a dia
+
+```bash
+# Subir os containers
+docker compose up -d
+
+# Parar os containers
+docker compose down
+
+# Ver logs do backend
+docker compose logs -f backend
+
+# Ver logs do frontend
+docker compose logs -f frontend
+
+# Acessar o shell Django
+docker compose exec backend python manage.py shell
+
+# Criar novas migrações após alterar models
+docker compose exec backend python manage.py makemigrations
+docker compose exec backend python manage.py migrate
+```
+
+### Redefinir senha de um usuário (se necessário)
+
+```bash
+docker compose exec backend python manage.py shell -c "from backend.models.models import Usuario; u = Usuario.objects.get(email='email@aeb.gov.br'); u.set_password('nova-senha'); u.save(); print('OK')"
+```
+
+### Adicionar um novo Admin de Eventos
+
+1. Faça login como **SuperAdmin** (`superadmin@aeb.gov.br`)
+2. Acesse **Gestão de Usuários** no menu lateral
+3. Busque o colaborador pelo nome ou e-mail
+4. Clique em **Promover a Admin**
+5. O usuário é criado com senha padrão `aeb@2026` e já pode logar
+
+---
+
+Fluxo de rotas:
 
 Rota	Página
 /	Login do colaborador (e-mail simples)
