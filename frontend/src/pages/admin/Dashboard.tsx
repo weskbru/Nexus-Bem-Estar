@@ -1,78 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import Relatorios from './Relatorios';
 import {
   Plus,
   Calendar,
   Users,
   TrendingUp,
-  MoreVertical,
   BarChart3,
 } from 'lucide-react';
-
-// ─── Tipos ───────────────────────────────────────────────────────────────────
-
-type SlotStatus = 'DISPONIVEL' | 'OCUPADO' | 'CANCELADO';
-
-interface Agendamento {
-  id: number;
-  colaborador_nome: string;
-  servico: string;
-  data_hora: string;
-  status: SlotStatus;
-}
 
 interface DashboardData {
   total_vagas: number;
   vagas_ocupadas: number;
   taxa_ocupacao: number;
-  agendamentos: Agendamento[];
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const STATUS_CONFIG: Record<SlotStatus, { label: string; className: string }> = {
-  DISPONIVEL: { label: 'Disponível', className: 'bg-slate-100 text-slate-700' },
-  OCUPADO:    { label: 'Confirmado', className: 'bg-emerald-100 text-emerald-700' },
-  CANCELADO:  { label: 'Cancelado',  className: 'bg-red-100 text-red-700' },
-};
-
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase();
-}
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-// ─── Skeleton ────────────────────────────────────────────────────────────────
-
-function SkeletonRow() {
-  return (
-    <tr className="animate-pulse">
-      <td className="px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-slate-200" />
-          <div className="h-3 w-28 bg-slate-200 rounded" />
-        </div>
-      </td>
-      <td className="px-6 py-4"><div className="h-3 w-36 bg-slate-200 rounded" /></td>
-      <td className="px-6 py-4"><div className="h-3 w-32 bg-slate-200 rounded" /></td>
-      <td className="px-6 py-4"><div className="h-5 w-20 bg-slate-200 rounded-full" /></td>
-      <td className="px-6 py-4 text-right"><div className="h-4 w-4 bg-slate-200 rounded ml-auto" /></td>
-    </tr>
-  );
 }
 
 function StatSkeleton() {
@@ -229,90 +169,15 @@ const taxa = data?.taxa_ocupacao ?? 0;
         )}
       </div>
 
-      {/* Tabela */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">Agendamentos Recentes</h2>
-          <a href="#" className="text-sm font-medium text-blue-600 hover:text-blue-700">
-            Ver todos
-          </a>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3 font-semibold">Paciente/Colaborador</th>
-                <th className="px-6 py-3 font-semibold">Serviço / Evento</th>
-                <th className="px-6 py-3 font-semibold">Data e Hora</th>
-                <th className="px-6 py-3 font-semibold">Status</th>
-                <th className="px-6 py-3 font-semibold text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
-              ) : data?.agendamentos?.length ? (
-                data.agendamentos.map((ag) => {
-                  const statusCfg = STATUS_CONFIG[ag.status] ?? {
-                    label: ag.status,
-                    className: 'bg-slate-100 text-slate-700',
-                  };
-                  return (
-                    <tr key={ag.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">
-                            {getInitials(ag.colaborador_nome)}
-                          </div>
-                          <span className="font-medium text-slate-900">{ag.colaborador_nome}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-600">{ag.servico}</td>
-                      <td className="px-6 py-4 text-slate-600 whitespace-nowrap">
-                        {formatDateTime(ag.data_hora)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusCfg.className}`}
-                        >
-                          {statusCfg.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button className="text-slate-400 hover:text-slate-600 transition-colors">
-                          <MoreVertical className="w-5 h-5" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate-400">
-                    Nenhum agendamento encontrado.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* Footer info */}
       <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-slate-500">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            32 Profissionais Online
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-blue-500" />
-            Sistema Operacional
-          </div>
-        </div>
         <div>Última atualização: hoje às 12:45</div>
       </div>
+
+      {/* Relatórios integrados ao Dashboard */}
+      <section className="mt-10 pt-8 border-t border-slate-200">
+        <Relatorios />
+      </section>
     </div>
   );
 }

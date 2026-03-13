@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, Award, Layers, FileText } from 'lucide-react';
+import { Download, Award, FileText } from 'lucide-react';
 import { adminDashboardApi, adminEventosApi, type EventoDTO, type AgendamentoDTO } from '../../services/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -37,36 +37,9 @@ function exportarCSV(eventos: EventoDTO[], agendamentos: AgendamentoDTO[]) {
   URL.revokeObjectURL(url);
 }
 
-const TIPO_COLORS: Record<string, string> = {
-  Massagem:    'bg-blue-500',
-  Yoga:        'bg-violet-500',
-  Meditação:   'bg-emerald-500',
-  Pilates:     'bg-pink-500',
-  Nutrição:    'bg-amber-500',
-  Acupuntura:  'bg-teal-500',
-  Outro:       'bg-slate-400',
-};
-
-function corParaTipo(tipo: string): string {
-  return TIPO_COLORS[tipo] ?? 'bg-slate-400';
-}
-
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
-
-function BarHorizontal({ label, valor, max, cor }: { label: string; valor: number; max: number; cor: string }) {
-  const pct = max > 0 ? (valor / max) * 100 : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm text-slate-600 w-28 shrink-0 truncate">{label}</span>
-      <div className="flex-1 bg-slate-100 rounded-full h-2.5">
-        <div className={`h-2.5 rounded-full transition-all duration-700 ${cor}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-sm font-semibold text-slate-800 w-6 text-right">{valor}</span>
-    </div>
-  );
-}
 
 function MesBar({ mes, valor, max }: { mes: string; valor: number; max: number }) {
   const pct = max > 0 ? Math.round((valor / max) * 100) : 0;
@@ -116,17 +89,6 @@ export default function Relatorios() {
 
   // ── Derivações analíticas ──────────────────────────────────────────────────
 
-  // Agrupamento por tipo
-  const porTipo = eventos.reduce<Record<string, { count: number; agendamentos: number }>>((acc, e) => {
-    const tipo = e.tipo || 'Outro';
-    if (!acc[tipo]) acc[tipo] = { count: 0, agendamentos: 0 };
-    acc[tipo].count++;
-    acc[tipo].agendamentos += e.total_agendamentos ?? 0;
-    return acc;
-  }, {});
-  const tiposOrdenados = Object.entries(porTipo).sort((a, b) => b[1].agendamentos - a[1].agendamentos);
-  const maxAgTipo = Math.max(1, ...tiposOrdenados.map(([, v]) => v.agendamentos));
-
   // Ranking de eventos por agendamentos
   const ranking = [...eventos]
     .sort((a, b) => (b.total_agendamentos ?? 0) - (a.total_agendamentos ?? 0))
@@ -174,43 +136,8 @@ export default function Relatorios() {
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{erro}</div>
       )}
 
-      {/* Linha 1: Tipo de evento + Distribuição por status */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* Engajamento por tipo */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <Layers className="w-4 h-4 text-blue-600" />
-            <h2 className="font-semibold text-slate-900">Engajamento por Tipo de Evento</h2>
-          </div>
-          {loading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-2.5 flex-1" />
-                  <Skeleton className="h-3 w-4" />
-                </div>
-              ))}
-            </div>
-          ) : tiposOrdenados.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">Nenhum evento cadastrado.</p>
-          ) : (
-            <div className="space-y-4">
-              {tiposOrdenados.map(([tipo, { agendamentos: ag }]) => (
-                <BarHorizontal
-                  key={tipo}
-                  label={tipo}
-                  valor={ag}
-                  max={maxAgTipo}
-                  cor={corParaTipo(tipo)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Distribuição por status */}
+      {/* Linha 1: Distribuição por status */}
+      <div className="grid grid-cols-1 gap-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-center gap-2 mb-5">
             <FileText className="w-4 h-4 text-violet-600" />

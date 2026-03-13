@@ -9,7 +9,6 @@ import Dashboard from './pages/admin/Dashboard';
 import AdminEventos from './pages/admin/EventosAgendados';
 import NovoEvento from './pages/admin/NovoEvento';
 import EditarEvento from './pages/admin/EditarEvento';
-import Relatorios from './pages/admin/Relatorios';
 import ColaboradorLayout from './layouts/ColaboradorLayout';
 import EventDetails from './pages/colaborador/EventDetails';
 import Confirmacao from './pages/colaborador/Confirmacao';
@@ -43,7 +42,6 @@ function App() {
             <Route path="agendamentos" element={<AdminEventos />} />
             <Route path="eventos/novo" element={<NovoEvento />} />
             <Route path="eventos/:id/editar" element={<EditarEvento />} />
-            <Route path="relatorios" element={<Relatorios />} />
           </Route>
 
           <Route
