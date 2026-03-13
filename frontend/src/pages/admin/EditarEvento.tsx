@@ -147,7 +147,6 @@ interface FormState {
   hora_fim: string;
   duracao_sessao: string;
   capacidade_por_horario: string;
-  nome_profissional: string;
   corpo_email: string;
 }
 
@@ -238,7 +237,7 @@ export default function EditarEvento() {
 
   const [form, setForm] = useState<FormState>({
     titulo: '', tipo: '', data: '', hora_inicio: '', hora_fim: '',
-    duracao_sessao: '30', capacidade_por_horario: '1', nome_profissional: '', corpo_email: '',
+    duracao_sessao: '30', capacidade_por_horario: '1', corpo_email: '',
   });
   const [erros, setErros] = useState<FormErrors>({});
   const [erroGeral, setErroGeral] = useState('');
@@ -259,7 +258,6 @@ export default function EditarEvento() {
           hora_fim:               evento.hora_fim.substring(0, 5),
           duracao_sessao:         String(evento.duracao_sessao),
           capacidade_por_horario: String(evento.capacidade_por_horario),
-          nome_profissional:      evento.nome_profissional,
           corpo_email:            evento.corpo_email ?? '',
         });
       })
@@ -296,8 +294,7 @@ export default function EditarEvento() {
       }
     }
     if (!form.capacidade_por_horario || Number(form.capacidade_por_horario) <= 0)
-                                   e.capacidade_por_horario = 'Informe a capacidade.';
-    if (!form.nome_profissional.trim()) e.nome_profissional = 'Nome do profissional é obrigatório.';
+                     e.capacidade_por_horario = 'Informe a capacidade.';
     setErros(e);
     if (Object.keys(e).length > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
     return Object.keys(e).length === 0;
@@ -312,12 +309,12 @@ export default function EditarEvento() {
       hora_fim:               form.hora_fim,
       duracao_sessao:         Number(form.duracao_sessao),
       capacidade_por_horario: Number(form.capacidade_por_horario),
-      nome_profissional:      form.nome_profissional.trim(),
       corpo_email:            form.corpo_email.trim(),
     };
   }
 
   async function handleSalvar() {
+    if (statusEvento.toUpperCase() === 'ENCERRADO') return;
     if (!validar()) return;
     setSalvando(true);
     setErroGeral('');
@@ -332,6 +329,7 @@ export default function EditarEvento() {
   }
 
   async function handleSalvarEPublicar() {
+    if (statusEvento.toUpperCase() === 'ENCERRADO') return;
     if (!validar()) return;
     setPublicando(true);
     setErroGeral('');
@@ -391,7 +389,36 @@ export default function EditarEvento() {
     );
   }
 
-  const isRascunho = statusEvento === 'RASCUNHO';
+  const normalizedStatus = statusEvento.toUpperCase() === 'PUBLICADO' ? 'ATIVO' : statusEvento.toUpperCase();
+  const isRascunho = normalizedStatus === 'RASCUNHO';
+  const isEncerrado = normalizedStatus === 'ENCERRADO';
+
+  if (isEncerrado) {
+    return (
+      <div className="max-w-3xl mx-auto mt-10">
+        <div className="flex items-center gap-3 mb-6">
+          <Link to="/admin/agendamentos">
+            <button className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Editar Evento</h1>
+            <p className="text-slate-500 text-sm">Eventos encerrados não podem ser editados.</p>
+          </div>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-amber-800 text-sm">
+          Este evento está encerrado. Para alterar informações, crie um novo evento.
+          <div className="mt-3">
+            <Link to="/admin/agendamentos" className="text-amber-900 font-semibold hover:underline">
+              Voltar para Agendamentos
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Formulário ───────────────────────────────────────────────────────────────
   return (
@@ -417,7 +444,7 @@ export default function EditarEvento() {
             statusEvento === 'RASCUNHO' ? 'bg-slate-100 text-slate-600' :
             'bg-amber-100 text-amber-700'
           }`}>
-            {statusEvento === 'ATIVO' ? 'Publicado' : statusEvento === 'RASCUNHO' ? 'Rascunho' : 'Encerrado'}
+            {normalizedStatus === 'ATIVO' ? 'Publicado' : normalizedStatus === 'RASCUNHO' ? 'Rascunho' : 'Encerrado'}
           </span>
         )}
       </div>
@@ -511,8 +538,8 @@ export default function EditarEvento() {
           </div>
         </div>
 
-        {/* Tipo + Profissional */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Tipo */}
+        <div className="mb-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Tipo de Atividade <span className="text-red-500">*</span>
@@ -523,17 +550,6 @@ export default function EditarEvento() {
               {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
             <FieldError msg={erros.tipo} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Profissional Responsável <span className="text-red-500">*</span>
-            </label>
-            <input type="text" value={form.nome_profissional}
-              onChange={e => update('nome_profissional', e.target.value)}
-              placeholder="Ex: Dra. Ana Lima"
-              className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.nome_profissional ? 'border-red-400' : 'border-slate-300'}`}
-            />
-            <FieldError msg={erros.nome_profissional} />
           </div>
         </div>
 

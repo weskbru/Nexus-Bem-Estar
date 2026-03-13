@@ -413,7 +413,6 @@ interface RegistrarParticipanteModalProps {
 
 function RegistrarParticipanteModal({ evento, onClose, onSuccess }: RegistrarParticipanteModalProps) {
   const [nome, setNome] = useState('');
-  const [matricula, setMatricula] = useState('');
   const [departamento, setDepartamento] = useState('');
   const [horarioId, setHorarioId] = useState<number | ''>('');
   const [salvando, setSalvando] = useState(false);
@@ -431,7 +430,6 @@ function RegistrarParticipanteModal({ evento, onClose, onSuccess }: RegistrarPar
       await adminEventosApi.registrarParticipanteManual(evento.id, {
         horario_id: horarioId as number,
         nome: nome.trim(),
-        matricula: matricula.trim(),
         departamento: departamento.trim(),
       });
       setSucesso(true);
@@ -456,7 +454,7 @@ function RegistrarParticipanteModal({ evento, onClose, onSuccess }: RegistrarPar
               <span className="font-medium">{nome}</span> foi adicionado ao evento com sucesso.
             </p>
             <div className="flex gap-3">
-              <button onClick={() => { setNome(''); setMatricula(''); setDepartamento(''); setHorarioId(''); setSucesso(false); }}
+              <button onClick={() => { setNome(''); setDepartamento(''); setHorarioId(''); setSucesso(false); }}
                 className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">
                 Registrar outro
               </button>
@@ -490,27 +488,15 @@ function RegistrarParticipanteModal({ evento, onClose, onSuccess }: RegistrarPar
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Matrícula</label>
-                  <input
-                    type="text"
-                    value={matricula}
-                    onChange={e => setMatricula(e.target.value)}
-                    placeholder="Opcional"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Departamento</label>
-                  <input
-                    type="text"
-                    value={departamento}
-                    onChange={e => setDepartamento(e.target.value)}
-                    placeholder="Opcional"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Setor</label>
+                <input
+                  type="text"
+                  value={departamento}
+                  onChange={e => setDepartamento(e.target.value)}
+                  placeholder="Opcional"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
 
               <div>
