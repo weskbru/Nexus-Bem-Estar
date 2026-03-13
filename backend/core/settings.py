@@ -121,3 +121,19 @@ DEFAULT_FROM_EMAIL = config(
 
 # URL base do frontend usada nos links de e-mail
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# Cache — Redis em produção, memória local em dev
+_REDIS_URL = os.getenv('REDIS_URL', '')
+if _REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': _REDIS_URL,
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }

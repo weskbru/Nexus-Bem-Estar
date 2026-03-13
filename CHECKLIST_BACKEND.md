@@ -1,535 +1,174 @@
-# 🔧 Checklist de Integração Backend
+# Documentação de Testes — Backend
 
-Este documento lista o que precisa ser implementado no backend Django para que o fluxo de email com token funcione completamente.
-
----
-
-## ✅ Checklist de Implementação
-
-### 1. Modelos (models.py)
-
-- [ ] **TokenAcesso** model criado
-```python
-class TokenAcesso(models.Model):
-    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    evento = models.ForeignKey(Evento, on_delete=models.CASCADE)
-    token = models.CharField(max_length=255, unique=True)
-    ativo = models.BooleanField(default=True)
-    data_expiracao = models.DateTimeField()
-    criado_em = models.DateTimeField(auto_now_add=True)
-    usado_em = models.DateTimeField(null=True, blank=True)
-    
-    class Meta:
-        unique_together = ('usuario', 'evento')
-```
-
-- [ ] **ConfirmacaoEvento** model criado/atualizado
-```python
-class ConfirmacaoEvento(models.Model):
-    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    evento = models.ForeignKey(Evento, on_delete=models.CASCADE)
-    confirmado = models.BooleanField(default=False)
-    data_confirmacao = models.DateTimeField(null=True, blank=True)
-    presenca = models.CharField(max_length=50, choices=[
-        ('confirmado', 'Confirmado'),
-        ('recusado', 'Recusado'),
-        ('pendente', 'Pendente')
-    ], default='pendente')
-    criado_em = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        unique_together = ('usuario', 'evento')
-```
-
-### 2. Serializers (serializers.py)
-
-- [ ] **TokenAcessoSerializer** implementado
-```python
-class TokenAcessoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TokenAcesso
-        fields = ('id', 'token', 'ativo', 'data_expiracao', 'criado_em')
-        read_only_fields = ('id', 'criado_em')
-```
-
-- [ ] **ConfirmacaoEventoSerializer** implementado
-```python
-class ConfirmacaoEventoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ConfirmacaoEvento
-        fields = ('id', 'usuario', 'evento', 'confirmado', 'presenca', 'data_confirmacao')
-```
-
-### 3. Views/ViewSets (views.py)
-
-#### Endpoint: Validar Token de Acesso
-- [ ] `GET /api/eventos/acesso-token/?token={token}`
-
-```python
-@api_view(['GET'])
-def acesso_via_token(request):
-    """
-    Valida token e retorna evento + email
-    GET /api/eventos/acesso-token/?token={token}
-    """
-    import hashlib
-    from django.utils import timezone
-    
-    token = request.query_params.get('token')
-    if not token:
-        return Response({'erro': 'Token obrigatório'}, status=400)
-    
-    # Hash do token recebido
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    
-    try:
-        # Buscar token no BD
-        token_obj = TokenAcesso.objects.get(
-            token=token_hash,
-            ativo=True
-        )
-        
-        # Validar expiração
-        if token_obj.data_expiracao < timezone.now():
-            token_obj.ativo = False
-            token_obj.save()
-            return Response({'erro': 'Token expirado'}, status=400)
-        
-        # Retornar dados
-        evento = token_obj.evento
-        return Response({
-            'evento': EventoSerializer(evento).data,
-            'email': token_obj.usuario.email,
-            'usuario_id': token_obj.usuario.id,
-            'evento_id': evento.id
-        })
-        
-    except TokenAcesso.DoesNotExist:
-        return Response({'erro': 'Token inválido'}, status=400)
-```
-
-#### Endpoint: Login via Token
-- [ ] `POST /api/auth/acesso/{token}/`
-
-```python
-@api_view(['POST'])
-def acesso_via_token_login(request, token):
-    """
-    Faz login do usuário via token e retorna JWT
-    POST /api/auth/acesso/{token}/
-    """
-    import hashlib
-    from django.utils import timezone
-    from rest_framework_simplejwt.tokens import RefreshToken
-    
-    # Hash do token
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    
-    try:
-        # Buscar token
-        token_obj = TokenAcesso.objects.select_related('usuario').get(
-            token=token_hash,
-            ativo=True
-        )
-        
-        # Validar expiração
-        if token_obj.data_expiracao < timezone.now():
-            return Response({'erro': 'Token expirado'}, status=400)
-        
-        # Gerar JWT
-        usuario = token_obj.usuario
-        refresh = RefreshToken.for_user(usuario)
-        
-        # Marcar como usado (opcional)
-        token_obj.usado_em = timezone.now()
-        token_obj.save()
-        
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'usuario': UsuarioSerializer(usuario).data,
-            'evento_id': token_obj.evento.id
-        })
-        
-    except TokenAcesso.DoesNotExist:
-        return Response({'erro': 'Token inválido'}, status=400)
-```
-
-#### Endpoint: Confirmar Participação
-- [ ] `POST /api/confirmacoes/`
-
-```python
-class ConfirmacaoEventoViewSet(viewsets.ModelViewSet):
-    serializer_class = ConfirmacaoEventoSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def create(self, request, *args, **kwargs):
-        """
-        POST /api/confirmacoes/
-        {
-            "evento_id": 1,
-            "confirmado": true
-        }
-        """
-        evento_id = request.data.get('evento_id')
-        confirmado = request.data.get('confirmado', True)
-        
-        try:
-            evento = Evento.objects.get(id=evento_id)
-        except Evento.DoesNotExist:
-            return Response({'erro': 'Evento não encontrado'}, status=404)
-        
-        # Criar ou atualizar confirmação
-        confirmacao, created = ConfirmacaoEvento.objects.update_or_create(
-            usuario=request.user,
-            evento=evento,
-            defaults={
-                'confirmado': confirmado,
-                'presenca': 'confirmado' if confirmado else 'recusado',
-                'data_confirmacao': timezone.now() if confirmado else None
-            }
-        )
-        
-        # Enviar email de confirmação
-        if confirmado:
-            enviar_email_confirmacao(request.user, evento)
-        
-        serializer = self.get_serializer(confirmacao)
-        return Response(serializer.data)
-```
-
-### 4. URLs (urls.py)
-
-- [ ] Rotas adicionadas em `urls.py`
-
-```python
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from . import views
-
-router = DefaultRouter()
-router.register(r'confirmacoes', views.ConfirmacaoEventoViewSet, basename='confirmacao')
-
-urlpatterns = [
-    # Autenticação
-    path('auth/acesso/<str:token>/', views.acesso_via_token_login, name='auth-acesso'),
-    
-    # Eventos
-    path('eventos/acesso-token/', views.acesso_via_token, name='evento-acesso-token'),
-    
-    # ViewSets
-    path('', include(router.urls)),
-]
-```
-
-### 5. Geração de Tokens de Email
-
-- [ ] Função de geração de tokens
-```python
-def gerar_tokens_para_evento(evento, usuarios):
-    """
-    Gera tokens únicos para cada usuário de um evento
-    """
-    import secrets
-    import hashlib
-    from datetime import timedelta
-    from django.utils import timezone
-    
-    tokens = []
-    
-    for usuario in usuarios:
-        # Gerar token aleatório
-        token_random = secrets.token_urlsafe(32)
-        
-        # Hash para armazenar
-        token_hash = hashlib.sha256(token_random.encode()).hexdigest()
-        
-        # Data de expiração
-        data_expiracao = timezone.now() + timedelta(hours=24)
-        
-        # Salvar no BD
-        token_obj = TokenAcesso.objects.create(
-            usuario=usuario,
-            evento=evento,
-            token=token_hash,
-            data_expiracao=data_expiracao
-        )
-        
-        tokens.append({
-            'usuario': usuario,
-            'token_original': token_random,  # Enviar por email
-            'token_obj': token_obj
-        })
-    
-    return tokens
-```
-
-### 6. Envio de Emails
-
-- [ ] Função de envio de email com token
-```python
-from django.core.mail import send_html_email
-from django.template.loader import render_to_string
-
-def enviar_email_convite(usuario, evento, token):
-    """
-    Envia email de convite com token de acesso
-    """
-    context = {
-        'usuario_nome': usuario.nome,
-        'evento_titulo': evento.titulo,
-        'evento_descricao': evento.descricao,
-        'evento_data': evento.data.strftime('%d/%m/%Y'),
-        'evento_hora': evento.hora_inicio.strftime('%H:%M'),
-        'evento_profissional': evento.nome_profissional,
-        'evento_local': evento.local,
-        'link_confirmacao': f"https://seu-dominio.com/acesso/{token}",
-        'link_suporte': "https://seu-dominio.com/ajuda"
-    }
-    
-    html_message = render_to_string('email/convite.html', context)
-    
-    send_html_email(
-        subject=f"Convite: {evento.titulo}",
-        message=html_message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[usuario.email],
-        html_message=html_message
-    )
-    
-    return True
-
-
-def enviar_email_confirmacao(usuario, evento):
-    """
-    Envia email de confirmação após participação
-    """
-    context = {
-        'usuario_nome': usuario.nome,
-        'evento_titulo': evento.titulo,
-        'evento_data': evento.data.strftime('%d/%m/%Y'),
-        'evento_hora': evento.hora_inicio.strftime('%H:%M'),
-        'evento_local': evento.local,
-    }
-    
-    html_message = render_to_string('email/confirmacao.html', context)
-    
-    send_html_email(
-        subject=f"Confirmação: {evento.titulo}",
-        message=html_message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[usuario.email],
-        html_message=html_message
-    )
-    
-    return True
-```
-
-### 7. Task Agendada (Celery/APScheduler)
-
-- [ ] Limpeza de tokens expirados
-```python
-from django.core.management.base import BaseCommand
-from django.utils import timezone
-from backend.models import TokenAcesso
-
-class Command(BaseCommand):
-    help = 'Remove tokens expirados'
-    
-    def handle(self, *args, **options):
-        expirados = TokenAcesso.objects.filter(
-            data_expiracao__lt=timezone.now(),
-            ativo=True
-        )
-        
-        count, _ = expirados.update(ativo=False)
-        
-        self.stdout.write(
-            self.style.SUCCESS(f'{count} tokens desativados')
-        )
-```
-
-Adicionar ao cron ou Celery:
-```python
-# Diariamente
-@periodic_task(run_every=crontab(hour=2, minute=0))
-def limpar_tokens_expirados():
-    from django.utils import timezone
-    TokenAcesso.objects.filter(
-        data_expiracao__lt=timezone.now()
-    ).update(ativo=False)
-```
-
-### 8. Migrations
-
-- [ ] Executar migrações
-```bash
-python manage.py makemigrations
-python manage.py migrate
-```
-
-### 9. Testes
-
-- [ ] Testes de unidade
-```python
-# tests.py
-from django.test import TestCase
-from django.utils import timezone
-from datetime import timedelta
-from backend.models import Usuario, Evento, TokenAcesso
-
-class TokenAcessoTestCase(TestCase):
-    def setUp(self):
-        self.usuario = Usuario.objects.create_user(
-            email='teste@example.com',
-            nome='Teste',
-            password='senha123'
-        )
-        self.evento = Evento.objects.create(
-            titulo='Evento Teste',
-            tipo='massagem',
-            data=timezone.now().date(),
-            hora_inicio='10:00',
-            hora_fim='11:00',
-            nome_profissional='Prof'
-        )
-    
-    def test_gerar_token(self):
-        token_obj = TokenAcesso.objects.create(
-            usuario=self.usuario,
-            evento=self.evento,
-            token='TEST123',
-            data_expiracao=timezone.now() + timedelta(hours=24)
-        )
-        self.assertTrue(token_obj.ativo)
-    
-    def test_validar_token(self):
-        # GET /api/eventos/acesso-token/?token=TEST123
-        response = self.client.get('/api/eventos/acesso-token/', {'token': 'TEST123'})
-        self.assertEqual(response.status_code, 200)
-```
-
-- [ ] Testes de integração
-```bash
-python manage.py test
-```
-
-### 10. Admin Django
-
-- [ ] Registrar modelos no admin
-```python
-# admin.py
-from django.contrib import admin
-from .models import TokenAcesso, ConfirmacaoEvento
-
-@admin.register(TokenAcesso)
-class TokenAcessoAdmin(admin.ModelAdmin):
-    list_display = ('usuario', 'evento', 'ativo', 'data_expiracao')
-    list_filter = ('ativo', 'criado_em')
-    search_fields = ('usuario__email', 'evento__titulo')
-    readonly_fields = ('criado_em', 'usado_em')
-
-@admin.register(ConfirmacaoEvento)
-class ConfirmacaoEventoAdmin(admin.ModelAdmin):
-    list_display = ('usuario', 'evento', 'presenca', 'data_confirmacao')
-    list_filter = ('presenca', 'criado_em')
-    search_fields = ('usuario__email', 'evento__titulo')
-```
-
-### 11. Configurações (settings.py)
-
-- [ ] Adicionar variáveis de ambiente
-```python
-# Email
-EMAIL_BACKEND = config(
-    'EMAIL_BACKEND',
-    default='django.core.mail.backends.console.EmailBackend'
-)
-EMAIL_HOST = config('EMAIL_HOST', default='smtp.mailtrap.io')
-EMAIL_PORT = config('EMAIL_PORT', default=2525, cast=int)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@example.com')
-
-# Token
-TOKEN_EXPIRY_HOURS = config('TOKEN_EXPIRY_HOURS', default=24, cast=int)
-TOKEN_LENGTH = config('TOKEN_LENGTH', default=32, cast=int)
-```
-
-### 12. Documentação da API
-
-- [ ] Adicionar docstrings
-- [ ] Gerar Swagger/OpenAPI (drf-spectacular)
-```bash
-pip install drf-spectacular
-```
-
----
-
-## 📋 Ordem de Implementação Recomendada
-
-1. ✅ Criar modelos (TokenAcesso, ConfirmacaoEvento)
-2. ✅ Gerar migrações
-3. ✅ Criar serializers
-4. ✅ Implementar views/endpoints
-5. ✅ Adicionar rotas
-6. ✅ Implementar função de geração de tokens
-7. ✅ Implementar envio de emails
-8. ✅ Testar endpoints (Postman/curl)
-9. ✅ Registrar no admin
-10. ✅ Adicionar task de limpeza
-11. ✅ Escrever testes
-12. ✅ Deploy
-
----
-
-## 🧪 Testar com cURL
+## Como executar
 
 ```bash
-# 1. Validar token
-curl -X GET "http://localhost:8001/api/eventos/acesso-token/?token=ABC123"
+# Todos os testes
+docker compose exec backend python manage.py test backend.tests --verbosity=2
 
-# 2. Login via token
-curl -X POST "http://localhost:8001/api/auth/acesso/ABC123/"
-
-# 3. Confirmar participação (com JWT)
-curl -X POST "http://localhost:8001/api/confirmacoes/" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "evento_id": 1,
-    "confirmado": true
-  }'
+# Um grupo específico
+docker compose exec backend python manage.py test backend.tests.tests.AdminEventoTest
 ```
 
 ---
 
-## 📞 Troubleshooting
+## Status geral
 
-**Problema:** Token inválido
-- **Solução:** Verificar hash e armazenamento no BD
-
-**Problema:** Token expirado
-- **Solução:** Validar `data_expiracao` com `timezone.now()`
-
-**Problema:** Email não enviado
-- **Solução:** Verificar configurações SMTP em settings.py
-
-**Problema:** Confirmação não registrada
-- **Solução:** Verificar autenticação (JWT) do usuário
-
----
-
-## 📚 Referências
-
-- [Django Signals](https://docs.djangoproject.com/en/4.2/topics/signals/)
-- [Django Email](https://docs.djangoproject.com/en/4.2/topics/email/)
-- [DRF SimpleJWT](https://django-rest-framework-simplejwt.readthedocs.io/)
-- [Django Celery](https://docs.celeryproject.org/en/stable/django/)
+| Grupo | Implementados | Faltando |
+|---|---|---|
+| Models — Geração de Horários | 5 | 0 |
+| Models — Convite de E-mail | 2 | 0 |
+| Auth — Login Admin | 3 | 0 |
+| Auth — Acesso via Token | 3 | 0 |
+| Admin — CRUD de Eventos | 8 | 0 |
+| Admin — Envio de E-mails | 4 | 0 |
+| Admin — Dashboard | 2 | 0 |
+| Colaborador — Eventos e Agendamentos | 11 | 0 |
+| Concorrência | 1 | 0 |
+| **Participantes Manuais** | **0** | **5** |
+| **Lista de Presença** | **0** | **4** |
+| **LDAP / Gestão de Usuários** | **0** | **7** |
+| **Total** | **39** | **16** |
 
 ---
 
-**Status:** 📋 Checklist Completo  
-**Versão:** 1.0  
-**Data:** Março 2024
+## Testes implementados
+
+### `HorarioGeracaoTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 1 | `test_gera_slots_corretos` | 09:00–11:00 com 30 min → exatamente 4 slots |
+| 2 | `test_slot_nao_completo_e_descartado` | Slot que não cabe no intervalo é descartado silenciosamente |
+| 3 | `test_gerar_horarios_com_agendamentos_gera_erro` | Lança `ValueError` se já há agendamentos no evento |
+| 4 | `test_vagas_livres_decrementa_apos_agendamento` | `vagas_livres` cai após confirmar agendamento |
+| 5 | `test_horario_esgotado_quando_sem_vagas` | `disponivel = False` quando vagas_livres = 0 |
+
+### `ConviteEmailTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 6 | `test_chave_mensagem_gerada_automaticamente` | `chave_mensagem` tem 8 chars e `token` UUID é gerado |
+| 7 | `test_unicidade_usuario_evento` | Dois convites para o mesmo par usuário+evento são bloqueados |
+
+---
+
+### `AdminLoginTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 8 | `test_login_sucesso` | Credenciais válidas retornam `access`, `refresh` e dados do usuário |
+| 9 | `test_login_senha_errada` | Senha incorreta retorna 401 |
+| 10 | `test_colaborador_nao_pode_logar_como_admin` | Usuário sem `is_admin` é rejeitado no login admin |
+
+### `AcessoViaTokenTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 11 | `test_acesso_valido` | Token válido retorna JWT + `evento_id` + `chave_mensagem` |
+| 12 | `test_acesso_token_invalido` | Token inexistente retorna 404 |
+| 13 | `test_token_marcado_como_usado` | Após acesso, `convite.usado` passa a `True` |
+
+---
+
+### `AdminEventoTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 14 | `test_criar_evento_rascunho` | Cria evento em rascunho sem gerar horários |
+| 15 | `test_publicar_evento_gera_horarios` | Publicar muda status e gera os slots |
+| 16 | `test_encerrar_evento` | Encerrar muda status para `encerrado` |
+| 17 | `test_editar_corpo_email` | PATCH salva `corpo_email` corretamente |
+| 18 | `test_validacao_hora_fim_menor_que_inicio` | `hora_fim <= hora_inicio` retorna 400 |
+| 19 | `test_validacao_duracao_zero` | `duracao_sessao = 0` retorna 400 |
+| 20 | `test_nao_pode_publicar_evento_encerrado` | Publicar evento encerrado retorna 400 |
+| 21 | `test_colaborador_nao_acessa_admin` | Colaborador recebe 403 em rotas de admin |
+
+### `EnviarEmailsTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 22 | `test_envia_email_para_cada_colaborador` | Número de e-mails enviados = número de colaboradores ativos |
+| 23 | `test_email_contem_link_e_chave` | Corpo do e-mail contém o token UUID e a chave de mensagem |
+| 24 | `test_reenvio_usa_mesmo_convite` | Segundo envio reutiliza o mesmo `ConviteEmail` (`get_or_create`) |
+| 25 | `test_nao_envia_para_evento_nao_publicado` | Enviar e-mails para rascunho retorna 400 |
+
+---
+
+### `AdminDashboardTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 26 | `test_dashboard_retorna_metricas` | Resposta contém `total_vagas`, `vagas_ocupadas`, `taxa_ocupacao`, `total_eventos_ativos` |
+| 27 | `test_taxa_ocupacao_calculada` | Taxa > 0 e vagas_ocupadas > 0 após agendamento confirmado |
+
+---
+
+### `ColaboradorEventoTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 28 | `test_lista_apenas_eventos_publicados` | Eventos em rascunho não aparecem na listagem do colaborador |
+| 29 | `test_detalhe_evento_com_horarios` | Detalhe retorna evento com lista completa de horários |
+| 30 | `test_reservar_horario_disponivel` | Reserva cria agendamento com status `confirmado` |
+| 31 | `test_reservar_horario_sem_vagas` | Horário lotado retorna 400 |
+| 32 | `test_usuario_nao_pode_reservar_dois_horarios_no_mesmo_evento` | Segunda reserva no mesmo evento retorna 400 |
+| 33 | `test_reservar_evento_encerrado_retorna_404` | Horário de evento encerrado retorna 404 |
+| 34 | `test_cancelar_agendamento` | Cancelar muda status para `cancelado` |
+| 35 | `test_cancelar_agendamento_ja_cancelado` | Cancelar novamente retorna 400 |
+| 36 | `test_cancelar_agendamento_de_outro_usuario_retorna_404` | Não pode cancelar agendamento de outro usuário |
+| 37 | `test_meus_agendamentos` | Retorna apenas agendamentos do usuário autenticado |
+| 38 | `test_unauthenticated_nao_acessa_eventos` | Sem JWT retorna 401 |
+
+### `ConcorrenciaTest`
+
+| # | Método | O que valida |
+|---|---|---|
+| 39 | `test_select_for_update_impede_dupla_reserva` | `unique_together` no banco bloqueia agendamento duplicado |
+
+---
+
+## Testes a implementar
+
+### `AgendamentoManualTest` — Participantes sem e-mail
+
+| # | Caso | Comportamento esperado |
+|---|---|---|
+| 40 | Registrar participante em rascunho sem `horario_id` | Cria com `horario=null` (pendente) — status 201 |
+| 41 | Registrar participante em evento publicado sem `horario_id` | Retorna 400 (horário obrigatório em publicado) |
+| 42 | Registrar participante em evento publicado com `horario_id` válido | Cria vinculado ao horário — status 201 |
+| 43 | Registrar participante em evento encerrado | Retorna 400 |
+| 44 | Publicar evento com 3 pendentes e 2 horários (round-robin) | `horario[0]` recebe 2 participantes, `horario[1]` recebe 1 |
+
+---
+
+### `ListaPresencaTest` — Portaria
+
+| # | Caso | Comportamento esperado |
+|---|---|---|
+| 45 | Lista retorna agendamentos `confirmado` agrupados por horário | Cada objeto de horário contém lista de participantes |
+| 46 | Lista inclui participantes manuais junto com os de e-mail | Campos `tipo: 'email'` e `tipo: 'manual'` presentes |
+| 47 | Participantes dentro de cada horário estão em ordem alfabética | Ordenação por `nome` |
+| 48 | Campo `total` bate com soma real de todos os participantes | Contagem consistente entre horários |
+
+---
+
+### `LdapGestaoTest` — Gestão de Usuários (SuperAdmin)
+
+| # | Caso | Comportamento esperado |
+|---|---|---|
+| 49 | Busca com menos de 2 caracteres | Retorna 400 |
+| 50 | Busca retorna campos `no_sistema`, `is_admin`, `is_superuser` | Dados enriquecidos com status do banco local |
+| 51 | Promover usuário novo cria com `is_admin=True` e senha utilizável | Autenticação funciona após promoção — status 201 |
+| 52 | Promover usuário já existente atualiza `is_admin=True` sem alterar senha | Idempotente — status 200 |
+| 53 | Revogar admin remove `is_admin` e `is_staff` | Usuário perde acesso ao painel |
+| 54 | Revogar SuperAdmin retorna 400 | Proteção para não perder acesso ao sistema |
+| 55 | Endpoints de LDAP retornam 403 para admin comum | Controle de acesso por `is_superuser` |
+
+---
+
+## Ordem de implementação
+
+1. `AgendamentoManualTest` — cobre participantes sem e-mail (funcionalidade recente crítica)
+2. `ListaPresencaTest` — cobre a lista para portaria
+3. `LdapGestaoTest` — cobre gestão de acesso de administradores

@@ -5,6 +5,8 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
 from django.http import StreamingHttpResponse
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 
 from rest_framework import generics, viewsets, status, permissions
 from rest_framework.decorators import action
@@ -495,6 +497,7 @@ class EventoDetailView(generics.RetrieveAPIView):
     """
     GET /api/colaborador/eventos/<id>/
     Detalhe do evento com todos os horários e disponibilidade.
+    Cache de 3 segundos — reduz carga no banco durante pico de acesso.
     """
     queryset = (
         Evento.objects
@@ -503,6 +506,10 @@ class EventoDetailView(generics.RetrieveAPIView):
     )
     serializer_class = EventoDetailSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    @method_decorator(cache_page(3))
+    def get(self, *args, **kwargs):
+        return super().get(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------

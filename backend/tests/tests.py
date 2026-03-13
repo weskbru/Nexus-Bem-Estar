@@ -18,7 +18,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual
 
 
 # ---------------------------------------------------------------------------
@@ -454,3 +454,234 @@ class ConcorrenciaTest(TestCase):
         Agendamento.objects.create(usuario=colaborador, horario=horario, status='confirmado')
         with self.assertRaises(IntegrityError):
             Agendamento.objects.create(usuario=colaborador, horario=horario, status='confirmado')
+
+
+# ---------------------------------------------------------------------------
+# Factories adicionais
+# ---------------------------------------------------------------------------
+
+def cria_superadmin(email='super@empresa.com.br', nome='Super Admin', password='super@123'):
+    return Usuario.objects.create_superuser(email=email, nome=nome, password=password)
+
+
+def cria_admin_simples(email='admin_simples@empresa.com.br', nome='Admin Simples', password='admin@123'):
+    u = Usuario.objects.create_user(email=email, nome=nome, password=password)
+    u.is_admin = True
+    u.is_staff = True
+    u.save(update_fields=['is_admin', 'is_staff'])
+    return u
+
+
+# ---------------------------------------------------------------------------
+# Testes Admin — Participantes Manuais
+# ---------------------------------------------------------------------------
+
+class AgendamentoManualTest(APITestCase):
+    def setUp(self):
+        self.admin = cria_admin()
+        self.client.force_authenticate(user=self.admin)
+
+    def test_registrar_participante_rascunho_sem_horario(self):
+        """Rascunho: horario_id não é necessário → participante fica pendente (horario=null)."""
+        evento = cria_evento()  # rascunho
+        resp = self.client.post(
+            f'/api/admin/eventos/{evento.id}/registrar-participante/',
+            {'nome': 'Carlos Sem E-mail'},
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        participante = AgendamentoManual.objects.get(evento=evento)
+        self.assertIsNone(participante.horario)
+
+    def test_registrar_participante_publicado_sem_horario_retorna_400(self):
+        """Publicado: horario_id obrigatório → 400."""
+        evento = cria_evento(status_evento='publicado')
+        evento.gerar_horarios()
+        resp = self.client.post(
+            f'/api/admin/eventos/{evento.id}/registrar-participante/',
+            {'nome': 'Carlos Sem E-mail'},
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_registrar_participante_publicado_com_horario(self):
+        """Publicado + horario_id válido → cria vinculado ao horário, status 201."""
+        evento = cria_evento(status_evento='publicado')
+        evento.gerar_horarios()
+        horario = evento.horarios.first()
+        resp = self.client.post(
+            f'/api/admin/eventos/{evento.id}/registrar-participante/',
+            {'nome': 'Carlos Sem E-mail', 'horario_id': horario.id},
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        participante = AgendamentoManual.objects.get(evento=evento)
+        self.assertEqual(participante.horario, horario)
+
+    def test_registrar_participante_evento_encerrado_retorna_400(self):
+        """Evento encerrado → 400."""
+        evento = cria_evento(status_evento='encerrado')
+        resp = self.client.post(
+            f'/api/admin/eventos/{evento.id}/registrar-participante/',
+            {'nome': 'Carlos Sem E-mail'},
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_publicar_com_pendentes_distribui_round_robin(self):
+        """
+        Publicar evento com 3 pendentes e 2 horários.
+        horario[0] recebe índices 0 e 2 (0%2=0, 2%2=0),
+        horario[1] recebe índice 1 (1%2=1).
+        """
+        evento = cria_evento(
+            hora_inicio=time(9, 0),
+            hora_fim=time(10, 0),
+            duracao_sessao=30,
+        )  # rascunho; gera 2 slots ao publicar
+        for i in range(3):
+            AgendamentoManual.objects.create(evento=evento, nome=f'Participante {i}')
+
+        resp = self.client.post(f'/api/admin/eventos/{evento.id}/publicar/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        horarios = list(evento.horarios.order_by('hora_inicio'))
+        self.assertEqual(len(horarios), 2)
+        h0_count = AgendamentoManual.objects.filter(evento=evento, horario=horarios[0]).count()
+        h1_count = AgendamentoManual.objects.filter(evento=evento, horario=horarios[1]).count()
+        self.assertEqual(h0_count, 2)
+        self.assertEqual(h1_count, 1)
+
+
+# ---------------------------------------------------------------------------
+# Testes Admin — Lista de Presença
+# ---------------------------------------------------------------------------
+
+class ListaPresencaTest(APITestCase):
+    def setUp(self):
+        self.admin = cria_admin()
+        self.client.force_authenticate(user=self.admin)
+        self.evento = cria_evento(status_evento='publicado')
+        self.evento.gerar_horarios()
+        self.horario = self.evento.horarios.first()
+        self.colaborador = cria_colaborador()
+        Agendamento.objects.create(
+            usuario=self.colaborador, horario=self.horario, status='confirmado'
+        )
+
+    def test_lista_retorna_agendamentos_agrupados_por_horario(self):
+        """Lista retorna agendamentos confirmados agrupados por horário."""
+        resp = self.client.get(f'/api/admin/eventos/{self.evento.id}/lista-presenca/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn('horarios', resp.data)
+        self.assertGreater(len(resp.data['horarios']), 0)
+        horario_data = next(
+            h for h in resp.data['horarios'] if h['horario_id'] == self.horario.id
+        )
+        self.assertEqual(len(horario_data['participantes']), 1)
+
+    def test_lista_inclui_participantes_email_e_manual(self):
+        """Lista inclui participantes com tipo='email' e tipo='manual'."""
+        AgendamentoManual.objects.create(
+            evento=self.evento, horario=self.horario, nome='Zara Manual'
+        )
+        resp = self.client.get(f'/api/admin/eventos/{self.evento.id}/lista-presenca/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        horario_data = next(
+            h for h in resp.data['horarios'] if h['horario_id'] == self.horario.id
+        )
+        tipos = {p['tipo'] for p in horario_data['participantes']}
+        self.assertIn('email', tipos)
+        self.assertIn('manual', tipos)
+
+    def test_participantes_em_ordem_alfabetica(self):
+        """Participantes dentro de cada horário estão em ordem alfabética pelo nome."""
+        AgendamentoManual.objects.create(
+            evento=self.evento, horario=self.horario, nome='Ana Primeira'
+        )
+        resp = self.client.get(f'/api/admin/eventos/{self.evento.id}/lista-presenca/')
+        horario_data = next(
+            h for h in resp.data['horarios'] if h['horario_id'] == self.horario.id
+        )
+        nomes = [p['nome'] for p in horario_data['participantes']]
+        self.assertEqual(nomes, sorted(nomes))
+
+    def test_total_bate_com_soma_real(self):
+        """Campo total bate com a soma real de participantes em todos os horários."""
+        AgendamentoManual.objects.create(
+            evento=self.evento, horario=self.horario, nome='Extra Manual'
+        )
+        resp = self.client.get(f'/api/admin/eventos/{self.evento.id}/lista-presenca/')
+        total_calculado = sum(len(h['participantes']) for h in resp.data['horarios'])
+        self.assertEqual(resp.data['total'], total_calculado)
+        self.assertEqual(resp.data['total'], 2)  # 1 email + 1 manual
+
+
+# ---------------------------------------------------------------------------
+# Testes SuperAdmin — Gestão de Usuários (LDAP)
+# ---------------------------------------------------------------------------
+
+class LdapGestaoTest(APITestCase):
+    def setUp(self):
+        self.superadmin = cria_superadmin()
+        self.client.force_authenticate(user=self.superadmin)
+
+    def test_busca_com_menos_de_2_caracteres_retorna_400(self):
+        """Busca com menos de 2 chars → 400."""
+        resp = self.client.get('/api/admin/ldap/buscar/?q=a')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_busca_retorna_campos_de_status(self):
+        """Busca retorna campos no_sistema, is_admin, is_superuser enriquecidos."""
+        resp = self.client.get('/api/admin/ldap/buscar/?q=jonas')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertGreater(len(resp.data), 0)
+        usuario = resp.data[0]
+        self.assertIn('no_sistema', usuario)
+        self.assertIn('is_admin', usuario)
+        self.assertIn('is_superuser', usuario)
+
+    def test_promover_novo_usuario_cria_com_admin_e_senha_padrao(self):
+        """Promover usuário novo cria com is_admin=True e senha padrão utilizável — status 201."""
+        resp = self.client.post('/api/admin/ldap/promover/', {
+            'email': 'novo.admin@aeb.gov.br',
+            'nome': 'Novo Admin',
+            'matricula': '999001',
+            'departamento': 'TI',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        usuario = Usuario.objects.get(email='novo.admin@aeb.gov.br')
+        self.assertTrue(usuario.is_admin)
+        self.assertTrue(usuario.check_password('aeb@2026'))
+
+    def test_promover_usuario_existente_e_idempotente(self):
+        """Promover usuário já existente atualiza is_admin=True sem alterar senha — status 200."""
+        existente = cria_colaborador('existente@aeb.gov.br', 'Existente', 'senha_anterior')
+        self.assertFalse(existente.is_admin)
+
+        resp = self.client.post('/api/admin/ldap/promover/', {
+            'email': 'existente@aeb.gov.br',
+            'nome': 'Existente',
+        })
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        existente.refresh_from_db()
+        self.assertTrue(existente.is_admin)
+        self.assertTrue(existente.check_password('senha_anterior'))
+
+    def test_revogar_admin_remove_acesso(self):
+        """Revogar admin remove is_admin e is_staff."""
+        admin = cria_admin_simples()
+        resp = self.client.post(f'/api/admin/ldap/revogar/{admin.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        admin.refresh_from_db()
+        self.assertFalse(admin.is_admin)
+        self.assertFalse(admin.is_staff)
+
+    def test_revogar_superadmin_retorna_400(self):
+        """Proteção: revogar SuperAdmin retorna 400."""
+        outro_super = cria_superadmin('outro.super@empresa.com.br', 'Outro Super', 'super@456')
+        resp = self.client.post(f'/api/admin/ldap/revogar/{outro_super.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_admin_comum_nao_acessa_endpoints_ldap(self):
+        """Endpoints de LDAP retornam 403 para admin comum (is_superuser=False)."""
+        admin_simples = cria_admin_simples()
+        self.client.force_authenticate(user=admin_simples)
+        resp = self.client.get('/api/admin/ldap/buscar/?q=jonas')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
