@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
 from django.http import StreamingHttpResponse
+from django.utils.html import strip_tags
 
 from rest_framework import generics, viewsets, status, permissions
 from rest_framework.decorators import action
@@ -241,9 +242,10 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             try:
                 send_mail(
                     subject=f'Convite: {evento.titulo}',
-                    message=corpo,
+                    message=strip_tags(corpo),
                     from_email=settings.DEFAULT_FROM_EMAIL,
                     recipient_list=[usuario.email],
+                    html_message=corpo,
                     fail_silently=False,
                 )
                 enviados += 1

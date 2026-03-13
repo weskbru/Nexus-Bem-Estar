@@ -121,3 +121,6 @@ DEFAULT_FROM_EMAIL = config(
 
 # URL base do frontend usada nos links de e-mail
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# Janela maxima para agendamento de eventos no futuro (em meses)
+EVENTO_MAX_MESES_FUTURO = config('EVENTO_MAX_MESES_FUTURO', default=6, cast=int)

@@ -1,6 +1,26 @@
 from rest_framework import serializers
+from datetime import date
+from django.conf import settings
+from django.utils import timezone
 
 from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual
+
+
+def _add_months(base_date: date, months: int) -> date:
+    month_index = (base_date.month - 1) + months
+    year = base_date.year + (month_index // 12)
+    month = (month_index % 12) + 1
+    day = min(base_date.day, _days_in_month(year, month))
+    return date(year, month, day)
+
+
+def _days_in_month(year: int, month: int) -> int:
+    if month == 2:
+        leap = (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
+        return 29 if leap else 28
+    if month in (4, 6, 9, 11):
+        return 30
+    return 31
 
 
 # ---------------------------------------------------------------------------
@@ -123,12 +143,37 @@ class EventoAdminSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        data_evento = attrs.get('data', getattr(self.instance, 'data', None))
         hora_inicio = attrs.get('hora_inicio', getattr(self.instance, 'hora_inicio', None))
         hora_fim = attrs.get('hora_fim', getattr(self.instance, 'hora_fim', None))
+        duracao_sessao = attrs.get('duracao_sessao', getattr(self.instance, 'duracao_sessao', None))
+
+        if data_evento:
+            hoje = timezone.localdate()
+            if data_evento < hoje:
+                raise serializers.ValidationError(
+                    {'data': 'A data do evento não pode ser no passado.'}
+                )
+
+            max_meses = max(int(getattr(settings, 'EVENTO_MAX_MESES_FUTURO', 6)), 1)
+            limite = _add_months(hoje, max_meses)
+            if data_evento > limite:
+                raise serializers.ValidationError(
+                    {'data': f'A data deve estar dentro de até {max_meses} meses no futuro.'}
+                )
+
         if hora_inicio and hora_fim and hora_inicio >= hora_fim:
             raise serializers.ValidationError(
                 {'hora_fim': 'O horário de término deve ser após o de início.'}
             )
+
+        if hora_inicio and hora_fim and duracao_sessao:
+            periodo_total = (hora_fim.hour * 60 + hora_fim.minute) - (hora_inicio.hour * 60 + hora_inicio.minute)
+            if duracao_sessao > periodo_total:
+                raise serializers.ValidationError(
+                    {'duracao_sessao': 'A duração da sessão não pode ser maior que o período total do evento.'}
+                )
+
         return attrs
 
     def create(self, validated_data):

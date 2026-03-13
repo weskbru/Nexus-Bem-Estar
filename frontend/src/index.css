@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+.email-editor .ql-toolbar.ql-snow {
+	border: none;
+	border-bottom: 1px solid rgb(226 232 240);
+}
+
+.email-editor .ql-container.ql-snow {
+	border: none;
+	min-height: 320px;
+}
+
+.email-editor .ql-editor {
+	min-height: 280px;
+	font-size: 0.95rem;
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -9,7 +9,17 @@ import {
   Send,
   CheckCircle2,
 } from 'lucide-react';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import { adminEventosApi, type EventoDTO } from '../../services/api';
+import {
+  MAX_MESES_FUTURO,
+  dataAposLimite,
+  dataNoPassado,
+  getDataLimiteFutura,
+  getHojeSemHora,
+  periodoEmMinutos,
+} from '../../lib/eventoRules';
 
 // ─── Mini Calendário ──────────────────────────────────────────────────────────
 
@@ -20,11 +30,16 @@ const MESES = [
 ];
 
 function MiniCalendar({ value, onChange, error }: { value: string; onChange: (d: string) => void; error?: string }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getHojeSemHora();
+  const maxDate = getDataLimiteFutura();
   const initDate = value ? new Date(value + 'T00:00:00') : today;
   const [viewYear, setViewYear] = useState(initDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(initDate.getMonth());
+
+  const canGoPrev = viewYear > today.getFullYear() ||
+    (viewYear === today.getFullYear() && viewMonth > today.getMonth());
+  const canGoNext = viewYear < maxDate.getFullYear() ||
+    (viewYear === maxDate.getFullYear() && viewMonth < maxDate.getMonth());
 
   // sync when value loads asynchronously
   useEffect(() => {
@@ -69,13 +84,13 @@ function MiniCalendar({ value, onChange, error }: { value: string; onChange: (d:
   return (
     <div className={`border rounded-xl p-4 bg-white select-none ${error ? 'border-red-400' : 'border-slate-200'}`}>
       <div className="flex items-center justify-between mb-3">
-        <button type="button" onClick={prevMonth}
-          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors">
+        <button type="button" onClick={prevMonth} disabled={!canGoPrev}
+          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
           <ChevronLeft className="w-4 h-4" />
         </button>
         <span className="text-sm font-semibold text-slate-900">{MESES[viewMonth]} {viewYear}</span>
-        <button type="button" onClick={nextMonth}
-          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors">
+        <button type="button" onClick={nextMonth} disabled={!canGoNext}
+          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
@@ -89,20 +104,22 @@ function MiniCalendar({ value, onChange, error }: { value: string; onChange: (d:
           const isCurrent = cell.offset === 0;
           const mo = (viewMonth + cell.offset + 12) % 12;
           const yo = viewYear + (cell.offset === -1 && viewMonth === 0 ? -1 : cell.offset === 1 && viewMonth === 11 ? 1 : 0);
-          const isPast = new Date(yo, mo, cell.day) < today;
+          const dateCell = new Date(yo, mo, cell.day);
+          const isPast = dateCell < today;
+          const isAfterMax = dateCell > maxDate;
           const isSelected = sel && isCurrent &&
             sel.getFullYear() === viewYear && sel.getMonth() === viewMonth && sel.getDate() === cell.day;
           const isToday = isCurrent &&
             today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === cell.day;
           return (
             <button key={i} type="button" onClick={() => clickDay(cell)}
-              disabled={isPast || !isCurrent}
+              disabled={isPast || isAfterMax || !isCurrent}
               className={`text-center text-xs py-1.5 rounded-full transition-colors
                 ${isSelected ? 'bg-blue-600 text-white font-bold' : ''}
                 ${isToday && !isSelected ? 'ring-1 ring-blue-400 text-blue-700 font-semibold' : ''}
                 ${isCurrent && !isPast && !isSelected ? 'hover:bg-blue-50 cursor-pointer text-slate-700' : ''}
                 ${!isCurrent ? 'text-slate-200 cursor-default' : ''}
-                ${isPast && isCurrent ? 'text-slate-300 cursor-not-allowed' : ''}
+                ${(isPast || isAfterMax) && isCurrent ? 'text-slate-300 cursor-not-allowed' : ''}
               `}>
               {cell.day}
             </button>
@@ -155,11 +172,65 @@ function FieldError({ msg }: { msg?: string }) {
   );
 }
 
+const EMAIL_FORMATS = [
+  'header',
+  'bold',
+  'italic',
+  'underline',
+  'strike',
+  'list',
+  'bullet',
+  'align',
+  'link',
+  'image',
+];
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function EditarEvento() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const quillRef = useRef<ReactQuill | null>(null);
+
+  const emailModules = useMemo(() => ({
+    toolbar: {
+      container: [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ align: [] }],
+        ['link', 'image', 'clean'],
+      ],
+      handlers: {
+        image: () => {
+          const input = document.createElement('input');
+          input.setAttribute('type', 'file');
+          input.setAttribute('accept', 'image/png,image/jpeg,image/jpg,image/webp');
+          input.click();
+
+          input.onchange = () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+              window.alert('A imagem deve ter no máximo 5MB.');
+              return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+              const editor = quillRef.current?.getEditor();
+              if (!editor || typeof reader.result !== 'string') return;
+              const range = editor.getSelection(true);
+              const index = range ? range.index : editor.getLength();
+              editor.insertEmbed(index, 'image', reader.result, 'user');
+              editor.setSelection(index + 1);
+            };
+            reader.readAsDataURL(file);
+          };
+        },
+      },
+    },
+  }), []);
 
   const [carregando, setCarregando] = useState(true);
   const [erroCarregar, setErroCarregar] = useState('');
@@ -204,15 +275,26 @@ export default function EditarEvento() {
 
   function validar(): boolean {
     const e: FormErrors = {};
+    const limiteFuturo = getDataLimiteFutura();
     if (!form.titulo.trim())       e.titulo               = 'Nome do evento é obrigatório.';
     if (!form.tipo)                e.tipo                 = 'Selecione o tipo de atividade.';
     if (!form.data)                e.data                 = 'Selecione a data do evento.';
+    if (form.data && dataNoPassado(form.data))
+                                   e.data                 = 'A data do evento não pode ser no passado.';
+    if (form.data && dataAposLimite(form.data))
+                                   e.data                 = `A data deve ser até ${limiteFuturo.toLocaleDateString('pt-BR')}.`;
     if (!form.hora_inicio)         e.hora_inicio          = 'Informe o horário de início.';
     if (!form.hora_fim)            e.hora_fim             = 'Informe o horário de término.';
     if (form.hora_inicio && form.hora_fim && form.hora_fim <= form.hora_inicio)
                                    e.hora_fim             = 'Término deve ser após o início.';
     if (!form.duracao_sessao || Number(form.duracao_sessao) <= 0)
                                    e.duracao_sessao       = 'Informe a duração (min).';
+    if (form.hora_inicio && form.hora_fim && Number(form.duracao_sessao) > 0) {
+      const periodoTotal = periodoEmMinutos(form.hora_inicio, form.hora_fim);
+      if (periodoTotal > 0 && Number(form.duracao_sessao) > periodoTotal) {
+        e.duracao_sessao = `A duração não pode ser maior que o período total (${periodoTotal} min).`;
+      }
+    }
     if (!form.capacidade_por_horario || Number(form.capacidade_por_horario) <= 0)
                                    e.capacidade_por_horario = 'Informe a capacidade.';
     if (!form.nome_profissional.trim()) e.nome_profissional = 'Nome do profissional é obrigatório.';
@@ -369,6 +451,9 @@ export default function EditarEvento() {
               Data do Evento <span className="text-red-500">*</span>
             </label>
             <MiniCalendar value={form.data} onChange={v => update('data', v)} error={erros.data} />
+            <p className="mt-1 text-xs text-slate-500">
+              Permitido entre hoje e {getDataLimiteFutura().toLocaleDateString('pt-BR')} ({MAX_MESES_FUTURO} meses).
+            </p>
             <FieldError msg={erros.data} />
           </div>
 
@@ -455,14 +540,23 @@ export default function EditarEvento() {
         {/* Corpo do e-mail */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Mensagem do E-mail <span className="text-slate-400 font-normal">(opcional)</span>
+            Mensagem do E-mail
           </label>
-          <textarea value={form.corpo_email}
-            onChange={e => update('corpo_email', e.target.value)}
-            rows={3}
-            placeholder="Olá! Temos uma nova atividade de bem-estar disponível para você..."
-            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition resize-none"
-          />
+          <div className="rounded-lg border border-slate-300 overflow-hidden bg-white">
+            <ReactQuill
+              ref={quillRef}
+              className="email-editor"
+              value={form.corpo_email}
+              onChange={(value) => update('corpo_email', value)}
+              placeholder="Olá! Temos uma nova atividade de bem-estar disponível para você..."
+              theme="snow"
+              modules={emailModules}
+              formats={EMAIL_FORMATS}
+            />
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Este conteúdo suporta formatação e anexos de foto (PNG, JPG, WEBP até 5MB).
+          </p>
         </div>
 
         {/* Aviso validação */}
