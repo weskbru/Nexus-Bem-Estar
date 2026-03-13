@@ -30,7 +30,7 @@ def _days_in_month(year: int, month: int) -> int:
 class UsuarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
-        fields = ['id', 'email', 'nome', 'matricula', 'departamento', 'is_admin']
+        fields = ['id', 'email', 'nome', 'matricula', 'departamento', 'is_admin', 'is_superuser']
         read_only_fields = ['id']
 
 

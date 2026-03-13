@@ -7,6 +7,7 @@ import {
   Bell,
   HelpCircle,
   LogOut,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import logoAeb from '../images/logoaeb.png';
@@ -32,7 +33,7 @@ const navItems = [
 ];
 
 export default function AdminLayout() {
-  const { usuario, logout } = useAuth();
+  const { usuario, logout, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
   const [notificacoes, setNotificacoes] = useState<AgendamentoNotificacao[]>([]);
   const [abrirNotificacoes, setAbrirNotificacoes] = useState(false);
@@ -137,6 +138,23 @@ export default function AdminLayout() {
               {label}
             </NavLink>
           ))}
+
+          {isSuperAdmin && (
+            <NavLink
+              to="/admin/gestao-usuarios"
+              end={false}
+              className={({ isActive }) =>
+                `flex items-center px-3 py-2.5 rounded-lg font-medium transition-colors ${
+                  isActive
+                    ? 'bg-purple-50 text-purple-700'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`
+              }
+            >
+              <ShieldCheck className="w-5 h-5 mr-3 shrink-0" />
+              Gestão de Usuários
+            </NavLink>
+          )}
         </nav>
 
         <div className="p-4 border-t border-slate-200">
