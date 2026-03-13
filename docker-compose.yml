@@ -49,6 +49,9 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: sis_bem_estar_frontend
     restart: unless-stopped
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "150"
     ports:
       - "3000:3000"
     volumes:
