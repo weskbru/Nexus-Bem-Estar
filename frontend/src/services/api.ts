@@ -39,6 +39,7 @@ export interface UsuarioDTO {
   email: string;
   nome: string;
   is_admin: boolean;
+  is_superuser: boolean;
   matricula: string;
   departamento: string;
 }
@@ -165,6 +166,29 @@ export interface AgendamentoDTO {
 
 export const adminDashboardApi = {
   obter: () => request<DashboardDTO>('/admin/dashboard/'),
+};
+
+// ── SuperAdmin (CTI) — Gestão de Usuários LDAP ────────────────────────────
+
+export interface LdapUsuarioDTO {
+  nome: string;
+  email: string;
+  matricula: string;
+  departamento: string;
+  no_sistema: boolean;
+  is_admin: boolean;
+  is_superuser: boolean;
+}
+
+export const ldapApi = {
+  buscar: (q: string) =>
+    request<LdapUsuarioDTO[]>(`/admin/ldap/buscar/?q=${encodeURIComponent(q)}`),
+  promover: (dados: { email: string; nome: string; matricula: string; departamento: string }) =>
+    request<UsuarioDTO>('/admin/ldap/promover/', { method: 'POST', body: JSON.stringify(dados) }),
+  revogar: (usuarioId: number) =>
+    request<{ mensagem: string }>(`/admin/ldap/revogar/${usuarioId}/`, { method: 'POST' }),
+  listarAdmins: () =>
+    request<UsuarioDTO[]>('/admin/ldap/admins/'),
 };
 
 // ── Colaborador — Eventos ─────────────────────────────────────────────────

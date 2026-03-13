@@ -24,6 +24,14 @@ urlpatterns = [
     path('admin/dashboard/', views.AdminDashboardView.as_view(), name='admin-dashboard'),
 
     # -----------------------------------------------------------------------
+    # SuperAdmin (CTI) — Gestão de usuários via LDAP
+    # -----------------------------------------------------------------------
+    path('admin/ldap/buscar/', views.LdapSearchView.as_view(), name='ldap-buscar'),
+    path('admin/ldap/promover/', views.PromoverAdminView.as_view(), name='ldap-promover'),
+    path('admin/ldap/revogar/<int:usuario_id>/', views.RevogarAdminView.as_view(), name='ldap-revogar'),
+    path('admin/ldap/admins/', views.ListarAdminsView.as_view(), name='ldap-admins'),
+
+    # -----------------------------------------------------------------------
     # Colaborador — Eventos
     # -----------------------------------------------------------------------
     path('colaborador/eventos/', views.EventoListView.as_view(), name='colaborador-eventos-list'),

@@ -10,7 +10,7 @@ from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento,
 class UsuarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
-        fields = ['id', 'email', 'nome', 'matricula', 'departamento', 'is_admin']
+        fields = ['id', 'email', 'nome', 'matricula', 'departamento', 'is_admin', 'is_superuser']
         read_only_fields = ['id']
 
 

@@ -12,6 +12,7 @@ interface AuthContextValue extends AuthState {
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -57,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       isAuthenticated: !!state.token,
       isAdmin: !!state.usuario?.is_admin,
+      isSuperAdmin: !!state.usuario?.is_superuser,
     }}>
       {children}
     </AuthContext.Provider>
