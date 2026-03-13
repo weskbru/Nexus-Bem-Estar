@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  ArrowLeft,
   Save,
-  Info,
+  Send,
+  CheckCircle2,
 } from 'lucide-react';
-import { adminEventosApi } from '../../services/api';
+import { adminEventosApi, type EventoDTO } from '../../services/api';
 
 // ─── Mini Calendário ──────────────────────────────────────────────────────────
 
@@ -23,6 +25,15 @@ function MiniCalendar({ value, onChange, error }: { value: string; onChange: (d:
   const initDate = value ? new Date(value + 'T00:00:00') : today;
   const [viewYear, setViewYear] = useState(initDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(initDate.getMonth());
+
+  // sync when value loads asynchronously
+  useEffect(() => {
+    if (value) {
+      const d = new Date(value + 'T00:00:00');
+      setViewYear(d.getFullYear());
+      setViewMonth(d.getMonth());
+    }
+  }, [value]);
 
   function prevMonth() {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
@@ -146,18 +157,44 @@ function FieldError({ msg }: { msg?: string }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function NovoEvento() {
+export default function EditarEvento() {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  const [carregando, setCarregando] = useState(true);
+  const [erroCarregar, setErroCarregar] = useState('');
+  const [statusEvento, setStatusEvento] = useState('');
+
   const [form, setForm] = useState<FormState>({
-    titulo: '', tipo: '', data: '',
-    hora_inicio: '08:00', hora_fim: '17:00',
-    duracao_sessao: '30', capacidade_por_horario: '1',
-    nome_profissional: '', corpo_email: '',
+    titulo: '', tipo: '', data: '', hora_inicio: '', hora_fim: '',
+    duracao_sessao: '30', capacidade_por_horario: '1', nome_profissional: '', corpo_email: '',
   });
   const [erros, setErros] = useState<FormErrors>({});
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [publicando, setPublicando] = useState(false);
+  const [sucesso, setSucesso] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    adminEventosApi.obter(Number(id))
+      .then((evento) => {
+        setStatusEvento(evento.status);
+        setForm({
+          titulo:                 evento.titulo,
+          tipo:                   evento.tipo,
+          data:                   evento.data,
+          hora_inicio:            evento.hora_inicio.substring(0, 5),
+          hora_fim:               evento.hora_fim.substring(0, 5),
+          duracao_sessao:         String(evento.duracao_sessao),
+          capacidade_por_horario: String(evento.capacidade_por_horario),
+          nome_profissional:      evento.nome_profissional,
+          corpo_email:            evento.corpo_email ?? '',
+        });
+      })
+      .catch(() => setErroCarregar('Não foi possível carregar o evento.'))
+      .finally(() => setCarregando(false));
+  }, [id]);
 
   function update(field: keyof FormState, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -178,9 +215,24 @@ export default function NovoEvento() {
                                    e.duracao_sessao       = 'Informe a duração (min).';
     if (!form.capacidade_por_horario || Number(form.capacidade_por_horario) <= 0)
                                    e.capacidade_por_horario = 'Informe a capacidade.';
+    if (!form.nome_profissional.trim()) e.nome_profissional = 'Nome do profissional é obrigatório.';
     setErros(e);
     if (Object.keys(e).length > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
     return Object.keys(e).length === 0;
+  }
+
+  function buildPayload(): Partial<EventoDTO> {
+    return {
+      titulo:                 form.titulo.trim(),
+      tipo:                   form.tipo,
+      data:                   form.data,
+      hora_inicio:            form.hora_inicio,
+      hora_fim:               form.hora_fim,
+      duracao_sessao:         Number(form.duracao_sessao),
+      capacidade_por_horario: Number(form.capacidade_por_horario),
+      nome_profissional:      form.nome_profissional.trim(),
+      corpo_email:            form.corpo_email.trim(),
+    };
   }
 
   async function handleSalvar() {
@@ -188,17 +240,7 @@ export default function NovoEvento() {
     setSalvando(true);
     setErroGeral('');
     try {
-      await adminEventosApi.criar({
-        titulo:                 form.titulo.trim(),
-        tipo:                   form.tipo,
-        data:                   form.data,
-        hora_inicio:            form.hora_inicio,
-        hora_fim:               form.hora_fim,
-        duracao_sessao:         Number(form.duracao_sessao),
-        capacidade_por_horario: Number(form.capacidade_por_horario),
-        nome_profissional:      form.nome_profissional.trim(),
-        corpo_email:            form.corpo_email.trim(),
-      });
+      await adminEventosApi.atualizar(Number(id), buildPayload());
       navigate('/admin/agendamentos');
     } catch (err) {
       setErroGeral(err instanceof Error ? err.message : 'Erro ao salvar evento.');
@@ -207,19 +249,99 @@ export default function NovoEvento() {
     }
   }
 
+  async function handleSalvarEPublicar() {
+    if (!validar()) return;
+    setPublicando(true);
+    setErroGeral('');
+    try {
+      await adminEventosApi.atualizar(Number(id), buildPayload());
+      await adminEventosApi.publicar(Number(id));
+      setSucesso(true);
+    } catch (err) {
+      setErroGeral(err instanceof Error ? err.message : 'Erro ao publicar evento.');
+    } finally {
+      setPublicando(false);
+    }
+  }
+
+  // ── Estados especiais ────────────────────────────────────────────────────────
+
+  if (carregando) {
+    return (
+      <div className="max-w-3xl mx-auto mt-20 text-center">
+        <svg className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+        <p className="text-slate-500 text-sm">Carregando evento...</p>
+      </div>
+    );
+  }
+
+  if (erroCarregar) {
+    return (
+      <div className="max-w-3xl mx-auto mt-20 text-center">
+        <p className="text-red-600 mb-4">{erroCarregar}</p>
+        <Link to="/admin/agendamentos" className="text-blue-600 hover:underline text-sm">
+          Voltar para Agendamentos
+        </Link>
+      </div>
+    );
+  }
+
+  if (sucesso) {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center px-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-10">
+          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Evento Publicado!</h2>
+          <p className="text-slate-500 mb-8">As alterações foram salvas e o evento foi publicado com sucesso.</p>
+          <button
+            onClick={() => navigate('/admin/agendamentos')}
+            className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium transition-colors"
+          >
+            Ver em Agendamentos
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const isRascunho = statusEvento === 'RASCUNHO';
+
+  // ── Formulário ───────────────────────────────────────────────────────────────
   return (
     <div className="max-w-3xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Criar Novo Evento</h1>
-        <p className="text-slate-500 text-sm mt-0.5">
-          Configure os detalhes da atividade de bem-estar para os colaboradores.
-        </p>
+      <div className="flex items-center gap-3 mb-6">
+        <Link to="/admin/agendamentos">
+          <button className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Editar Evento</h1>
+          <p className="text-slate-500 text-sm">
+            {isRascunho
+              ? 'Rascunho — salve as alterações ou publique o evento.'
+              : 'Atualize os detalhes do evento.'}
+          </p>
+        </div>
+        {statusEvento && (
+          <span className={`ml-auto px-3 py-1 rounded-full text-xs font-semibold ${
+            statusEvento === 'ATIVO' ? 'bg-emerald-100 text-emerald-700' :
+            statusEvento === 'RASCUNHO' ? 'bg-slate-100 text-slate-600' :
+            'bg-amber-100 text-amber-700'
+          }`}>
+            {statusEvento === 'ATIVO' ? 'Publicado' : statusEvento === 'RASCUNHO' ? 'Rascunho' : 'Encerrado'}
+          </span>
+        )}
       </div>
 
       {/* Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
-
         {erroGeral && (
           <div className="mb-5 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />{erroGeral}
@@ -231,9 +353,10 @@ export default function NovoEvento() {
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             Nome do Evento <span className="text-red-500">*</span>
           </label>
-          <input type="text" value={form.titulo}
+          <input
+            type="text"
+            value={form.titulo}
             onChange={e => update('titulo', e.target.value)}
-            placeholder="Ex: Ginástica Laboral Matinal"
             className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${erros.titulo ? 'border-red-400' : 'border-slate-300'}`}
           />
           <FieldError msg={erros.titulo} />
@@ -275,7 +398,7 @@ export default function NovoEvento() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Duração por Sessão (minutos) <span className="text-red-500">*</span>
+                Duração por Sessão (min) <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <input type="number" min={5} max={480} value={form.duracao_sessao}
@@ -300,16 +423,6 @@ export default function NovoEvento() {
               </div>
               <FieldError msg={erros.capacidade_por_horario} />
             </div>
-
-            {form.hora_inicio && form.hora_fim && Number(form.duracao_sessao) > 0 && form.hora_fim > form.hora_inicio && (
-              <div className="bg-blue-50 rounded-lg p-2.5 text-xs text-blue-700">
-                <span className="font-semibold">Sessões geradas:</span>{' '}
-                {Math.floor(
-                  (Number(form.hora_fim.replace(':', '')) - Number(form.hora_inicio.replace(':', ''))) /
-                  Number(form.duracao_sessao)
-                )} aprox.
-              </div>
-            )}
           </div>
         </div>
 
@@ -326,6 +439,17 @@ export default function NovoEvento() {
             </select>
             <FieldError msg={erros.tipo} />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Profissional Responsável <span className="text-red-500">*</span>
+            </label>
+            <input type="text" value={form.nome_profissional}
+              onChange={e => update('nome_profissional', e.target.value)}
+              placeholder="Ex: Dra. Ana Lima"
+              className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.nome_profissional ? 'border-red-400' : 'border-slate-300'}`}
+            />
+            <FieldError msg={erros.nome_profissional} />
+          </div>
         </div>
 
         {/* Corpo do e-mail */}
@@ -336,12 +460,12 @@ export default function NovoEvento() {
           <textarea value={form.corpo_email}
             onChange={e => update('corpo_email', e.target.value)}
             rows={3}
-            placeholder="Texto personalizado que será incluído no e-mail de convite..."
+            placeholder="Olá! Temos uma nova atividade de bem-estar disponível para você..."
             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition resize-none"
           />
         </div>
 
-        {/* Aviso de validação */}
+        {/* Aviso validação */}
         {Object.keys(erros).length > 0 && (
           <div className="mb-5 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -349,23 +473,27 @@ export default function NovoEvento() {
           </div>
         )}
 
-        {/* Botão salvar */}
-        <button type="button" onClick={handleSalvar} disabled={salvando}
-          className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm mb-5">
-          {salvando
-            ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg> Salvando...</>
-            : <><Save className="w-4 h-4" /> Salvar Evento</>
-          }
-        </button>
+        {/* Botões */}
+        <div className={`flex flex-col sm:flex-row gap-3 ${isRascunho ? '' : ''}`}>
+          <button type="button" onClick={handleSalvar}
+            disabled={salvando || publicando}
+            className="flex-1 py-3 px-6 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            {salvando
+              ? <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
+              : <Save className="w-4 h-4" />}
+            {salvando ? 'Salvando...' : isRascunho ? 'Salvar Rascunho' : 'Salvar Alterações'}
+          </button>
 
-        {/* Nota informativa */}
-        <div className="flex items-start gap-2 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-4">
-          <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-          <p>
-            O evento será salvo como <span className="font-semibold text-slate-700">Rascunho</span>.
-            Para disponibilizá-lo aos colaboradores, acesse <span className="font-semibold text-slate-700">Agendamentos</span> e clique em <span className="font-semibold text-slate-700">Publicar</span> no card do evento.
-            Após publicar, você poderá enviar e-mails de notificação para todos os colaboradores e registrar participantes sem e-mail diretamente no card do evento.
-          </p>
+          {isRascunho && (
+            <button type="button" onClick={handleSalvarEPublicar}
+              disabled={salvando || publicando}
+              className="flex-1 py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+              {publicando
+                ? <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
+                : <Send className="w-4 h-4" />}
+              {publicando ? 'Publicando...' : 'Salvar e Publicar'}
+            </button>
+          )}
         </div>
       </div>
     </div>

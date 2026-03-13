@@ -1,16 +1,22 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Calendar,
-  Users,
   BarChart3,
   Settings,
   Bell,
   HelpCircle,
   Search,
-  LogOut
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+
+const navItems = [
+  { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  { to: '/admin/agendamentos', icon: Calendar, label: 'Agendamentos', end: false },
+  { to: '/admin/relatorios', icon: BarChart3, label: 'Relatórios', end: false },
+  { to: '/admin/configuracoes', icon: Settings, label: 'Configurações', end: false },
+];
 
 export default function AdminLayout() {
   const { usuario, logout } = useAuth();
@@ -18,7 +24,7 @@ export default function AdminLayout() {
 
   function handleLogout() {
     logout();
-    navigate('/');
+    navigate('/admin/login');
   }
 
   return (
@@ -38,26 +44,23 @@ export default function AdminLayout() {
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1">
-          <Link to="/admin" className="flex items-center px-3 py-2.5 bg-blue-50 text-blue-700 rounded-lg font-medium">
-            <LayoutDashboard className="w-5 h-5 mr-3" />
-            Dashboard
-          </Link>
-          <Link to="#" className="flex items-center px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg font-medium">
-            <Calendar className="w-5 h-5 mr-3" />
-            Agendamentos
-          </Link>
-          <Link to="#" className="flex items-center px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg font-medium">
-            <Users className="w-5 h-5 mr-3" />
-            Profissionais
-          </Link>
-          <Link to="#" className="flex items-center px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg font-medium">
-            <BarChart3 className="w-5 h-5 mr-3" />
-            Relatórios
-          </Link>
-          <Link to="#" className="flex items-center px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg font-medium">
-            <Settings className="w-5 h-5 mr-3" />
-            Configurações
-          </Link>
+          {navItems.map(({ to, icon: Icon, label, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                `flex items-center px-3 py-2.5 rounded-lg font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`
+              }
+            >
+              <Icon className="w-5 h-5 mr-3 shrink-0" />
+              {label}
+            </NavLink>
+          ))}
         </nav>
 
         <div className="p-4 border-t border-slate-200">
@@ -86,7 +89,7 @@ export default function AdminLayout() {
       <div className="flex-1 ml-64 flex flex-col min-h-screen">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-10">
-          <div className="relative w-96">
+          <div className="relative w-full max-w-sm">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-slate-400" />
             </div>
@@ -96,7 +99,7 @@ export default function AdminLayout() {
               placeholder="Pesquisar agendamentos, pacientes..."
             />
           </div>
-          
+
           <div className="flex items-center gap-4 text-slate-500">
             <button className="hover:text-slate-700 relative">
               <Bell className="w-5 h-5" />
@@ -109,7 +112,7 @@ export default function AdminLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-8">
+        <main className="flex-1 p-4 sm:p-8">
           <Outlet />
         </main>
       </div>

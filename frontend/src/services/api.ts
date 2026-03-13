@@ -17,6 +17,13 @@ async function request<T>(
 
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
 
+  if (res.status === 401) {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('usuario');
+    window.location.href = '/admin/login';
+    throw new Error('Sessão expirada. Faça login novamente.');
+  }
+
   if (!res.ok) {
     const erro = await res.json().catch(() => ({ erro: 'Erro desconhecido' }));
     throw new Error(erro.erro ?? erro.detail ?? 'Erro na requisição');
@@ -86,6 +93,7 @@ export interface HorarioDTO {
 
 export const adminEventosApi = {
   listar: () => request<EventoDTO[]>('/admin/eventos/'),
+  obter: (id: number) => request<EventoDTO>(`/admin/eventos/${id}/`),
   criar: (data: Partial<EventoDTO>) =>
     request<EventoDTO>('/admin/eventos/', { method: 'POST', body: JSON.stringify(data) }),
   atualizar: (id: number, data: Partial<EventoDTO>) =>
@@ -96,7 +104,43 @@ export const adminEventosApi = {
     request<{ mensagem: string }>(`/admin/eventos/${id}/encerrar/`, { method: 'POST' }),
   enviarEmails: (id: number) =>
     request<{ mensagem: string; enviados: number; erros: unknown[] }>(`/admin/eventos/${id}/enviar-emails/`, { method: 'POST' }),
+  registrarParticipanteManual: (id: number, dados: { horario_id: number; nome: string; matricula?: string; departamento?: string }) =>
+    request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
+  adicionarParticipantePendente: (id: number, dados: { nome: string; matricula?: string; departamento?: string }) =>
+    request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
+  listaPresenca: (id: number) =>
+    request<ListaPresencaDTO>(`/admin/eventos/${id}/lista-presenca/`),
 };
+
+// ── Lista de presença ─────────────────────────────────────────────────────────
+
+export interface ParticipantePresencaDTO {
+  nome: string;
+  matricula: string;
+  departamento: string;
+  tipo: 'email' | 'manual';
+}
+
+export interface HorarioPresencaDTO {
+  horario_id: number;
+  hora_inicio: string;
+  hora_fim: string;
+  participantes: ParticipantePresencaDTO[];
+}
+
+export interface ListaPresencaDTO {
+  evento: {
+    id: number;
+    titulo: string;
+    data: string;
+    hora_inicio: string;
+    hora_fim: string;
+    nome_profissional: string;
+    status: string;
+  };
+  horarios: HorarioPresencaDTO[];
+  total: number;
+}
 
 // ── Admin — Dashboard ─────────────────────────────────────────────────────
 

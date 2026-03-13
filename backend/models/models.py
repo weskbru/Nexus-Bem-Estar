@@ -285,6 +285,37 @@ class Agendamento(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# Participante Manual (colaboradores sem e-mail corporativo)
+# ---------------------------------------------------------------------------
+
+class AgendamentoManual(models.Model):
+    """
+    Registro manual feito pelo admin para colaboradores que não possuem
+    e-mail corporativo e não podem acessar o sistema normalmente.
+    """
+    evento = models.ForeignKey(
+        Evento, on_delete=models.CASCADE, related_name='participantes_manuais'
+    )
+    horario = models.ForeignKey(
+        Horario, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='participantes_manuais',
+    )
+    nome = models.CharField(max_length=200, verbose_name='Nome completo')
+    matricula = models.CharField(max_length=50, blank=True, verbose_name='Matrícula')
+    departamento = models.CharField(max_length=100, blank=True, verbose_name='Departamento')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Participante Manual'
+        verbose_name_plural = 'Participantes Manuais'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f'{self.nome} – {self.horario} [manual]'
+
+
+# ---------------------------------------------------------------------------
 # Helpers internos
 # ---------------------------------------------------------------------------
 

@@ -1,13 +1,16 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import Login from './pages/Login';
+import LoginColaborador from './pages/LoginColaborador';
+import LoginAdmin from './pages/Login';
 import AcessoViaToken from './pages/AcessoViaToken';
 import AdminLayout from './layouts/AdminLayout';
 import Dashboard from './pages/admin/Dashboard';
+import AdminEventos from './pages/admin/EventosAgendados';
 import NovoEvento from './pages/admin/NovoEvento';
+import EditarEvento from './pages/admin/EditarEvento';
+import Relatorios from './pages/admin/Relatorios';
 import ColaboradorLayout from './layouts/ColaboradorLayout';
-import Eventos from './pages/colaborador/Eventos';
 import EventDetails from './pages/colaborador/EventDetails';
 import Confirmacao from './pages/colaborador/Confirmacao';
 
@@ -16,11 +19,20 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          <Route path="/" element={<Login />} />
+          {/* Redireciona raiz para login admin */}
+          <Route path="/" element={<Navigate to="/admin/login" replace />} />
+
+          {/* Login colaborador */}
+          <Route path="/login" element={<LoginColaborador />} />
+
+          {/* Login admin */}
+          <Route path="/admin/login" element={<LoginAdmin />} />
+
+          {/* Acesso via link de token (e-mail) */}
           <Route path="/acesso/:token" element={<AcessoViaToken />} />
 
           <Route
-            path="/admin"
+            path="/admin/*"
             element={
               <ProtectedRoute adminOnly>
                 <AdminLayout />
@@ -28,18 +40,20 @@ function App() {
             }
           >
             <Route index element={<Dashboard />} />
+            <Route path="agendamentos" element={<AdminEventos />} />
             <Route path="eventos/novo" element={<NovoEvento />} />
+            <Route path="eventos/:id/editar" element={<EditarEvento />} />
+            <Route path="relatorios" element={<Relatorios />} />
           </Route>
 
           <Route
-            path="/colaborador"
+            path="/colaborador/*"
             element={
               <ProtectedRoute>
                 <ColaboradorLayout />
               </ProtectedRoute>
             }
           >
-            <Route path="eventos" element={<Eventos />} />
             <Route path="eventos/:id" element={<EventDetails />} />
             <Route path="confirmacao" element={<Confirmacao />} />
           </Route>

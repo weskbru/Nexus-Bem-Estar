@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +200,27 @@ class ConviteEmailSerializer(serializers.ModelSerializer):
 
     def get_evento_titulo(self, obj):
         return obj.evento.titulo
+
+
+# ---------------------------------------------------------------------------
+# Participante Manual
+# ---------------------------------------------------------------------------
+
+class AgendamentoManualSerializer(serializers.ModelSerializer):
+    horario_info = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AgendamentoManual
+        fields = ['id', 'evento', 'horario', 'horario_info', 'nome', 'matricula', 'departamento', 'criado_em']
+        read_only_fields = ['id', 'criado_em', 'horario_info']
+
+    def get_horario_info(self, obj):
+        if obj.horario is None:
+            return 'A definir'
+        return (
+            f"{obj.horario.hora_inicio.strftime('%H:%M')} – "
+            f"{obj.horario.hora_fim.strftime('%H:%M')}"
+        )
 
 
 # ---------------------------------------------------------------------------

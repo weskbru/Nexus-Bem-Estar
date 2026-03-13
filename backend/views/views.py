@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual
 from ..serializers.serializers import (
     UsuarioSerializer,
     UsuarioCreateSerializer,
@@ -21,6 +21,7 @@ from ..serializers.serializers import (
     EventoAdminSerializer,
     HorarioSerializer,
     AgendamentoSerializer,
+    AgendamentoManualSerializer,
     ConviteEmailSerializer,
     AdminLoginSerializer,
 )
@@ -155,7 +156,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='publicar')
     def publicar(self, request, pk=None):
-        """Publica o evento e gera os slots de horário automaticamente."""
+        """Publica o evento, gera os slots de horário e distribui participantes pendentes."""
         evento = self.get_object()
         if evento.status == 'encerrado':
             return Response(
@@ -168,6 +169,15 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             evento.gerar_horarios()
         except ValueError as exc:
             return Response({'erro': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Auto-assign pending manual participants (saved during draft) to horarios
+        horarios = list(evento.horarios.order_by('hora_inicio'))
+        pendentes = list(evento.participantes_manuais.filter(horario__isnull=True))
+        if horarios and pendentes:
+            for i, participante in enumerate(pendentes):
+                participante.horario = horarios[i % len(horarios)]
+                participante.save(update_fields=['horario'])
+
         return Response({
             'mensagem': 'Evento publicado com sucesso.',
             'horarios_gerados': evento.horarios.count(),
@@ -244,6 +254,118 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             'mensagem': f'{enviados} e-mail(s) enviado(s) com sucesso.',
             'enviados': enviados,
             'erros': erros,
+        })
+
+    @action(detail=True, methods=['post'], url_path='registrar-participante')
+    def registrar_participante(self, request, pk=None):
+        """
+        POST /api/admin/eventos/<id>/registrar-participante/
+        Registra manualmente um colaborador sem e-mail corporativo.
+        - Rascunho: horario_id não é necessário (participante fica pendente).
+        - Publicado: horario_id obrigatório.
+        Body: { nome, horario_id?, matricula?, departamento? }
+        """
+        evento = self.get_object()
+        if evento.status == 'encerrado':
+            return Response(
+                {'erro': 'Não é possível registrar participantes em eventos encerrados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        nome = request.data.get('nome', '').strip()
+        horario_id = request.data.get('horario_id')
+        matricula = request.data.get('matricula', '').strip()
+        departamento = request.data.get('departamento', '').strip()
+
+        if not nome:
+            return Response(
+                {'erro': 'O nome do participante é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        horario = None
+        if horario_id:
+            try:
+                horario = Horario.objects.get(id=horario_id, evento=evento)
+            except Horario.DoesNotExist:
+                return Response(
+                    {'erro': 'Horário não encontrado neste evento.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        elif evento.status == 'publicado':
+            return Response(
+                {'erro': 'Selecione um horário para eventos publicados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        participante = AgendamentoManual.objects.create(
+            evento=evento,
+            horario=horario,
+            nome=nome,
+            matricula=matricula,
+            departamento=departamento,
+        )
+        return Response(
+            AgendamentoManualSerializer(participante).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['get'], url_path='lista-presenca')
+    def lista_presenca(self, request, pk=None):
+        """
+        GET /api/admin/eventos/<id>/lista-presenca/
+        Retorna lista consolidada de participantes (agendamentos + manuais)
+        agrupada por horário, para conferência na portaria.
+        """
+        evento = self.get_object()
+        horarios = evento.horarios.order_by('hora_inicio').prefetch_related(
+            'agendamentos__usuario',
+            'participantes_manuais',
+        )
+
+        resultado = []
+        total = 0
+        for horario in horarios:
+            participantes = []
+
+            for ag in horario.agendamentos.filter(status='confirmado'):
+                participantes.append({
+                    'nome':        ag.usuario.nome,
+                    'matricula':   ag.usuario.matricula or '—',
+                    'departamento': ag.usuario.departamento or '—',
+                    'tipo':        'email',
+                })
+
+            for pm in horario.participantes_manuais.all():
+                participantes.append({
+                    'nome':        pm.nome,
+                    'matricula':   pm.matricula or '—',
+                    'departamento': pm.departamento or '—',
+                    'tipo':        'manual',
+                })
+
+            participantes.sort(key=lambda p: p['nome'])
+            total += len(participantes)
+
+            resultado.append({
+                'horario_id':    horario.id,
+                'hora_inicio':   horario.hora_inicio.strftime('%H:%M'),
+                'hora_fim':      horario.hora_fim.strftime('%H:%M'),
+                'participantes': participantes,
+            })
+
+        return Response({
+            'evento': {
+                'id':            evento.id,
+                'titulo':        evento.titulo,
+                'data':          evento.data.strftime('%d/%m/%Y'),
+                'hora_inicio':   evento.hora_inicio.strftime('%H:%M'),
+                'hora_fim':      evento.hora_fim.strftime('%H:%M'),
+                'nome_profissional': evento.nome_profissional,
+                'status':        evento.status,
+            },
+            'horarios': resultado,
+            'total':    total,
         })
 
     @action(detail=True, methods=['get'], url_path='exportar-csv')
