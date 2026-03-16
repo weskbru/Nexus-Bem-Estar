@@ -5,12 +5,9 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
 from django.http import StreamingHttpResponse
-<<<<<<< HEAD
 from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-=======
 from django.utils.html import strip_tags
->>>>>>> 0b4d7518ac68855d5901066595fca12a5f435169
+from django.views.decorators.cache import cache_page
 
 from rest_framework import generics, viewsets, status, permissions
 from rest_framework.decorators import action
@@ -101,32 +98,71 @@ class AcessoViaTokenView(APIView):
     """
     GET /api/auth/acesso/<token>/
     Ponto de entrada do colaborador via link mágico do e-mail.
-    Valida o token, marca o convite como utilizado e retorna um JWT.
+    Se o evento não exige palavra-chave, valida o token e retorna um JWT imediatamente.
+    Se exige palavra-chave, retorna apenas os dados do evento e o flag requer_palavra_chave=True.
+
+    POST /api/auth/acesso/<token>/
+    Valida a palavra-chave e, se correta, retorna o JWT.
     """
     permission_classes = [permissions.AllowAny]
 
-    def get(self, request, token):
+    def _get_convite(self, token):
         try:
-            convite = ConviteEmail.objects.select_related('usuario', 'evento').get(token=token)
+            return ConviteEmail.objects.select_related('usuario', 'evento').get(token=token)
         except ConviteEmail.DoesNotExist:
-            return Response(
-                {'erro': 'Link inválido ou expirado.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return None
 
-        # Marca como usado (registro de auditoria; não bloqueia reutilização)
+    def _emitir_jwt(self, convite):
         if not convite.usado:
             convite.usado = True
             convite.save(update_fields=['usado'])
-
         refresh = RefreshToken.for_user(convite.usuario)
-        return Response({
+        return {
             'access': str(refresh.access_token),
             'refresh': str(refresh),
             'usuario': UsuarioSerializer(convite.usuario).data,
             'evento_id': convite.evento.id,
             'chave_mensagem': convite.chave_mensagem,
-        })
+        }
+
+    def get(self, request, token):
+        convite = self._get_convite(token)
+        if convite is None:
+            return Response({'erro': 'Link inválido ou expirado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        evento = convite.evento
+        if evento.palavra_chave:
+            # Exige palavra-chave: retorna apenas dados de prévia, sem JWT
+            return Response({
+                'requer_palavra_chave': True,
+                'evento_titulo': evento.titulo,
+                'evento_tipo': evento.tipo,
+                'evento_data': str(evento.data),
+                'evento_hora_inicio': str(evento.hora_inicio),
+                'evento_hora_fim': str(evento.hora_fim),
+                'nome_profissional': evento.nome_profissional,
+            })
+
+        return Response(self._emitir_jwt(convite))
+
+    def post(self, request, token):
+        convite = self._get_convite(token)
+        if convite is None:
+            return Response({'erro': 'Link inválido ou expirado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        evento = convite.evento
+        if not evento.palavra_chave:
+            # Evento sem palavra-chave: emite JWT normalmente
+            return Response(self._emitir_jwt(convite))
+
+        palavra_chave = request.data.get('palavra_chave', '').strip()
+        if not palavra_chave:
+            return Response({'erro': 'Informe a palavra-chave para acessar o evento.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if palavra_chave.lower() != evento.palavra_chave.strip().lower():
+            return Response({'erro': 'Palavra-chave incorreta. Tente novamente.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        return Response(self._emitir_jwt(convite))
 
 
 # ---------------------------------------------------------------------------
@@ -213,9 +249,9 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='enviar-emails')
     def enviar_emails(self, request, pk=None):
         """
-        Gera um ConviteEmail para cada colaborador ativo e envia o e-mail com
-        o link mágico (token UUID) e a chave de mensagem legível.
-        O admin pode editar o campo `corpo_email` do evento antes de enviar.
+        Envia UM único e-mail para o endereço configurado em EMAIL_DESTINO_EVENTO
+        (normalmente uma Lista de Distribuição corporativa).
+        O envio é síncrono e imediato — sem Celery.
         """
         evento = self.get_object()
         if evento.status != 'publicado':
@@ -224,57 +260,141 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        colaboradores = Usuario.objects.filter(is_active=True, is_admin=False)
-        if not colaboradores.exists():
+        # ---------------------------------------------------------------------------
+        # MODO TESTE — envia apenas para o e-mail do desenvolvedor.
+        # Para ativar o envio real à Lista de Distribuição, comente o bloco
+        # "MODO TESTE" e descomente o bloco "MODO PRODUÇÃO" abaixo.
+        # ---------------------------------------------------------------------------
+        destinatario = 'jonas.silva@aeb.gov.br'  # MODO TESTE
+
+        # ---------------------------------------------------------------------------
+        # MODO PRODUÇÃO — descomente quando for ao ar com a LD real.
+        # ---------------------------------------------------------------------------
+        # destinatario = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
+        # if not destinatario:
+        #     return Response(
+        #         {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no arquivo .env.'},
+        #         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        #     )
+
+        link_sistema = f"{settings.FRONTEND_URL}/eventos"
+
+        secao_chave = ''
+        if evento.palavra_chave:
+            secao_chave = f"""
+        <tr>
+          <td style="padding:16px 24px;background:#fffbeb;border-left:4px solid #f59e0b;">
+            <p style="margin:0;font-size:14px;color:#92400e;">
+              🔑 <strong>Palavra-chave de acesso:</strong>
+              <span style="font-size:18px;font-weight:bold;letter-spacing:2px;color:#78350f;">
+                &nbsp;{evento.palavra_chave}
+              </span>
+            </p>
+            <p style="margin:6px 0 0;font-size:12px;color:#92400e;">
+              Você precisará informar esta palavra-chave ao acessar o evento pelo link abaixo.
+            </p>
+          </td>
+        </tr>"""
+
+        profissional_linha = ''
+        if evento.nome_profissional:
+            profissional_linha = f'<tr><td style="padding:4px 24px;font-size:14px;color:#6b7280;">👤 Profissional: <strong>{evento.nome_profissional}</strong></td></tr>'
+
+        corpo_html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table width="600" cellpadding="0" cellspacing="0"
+               style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+          <!-- Cabeçalho -->
+          <tr>
+            <td style="background:#1d4ed8;padding:24px;text-align:center;">
+              <p style="margin:0;font-size:22px;font-weight:bold;color:#ffffff;">
+                🌿 Programa de Bem-Estar AEB
+              </p>
+            </td>
+          </tr>
+          <!-- Chamada -->
+          <tr>
+            <td style="padding:24px 24px 8px;">
+              <p style="margin:0;font-size:16px;color:#111827;">
+                Prezado(a) colaborador(a),
+              </p>
+              <p style="margin:12px 0 0;font-size:15px;color:#374151;line-height:1.6;">
+                Um novo evento de bem-estar está disponível para agendamento.
+                Acesse o sistema e garanta sua vaga!
+              </p>
+            </td>
+          </tr>
+          <!-- Detalhes do evento -->
+          <tr>
+            <td style="padding:16px 24px 8px;">
+              <table width="100%" cellpadding="0" cellspacing="0"
+                     style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;">
+                <tr>
+                  <td style="padding:14px 16px;font-size:18px;font-weight:bold;color:#1d4ed8;border-bottom:1px solid #e5e7eb;">
+                    {evento.titulo}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 16px 4px;font-size:14px;color:#6b7280;">
+                    📅 Data: <strong>{evento.data.strftime('%d/%m/%Y')}</strong>
+                    &nbsp;&nbsp;
+                    🕐 Horário: <strong>{evento.hora_inicio.strftime('%H:%M')} às {evento.hora_fim.strftime('%H:%M')}</strong>
+                  </td>
+                </tr>
+                {profissional_linha}
+                <tr><td style="padding:8px;"></td></tr>
+              </table>
+            </td>
+          </tr>
+          {secao_chave}
+          <!-- Botão -->
+          <tr>
+            <td style="padding:24px;text-align:center;">
+              <a href="{link_sistema}"
+                 style="display:inline-block;padding:12px 32px;background:#1d4ed8;color:#ffffff;
+                        font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px;">
+                Acessar o Sistema e Agendar
+              </a>
+            </td>
+          </tr>
+          <!-- Rodapé -->
+          <tr>
+            <td style="padding:16px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;
+                       text-align:center;font-size:12px;color:#9ca3af;">
+              Este e-mail foi enviado automaticamente pelo Sistema de Bem-Estar da AEB.<br>
+              Por favor, não responda a esta mensagem.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+        try:
+            send_mail(
+                subject=f'[Bem-Estar AEB] Novo evento disponível: {evento.titulo}',
+                message=f"Novo evento disponível: {evento.titulo} — {evento.data.strftime('%d/%m/%Y')} {evento.hora_inicio.strftime('%H:%M')} às {evento.hora_fim.strftime('%H:%M')}. Acesse: {link_sistema}",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[destinatario],
+                html_message=corpo_html,
+                fail_silently=False,
+            )
+            return Response({
+                'mensagem': f'E-mail enviado com sucesso para {destinatario}.',
+                'destinatario': destinatario,
+            }, status=status.HTTP_200_OK)
+        except Exception as exc:
             return Response(
-                {'erro': 'Nenhum colaborador ativo encontrado para envio.'},
-                status=status.HTTP_400_BAD_REQUEST,
+                {'erro': f'Falha ao enviar e-mail: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-        corpo_template = evento.get_corpo_email()
-        enviados = 0
-        erros = []
-
-        for usuario in colaboradores:
-            convite, _ = ConviteEmail.objects.get_or_create(
-                usuario=usuario,
-                evento=evento,
-            )
-            link = f"{settings.FRONTEND_URL}/acesso/{convite.token}"
-            try:
-                corpo = corpo_template.format(
-                    nome=usuario.nome,
-                    titulo=evento.titulo,
-                    data=evento.data.strftime('%d/%m/%Y'),
-                    hora_inicio=evento.hora_inicio.strftime('%H:%M'),
-                    hora_fim=evento.hora_fim.strftime('%H:%M'),
-                    link=link,
-                    chave=convite.chave_mensagem,
-                )
-            except KeyError as exc:
-                return Response(
-                    {'erro': f'Variável inválida no template de e-mail: {exc}'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            try:
-                send_mail(
-                    subject=f'Convite: {evento.titulo}',
-                    message=strip_tags(corpo),
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[usuario.email],
-                    html_message=corpo,
-                    fail_silently=False,
-                )
-                enviados += 1
-            except Exception as exc:
-                erros.append({'email': usuario.email, 'erro': str(exc)})
-
-        return Response({
-            'mensagem': f'{enviados} e-mail(s) enviado(s) com sucesso.',
-            'enviados': enviados,
-            'erros': erros,
-        })
 
     @action(detail=True, methods=['post'], url_path='registrar-participante')
     def registrar_participante(self, request, pk=None):
