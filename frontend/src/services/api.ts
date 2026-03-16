@@ -50,6 +50,20 @@ export interface LoginResponse {
   usuario: UsuarioDTO;
 }
 
+export interface AcessoPreviewDTO {
+  requer_palavra_chave: true;
+  evento_titulo: string;
+  evento_tipo: string;
+  evento_data: string;
+  evento_hora_inicio: string;
+  evento_hora_fim: string;
+  nome_profissional: string;
+}
+
+export type AcessoTokenResponse =
+  | (LoginResponse & { evento_id: number; chave_mensagem: string })
+  | AcessoPreviewDTO;
+
 export const authApi = {
   login: (email: string, password: string) =>
     request<LoginResponse>('/auth/login/', {
@@ -57,9 +71,18 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     }),
 
+  verificarToken: (token: string) =>
+    request<AcessoTokenResponse>(`/auth/acesso/${token}/`),
+
   acessoViaToken: (token: string) =>
     request<LoginResponse & { evento_id: number; chave_mensagem: string }>(
       `/auth/acesso/${token}/`
+    ),
+
+  acessoViaTokenComChave: (token: string, palavra_chave: string) =>
+    request<LoginResponse & { evento_id: number; chave_mensagem: string }>(
+      `/auth/acesso/${token}/`,
+      { method: 'POST', body: JSON.stringify({ palavra_chave }) }
     ),
 };
 
@@ -78,6 +101,7 @@ export interface EventoDTO {
   imagem_url: string;
   corpo_email: string;
   nome_profissional: string;
+  palavra_chave: string;
   horarios: HorarioDTO[];
   total_agendamentos?: number;
 }

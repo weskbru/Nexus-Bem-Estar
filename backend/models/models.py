@@ -119,6 +119,13 @@ class Evento(models.Model):
             '{hora_inicio}, {hora_fim}, {link}, {chave}'
         ),
     )
+    # Palavra-chave opcional: se preenchida, o colaborador deve informá-la ao acessar o link do evento.
+    palavra_chave = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Palavra-chave de acesso',
+        help_text='Se preenchida, o colaborador precisará informar esta palavra-chave ao clicar no link do convite.',
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

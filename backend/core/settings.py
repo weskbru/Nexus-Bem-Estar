@@ -113,15 +113,16 @@ EMAIL_HOST = config('EMAIL_HOST', default='')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-DEFAULT_FROM_EMAIL = config(
-    'DEFAULT_FROM_EMAIL',
-    default='Agenda Bem-Estar <noreply@empresa.com.br>'
-)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@aeb.gov.br')
 
 # URL base do frontend usada nos links de e-mail
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
+# Destinatário único do disparo de e-mails de evento.
+# Em teste: e-mail pessoal. Em produção: Lista de Distribuição (ex: ld-usuarios@aeb.gov.br)
+EMAIL_DESTINO_EVENTO = config('EMAIL_DESTINO_EVENTO', default='')
 # Cache — Redis em produção, memória local em dev
 _REDIS_URL = os.getenv('REDIS_URL', '')
 if _REDIS_URL:

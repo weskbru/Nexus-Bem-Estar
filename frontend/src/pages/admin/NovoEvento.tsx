@@ -137,6 +137,7 @@ interface FormState {
   duracao_sessao: string;
   capacidade_por_horario: string;
   nome_profissional: string;
+  palavra_chave: string;
   corpo_email: string;
 }
 
@@ -224,7 +225,7 @@ export default function NovoEvento() {
     titulo: '', tipo: '', data: '',
     hora_inicio: '08:00', hora_fim: '17:00',
     duracao_sessao: '30', capacidade_por_horario: '1',
-    nome_profissional: '', corpo_email: '',
+    nome_profissional: '', palavra_chave: '', corpo_email: '',
   });
   const [erros, setErros] = useState<FormErrors>({});
   const [erroGeral, setErroGeral] = useState('');
@@ -279,6 +280,7 @@ export default function NovoEvento() {
         duracao_sessao:         Number(form.duracao_sessao),
         capacidade_por_horario: Number(form.capacidade_por_horario),
         nome_profissional:      form.nome_profissional.trim(),
+        palavra_chave:          form.palavra_chave.trim(),
         corpo_email:            form.corpo_email.trim(),
         status:                 'publicado',
       });
@@ -409,6 +411,23 @@ export default function NovoEvento() {
             </select>
             <FieldError msg={erros.tipo} />
           </div>
+        </div>
+
+        {/* Palavra-chave de acesso */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            Palavra-chave de Acesso
+          </label>
+          <input
+            type="text"
+            value={form.palavra_chave}
+            onChange={e => update('palavra_chave', e.target.value)}
+            placeholder="Ex: YOGA2026 (deixe em branco para acesso livre)"
+            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Se preenchida, o colaborador precisará informar esta palavra-chave ao clicar no link do convite.
+          </p>
         </div>
 
         {/* Corpo do e-mail */}

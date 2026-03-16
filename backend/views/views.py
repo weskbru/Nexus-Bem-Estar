@@ -1,15 +1,15 @@
 import csv
 
 from django.contrib.auth import authenticate
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
 from django.http import StreamingHttpResponse
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.utils.html import strip_tags
+from django.views.decorators.cache import cache_page
 
 from rest_framework import generics, viewsets, status, permissions
 from rest_framework.decorators import action
@@ -114,32 +114,71 @@ class AcessoViaTokenView(APIView):
     """
     GET /api/auth/acesso/<token>/
     Ponto de entrada do colaborador via link mágico do e-mail.
-    Valida o token, marca o convite como utilizado e retorna um JWT.
+    Se o evento não exige palavra-chave, valida o token e retorna um JWT imediatamente.
+    Se exige palavra-chave, retorna apenas os dados do evento e o flag requer_palavra_chave=True.
+
+    POST /api/auth/acesso/<token>/
+    Valida a palavra-chave e, se correta, retorna o JWT.
     """
     permission_classes = [permissions.AllowAny]
 
-    def get(self, request, token):
+    def _get_convite(self, token):
         try:
-            convite = ConviteEmail.objects.select_related('usuario', 'evento').get(token=token)
+            return ConviteEmail.objects.select_related('usuario', 'evento').get(token=token)
         except ConviteEmail.DoesNotExist:
-            return Response(
-                {'erro': 'Link inválido ou expirado.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return None
 
-        # Marca como usado (registro de auditoria; não bloqueia reutilização)
+    def _emitir_jwt(self, convite):
         if not convite.usado:
             convite.usado = True
             convite.save(update_fields=['usado'])
-
         refresh = RefreshToken.for_user(convite.usuario)
-        return Response({
+        return {
             'access': str(refresh.access_token),
             'refresh': str(refresh),
             'usuario': UsuarioSerializer(convite.usuario).data,
             'evento_id': convite.evento.id,
             'chave_mensagem': convite.chave_mensagem,
-        })
+        }
+
+    def get(self, request, token):
+        convite = self._get_convite(token)
+        if convite is None:
+            return Response({'erro': 'Link inválido ou expirado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        evento = convite.evento
+        if evento.palavra_chave:
+            # Exige palavra-chave: retorna apenas dados de prévia, sem JWT
+            return Response({
+                'requer_palavra_chave': True,
+                'evento_titulo': evento.titulo,
+                'evento_tipo': evento.tipo,
+                'evento_data': str(evento.data),
+                'evento_hora_inicio': str(evento.hora_inicio),
+                'evento_hora_fim': str(evento.hora_fim),
+                'nome_profissional': evento.nome_profissional,
+            })
+
+        return Response(self._emitir_jwt(convite))
+
+    def post(self, request, token):
+        convite = self._get_convite(token)
+        if convite is None:
+            return Response({'erro': 'Link inválido ou expirado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        evento = convite.evento
+        if not evento.palavra_chave:
+            # Evento sem palavra-chave: emite JWT normalmente
+            return Response(self._emitir_jwt(convite))
+
+        palavra_chave = request.data.get('palavra_chave', '').strip()
+        if not palavra_chave:
+            return Response({'erro': 'Informe a palavra-chave para acessar o evento.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if palavra_chave.lower() != evento.palavra_chave.strip().lower():
+            return Response({'erro': 'Palavra-chave incorreta. Tente novamente.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        return Response(self._emitir_jwt(convite))
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +280,9 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='enviar-emails')
     def enviar_emails(self, request, pk=None):
         """
-        Gera um ConviteEmail para cada colaborador ativo e envia o e-mail com
-        o link mágico (token UUID) e a chave de mensagem legível.
-        O admin pode editar o campo `corpo_email` do evento antes de enviar.
+        Envia UM único e-mail para o endereço configurado em EMAIL_DESTINO_EVENTO
+        (normalmente uma Lista de Distribuição corporativa).
+        O envio é síncrono e imediato — sem Celery.
         """
         evento = self.get_object()
         if evento.status != 'publicado':
@@ -252,57 +291,43 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        colaboradores = Usuario.objects.filter(is_active=True, is_admin=False)
-        if not colaboradores.exists():
+        # ---------------------------------------------------------------------------
+        # MODO TESTE — envia apenas para o e-mail do desenvolvedor.
+        # Para ativar o envio real à Lista de Distribuição, comente o bloco
+        # "MODO TESTE" e descomente o bloco "MODO PRODUÇÃO" abaixo.
+        # ---------------------------------------------------------------------------
+        destinatario = 'jonas.silva@aeb.gov.br'  # MODO TESTE
+
+        # ---------------------------------------------------------------------------
+        # MODO PRODUÇÃO — descomente quando for ao ar com a LD real.
+        # ---------------------------------------------------------------------------
+        # destinatario = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
+        # if not destinatario:
+        #     return Response(
+        #         {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no arquivo .env.'},
+        #         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        #     )
+
+        corpo_html = evento.corpo_email or ''
+
+        try:
+            send_mail(
+                subject=evento.titulo,
+                message='',
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[destinatario],
+                html_message=corpo_html,
+                fail_silently=False,
+            )
+            return Response({
+                'mensagem': f'E-mail enviado com sucesso para {destinatario}.',
+                'destinatario': destinatario,
+            }, status=status.HTTP_200_OK)
+        except Exception as exc:
             return Response(
-                {'erro': 'Nenhum colaborador ativo encontrado para envio.'},
-                status=status.HTTP_400_BAD_REQUEST,
+                {'erro': f'Falha ao enviar e-mail: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-        corpo_template = evento.get_corpo_email()
-        enviados = 0
-        erros = []
-
-        for usuario in colaboradores:
-            convite, _ = ConviteEmail.objects.get_or_create(
-                usuario=usuario,
-                evento=evento,
-            )
-            link = f"{settings.FRONTEND_URL}/acesso/{convite.token}"
-            try:
-                corpo = corpo_template.format(
-                    nome=usuario.nome,
-                    titulo=evento.titulo,
-                    data=evento.data.strftime('%d/%m/%Y'),
-                    hora_inicio=evento.hora_inicio.strftime('%H:%M'),
-                    hora_fim=evento.hora_fim.strftime('%H:%M'),
-                    link=link,
-                    chave=convite.chave_mensagem,
-                )
-            except KeyError as exc:
-                return Response(
-                    {'erro': f'Variável inválida no template de e-mail: {exc}'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            try:
-                send_mail(
-                    subject=f'Convite: {evento.titulo}',
-                    message=strip_tags(corpo),
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[usuario.email],
-                    html_message=corpo,
-                    fail_silently=False,
-                )
-                enviados += 1
-            except Exception as exc:
-                erros.append({'email': usuario.email, 'erro': str(exc)})
-
-        return Response({
-            'mensagem': f'{enviados} e-mail(s) enviado(s) com sucesso.',
-            'enviados': enviados,
-            'erros': erros,
-        })
 
     @action(detail=True, methods=['post'], url_path='registrar-participante')
     def registrar_participante(self, request, pk=None):
@@ -341,6 +366,16 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             return Response(
                 {'erro': 'Horário não encontrado neste evento.'},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        confirmados = horario.agendamentos.filter(status='confirmado').count()
+        manuais = horario.participantes_manuais.count()
+        ocupados = confirmados + manuais
+
+        if ocupados >= evento.capacidade_por_horario:
+            return Response(
+                {'erro': f'Horário lotado. Capacidade máxima de {evento.capacidade_por_horario} pessoa(s) atingida.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         participante = AgendamentoManual.objects.create(

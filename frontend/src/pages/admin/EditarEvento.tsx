@@ -145,6 +145,7 @@ interface FormState {
   hora_fim: string;
   duracao_sessao: string;
   capacidade_por_horario: string;
+  palavra_chave: string;
   corpo_email: string;
 }
 
@@ -235,7 +236,7 @@ export default function EditarEvento() {
 
   const [form, setForm] = useState<FormState>({
     titulo: '', tipo: '', data: '', hora_inicio: '', hora_fim: '',
-    duracao_sessao: '30', capacidade_por_horario: '1', corpo_email: '',
+    duracao_sessao: '30', capacidade_por_horario: '1', palavra_chave: '', corpo_email: '',
   });
   const [erros, setErros] = useState<FormErrors>({});
   const [erroGeral, setErroGeral] = useState('');
@@ -254,6 +255,7 @@ export default function EditarEvento() {
           hora_fim:               evento.hora_fim.substring(0, 5),
           duracao_sessao:         String(evento.duracao_sessao),
           capacidade_por_horario: String(evento.capacidade_por_horario),
+          palavra_chave:          evento.palavra_chave ?? '',
           corpo_email:            evento.corpo_email ?? '',
         });
       })
@@ -305,6 +307,7 @@ export default function EditarEvento() {
       hora_fim:               form.hora_fim,
       duracao_sessao:         Number(form.duracao_sessao),
       capacidade_por_horario: Number(form.capacidade_por_horario),
+      palavra_chave:          form.palavra_chave.trim(),
       corpo_email:            form.corpo_email.trim(),
     };
   }
@@ -509,6 +512,23 @@ export default function EditarEvento() {
           </div>
         </div>
 
+        {/* Palavra-chave de acesso */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            Palavra-chave de Acesso
+          </label>
+          <input
+            type="text"
+            value={form.palavra_chave}
+            onChange={e => update('palavra_chave', e.target.value)}
+            placeholder="Ex: YOGA2026 (deixe em branco para acesso livre)"
+            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Se preenchida, o colaborador precisará informar esta palavra-chave ao clicar no link do convite.
+          </p>
+        </div>
+
         {/* Corpo do e-mail */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -519,7 +539,7 @@ export default function EditarEvento() {
               ref={quillRef}
               className="email-editor"
               value={form.corpo_email}
-              onChange={(value) => update('corpo_email', value)}
+              onChange={(value: string) => update('corpo_email', value)}
               placeholder="Olá! Temos uma nova atividade de bem-estar disponível para você..."
               theme="snow"
               modules={emailModules}

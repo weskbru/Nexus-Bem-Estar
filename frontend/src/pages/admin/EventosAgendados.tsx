@@ -777,6 +777,7 @@ export default function AdminEventos() {
   const [listaPresencaId, setListaPresencaId] = useState<number | null>(null);
   const [actionTarget, setActionTarget] = useState<EventoDTO | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ evento: EventoDTO; tipo: 'emails' | 'cancelar' } | null>(null);
+  const [toast, setToast] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null);
 
   useEffect(() => { carregarEventos(); }, []);
 
@@ -799,11 +800,21 @@ export default function AdminEventos() {
     finally { setActionLoadingId(null); }
   }
 
+  function mostrarToast(tipo: 'sucesso' | 'erro', msg: string) {
+    setToast({ tipo, msg });
+    setTimeout(() => setToast(null), 5000);
+  }
+
   async function handleEnviarEmails(evento: EventoDTO) {
     setEmailLoadingId(evento.id);
-    try { await adminEventosApi.enviarEmails(evento.id); }
-    catch (err) { console.error(err); }
-    finally { setEmailLoadingId(null); }
+    try {
+      await adminEventosApi.enviarEmails(evento.id);
+      mostrarToast('sucesso', `E-mail enviado com sucesso para a lista de distribuição.`);
+    } catch (err) {
+      mostrarToast('erro', err instanceof Error ? err.message : 'Erro ao enviar e-mails.');
+    } finally {
+      setEmailLoadingId(null);
+    }
   }
 
   async function handleDelete() {
@@ -835,6 +846,21 @@ export default function AdminEventos() {
 
   return (
     <div className="max-w-6xl mx-auto">
+
+      {/* Toast de feedback */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium max-w-sm transition-all
+          ${toast.tipo === 'sucesso' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+          {toast.tipo === 'sucesso'
+            ? <CheckCircle2 className="w-5 h-5 shrink-0" />
+            : <AlertTriangle className="w-5 h-5 shrink-0" />}
+          <span>{toast.msg}</span>
+          <button onClick={() => setToast(null)} className="ml-2 opacity-70 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>

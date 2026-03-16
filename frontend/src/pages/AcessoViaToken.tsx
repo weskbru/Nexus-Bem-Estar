@@ -1,118 +1,86 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Shield, Calendar, Clock, User, MapPin, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { authApi, type AcessoPreviewDTO } from '../services/api';
+import { Shield, Calendar, Clock, User, AlertCircle, CheckCircle2, Key } from 'lucide-react';
 
-interface EventoData {
-  id: number;
-  titulo: string;
-  tipo: string;
-  descricao: string;
-  nome_profissional: string;
-  data: string;
-  hora_inicio: string;
-  hora_fim: string;
-  local: string;
-  vagas_disponiveis: number;
-}
+type Estado = 'carregando' | 'sem_chave' | 'aguarda_chave' | 'confirmando' | 'confirmado' | 'erro';
 
 export default function AcessoViaToken() {
   const { token } = useParams<{ token: string }>();
   const { loginViaToken } = useAuth();
   const navigate = useNavigate();
+
+  const [estado, setEstado] = useState<Estado>('carregando');
   const [erro, setErro] = useState('');
-  const [carregando, setCarregando] = useState(true);
-  const [evento, setEvento] = useState<EventoData | null>(null);
-  const [email, setEmail] = useState('');
-  const [confirmando, setConfirmando] = useState(false);
-  const [confirmado, setConfirmado] = useState(false);
+  const [preview, setPreview] = useState<AcessoPreviewDTO | null>(null);
+  const [palavraChave, setPalavraChave] = useState('');
+  const [erroChave, setErroChave] = useState('');
 
   useEffect(() => {
-    if (!token) {
-      setErro('Link inválido.');
-      setCarregando(false);
-      return;
-    }
-
-    // Validar token e carregar evento
-    carregarDadosEvento();
+    if (!token) { setErro('Link inválido.'); setEstado('erro'); return; }
+    verificarToken();
   }, [token]);
 
-  const carregarDadosEvento = async () => {
+  async function verificarToken() {
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api'}/eventos/acesso-token/?token=${token}`
-      );
-      
-      if (!response.ok) {
-        throw new Error('Token inválido ou expirado');
-      }
+      const data = await authApi.verificarToken(token!);
 
-      const data = await response.json();
-      setEvento(data.evento);
-      setEmail(data.email || '');
-      setCarregando(false);
+      if ('requer_palavra_chave' in data && data.requer_palavra_chave) {
+        setPreview(data as AcessoPreviewDTO);
+        setEstado('aguarda_chave');
+      } else {
+        // Não exige palavra-chave: já recebemos o JWT — salvar sessão e redirecionar
+        const resp = data as { access: string; refresh: string; usuario: import('../services/api').UsuarioDTO; evento_id: number };
+        await loginViaToken(token!);
+        navigate(`/colaborador/eventos/${resp.evento_id}`, { replace: true });
+      }
     } catch {
       setErro('Link inválido ou expirado. Solicite um novo convite.');
-      setCarregando(false);
+      setEstado('erro');
     }
-  };
+  }
 
-  const handleConfirmar = async () => {
-    if (!token || !evento) return;
-
-    setConfirmando(true);
+  async function handleConfirmarComChave() {
+    if (!palavraChave.trim()) {
+      setErroChave('Informe a palavra-chave.');
+      return;
+    }
+    setEstado('confirmando');
+    setErroChave('');
     try {
-      // Fazer login via token
-      await loginViaToken(token);
-      
-      // Confirmar participação
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api'}/confirmacoes/`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          },
-          body: JSON.stringify({
-            evento_id: evento.id,
-            confirmado: true,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Erro ao confirmar participação');
-      }
-
-      setConfirmado(true);
+      const data = await authApi.acessoViaTokenComChave(token!, palavraChave.trim());
+      // Salvar sessão manualmente (loginViaToken chama GET, mas já temos os dados via POST)
+      localStorage.setItem('access_token', data.access);
+      localStorage.setItem('usuario', JSON.stringify(data.usuario));
+      setEstado('confirmado');
       setTimeout(() => {
-        navigate(`/colaborador/eventos/${evento.id}`, { replace: true });
-      }, 2000);
-    } catch {
-      setErro('Erro ao confirmar participação. Tente novamente.');
-      setConfirmando(false);
+        navigate(`/colaborador/eventos/${data.evento_id}`, { replace: true });
+      }, 1500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao validar palavra-chave.';
+      setErroChave(msg);
+      setEstado('aguarda_chave');
     }
-  };
+  }
 
-  if (carregando) {
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (estado === 'carregando') {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <svg className="animate-spin h-12 w-12 text-blue-600" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-          </div>
+          <svg className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
           <p className="text-slate-500 font-medium">Carregando convite...</p>
         </div>
       </div>
     );
   }
 
-  if (erro) {
+  // ── Erro ───────────────────────────────────────────────────────────────────
+  if (estado === 'erro') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
@@ -134,7 +102,8 @@ export default function AcessoViaToken() {
     );
   }
 
-  if (confirmado) {
+  // ── Confirmado ─────────────────────────────────────────────────────────────
+  if (estado === 'confirmado') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
@@ -143,19 +112,24 @@ export default function AcessoViaToken() {
               <CheckCircle2 className="w-8 h-8 text-emerald-600" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Confirmação Recebida!</h1>
-          <p className="text-slate-500 mb-6">
-            Sua participação foi confirmada. Você será redirecionado em instantes...
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Acesso Liberado!</h1>
+          <p className="text-slate-500">Redirecionando para o evento...</p>
         </div>
       </div>
     );
   }
 
+  // ── Aguarda palavra-chave ──────────────────────────────────────────────────
+  const tipoEmoji: Record<string, string> = {
+    massagem: '💆', yoga: '🧘', meditacao: '🕉️',
+    nutricao: '🥗', pilates: '🤸', acupuntura: '🪡',
+  };
+  const emoji = preview ? (tipoEmoji[preview.evento_tipo] ?? '✨') : '✨';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Header com Logo */}
+      <div className="max-w-lg mx-auto">
+        {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -165,134 +139,103 @@ export default function AcessoViaToken() {
           </div>
         </div>
 
-        {/* Card Principal */}
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-          {/* Imagem do Evento */}
-          <div className="h-56 bg-gradient-to-br from-blue-400 to-blue-600 relative overflow-hidden">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-6xl mb-2">
-                  {evento?.tipo === 'massagem' && '💆'}
-                  {evento?.tipo === 'yoga' && '🧘'}
-                  {evento?.tipo === 'meditacao' && '🕉️'}
-                  {evento?.tipo === 'nutricao' && '🥗'}
-                  {evento?.tipo === 'pilates' && '🤸'}
-                  {evento?.tipo === 'acupuntura' && '🪡'}
-                  {!['massagem', 'yoga', 'meditacao', 'nutricao', 'pilates', 'acupuntura'].includes(evento?.tipo || '') && '✨'}
-                </div>
-              </div>
-            </div>
+          {/* Header do evento */}
+          <div className="h-40 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+            <span className="text-6xl">{emoji}</span>
           </div>
 
-          {/* Conteúdo */}
-          <div className="p-8 md:p-10">
-            {/* Título e Descrição */}
-            <h2 className="text-3xl font-bold text-slate-900 mb-2">
-              {evento?.titulo}
-            </h2>
-            <p className="text-slate-500 mb-8">
-              {evento?.descricao || 'Participe deste evento de bem-estar e relaxe com profissionais especializados.'}
-            </p>
+          <div className="p-8">
+            {preview && (
+              <>
+                <h2 className="text-2xl font-bold text-slate-900 mb-6">{preview.evento_titulo}</h2>
 
-            {/* Detalhes do Evento */}
-            <div className="bg-slate-50 rounded-2xl p-6 mb-8 space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="flex-grow">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Data</p>
-                  <p className="text-lg font-semibold text-slate-900">
-                    {new Date(evento?.data || '').toLocaleDateString('pt-BR', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </p>
-                </div>
-              </div>
+                <div className="bg-slate-50 rounded-2xl p-5 mb-8 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                      <Calendar className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Data</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {new Date(preview.evento_data + 'T00:00:00').toLocaleDateString('pt-BR', {
+                          weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="flex-grow">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Horário</p>
-                  <p className="text-lg font-semibold text-slate-900">
-                    {evento?.hora_inicio.substring(0, 5)} às {evento?.hora_fim.substring(0, 5)}
-                  </p>
-                </div>
-              </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                      <Clock className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Horário</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {preview.evento_hora_inicio.substring(0, 5)} às {preview.evento_hora_fim.substring(0, 5)}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <User className="w-5 h-5 text-blue-600" />
+                  {preview.nome_profissional && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                        <User className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Profissional</p>
+                        <p className="text-sm font-semibold text-slate-900">{preview.nome_profissional}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex-grow">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Profissional</p>
-                  <p className="text-lg font-semibold text-slate-900">{evento?.nome_profissional}</p>
-                </div>
-              </div>
+              </>
+            )}
 
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <MapPin className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="flex-grow">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Local</p>
-                  <p className="text-lg font-semibold text-slate-900">{evento?.local}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Campo de Email */}
-            <div className="mb-8">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                E-mail corporativo
+            {/* Campo palavra-chave */}
+            <div className="mb-6">
+              <label className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 mb-2">
+                <Key className="w-4 h-4 text-blue-600" />
+                Palavra-chave de acesso
               </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  value={email}
-                  disabled
-                  className="w-full px-4 py-3 pl-4 border border-slate-300 rounded-xl text-slate-900 bg-slate-50 cursor-not-allowed"
-                />
-              </div>
+              <input
+                type="text"
+                value={palavraChave}
+                onChange={e => { setPalavraChave(e.target.value); setErroChave(''); }}
+                onKeyDown={e => e.key === 'Enter' && handleConfirmarComChave()}
+                placeholder="Digite a palavra-chave recebida..."
+                className={`w-full px-4 py-3 border rounded-xl text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${erroChave ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+              />
+              {erroChave && (
+                <p className="mt-1.5 flex items-center gap-1 text-sm text-red-600">
+                  <AlertCircle className="w-4 h-4 shrink-0" />{erroChave}
+                </p>
+              )}
             </div>
 
-            {/* Botão de Confirmação */}
             <button
-              onClick={handleConfirmar}
-              disabled={confirmando}
-              className={`w-full px-6 py-3 rounded-xl font-semibold text-white text-lg transition-all ${
-                confirmando
-                  ? 'bg-slate-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl'
-              }`}
+              onClick={handleConfirmarComChave}
+              disabled={estado === 'confirmando'}
+              className="w-full px-6 py-3 rounded-xl font-semibold text-white text-base transition-all bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {confirmando ? (
+              {estado === 'confirmando' ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
-                  Confirmando...
+                  Validando...
                 </span>
-              ) : (
-                'Confirmar Participação'
-              )}
+              ) : 'Acessar Evento'}
             </button>
 
-            {/* Segurança */}
-            <div className="flex items-center justify-center gap-2 mt-6 text-slate-500">
+            <div className="flex items-center justify-center gap-2 mt-6 text-slate-400">
               <Shield className="w-4 h-4 text-blue-600" />
               <span className="text-sm">SISTEMA INTERNO SEGURO</span>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="text-center mt-8 text-slate-500 text-sm">
           <p>© 2026 Agenda Bem-Estar • Gestão de Qualidade de Vida</p>
         </div>
