@@ -6,8 +6,6 @@ import {
   AlertCircle,
   ArrowLeft,
   Save,
-  Send,
-  CheckCircle2,
 } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
@@ -242,8 +240,6 @@ export default function EditarEvento() {
   const [erros, setErros] = useState<FormErrors>({});
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const [publicando, setPublicando] = useState(false);
-  const [sucesso, setSucesso] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -328,22 +324,6 @@ export default function EditarEvento() {
     }
   }
 
-  async function handleSalvarEPublicar() {
-    if (statusEvento.toUpperCase() === 'ENCERRADO') return;
-    if (!validar()) return;
-    setPublicando(true);
-    setErroGeral('');
-    try {
-      await adminEventosApi.atualizar(Number(id), buildPayload());
-      await adminEventosApi.publicar(Number(id));
-      setSucesso(true);
-    } catch (err) {
-      setErroGeral(err instanceof Error ? err.message : 'Erro ao publicar evento.');
-    } finally {
-      setPublicando(false);
-    }
-  }
-
   // ── Estados especiais ────────────────────────────────────────────────────────
 
   if (carregando) {
@@ -369,31 +349,11 @@ export default function EditarEvento() {
     );
   }
 
-  if (sucesso) {
-    return (
-      <div className="max-w-lg mx-auto mt-16 text-center px-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-10">
-          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
-            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Evento Publicado!</h2>
-          <p className="text-slate-500 mb-8">As alterações foram salvas e o evento foi publicado com sucesso.</p>
-          <button
-            onClick={() => navigate('/admin/agendamentos')}
-            className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium transition-colors"
-          >
-            Ver em Agendamentos
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const normalizedStatus = statusEvento.toUpperCase() === 'PUBLICADO' ? 'ATIVO' : statusEvento.toUpperCase();
-  const isRascunho = normalizedStatus === 'RASCUNHO';
+  const isCancelado = normalizedStatus === 'CANCELADO';
   const isEncerrado = normalizedStatus === 'ENCERRADO';
 
-  if (isEncerrado) {
+  if (isEncerrado || isCancelado) {
     return (
       <div className="max-w-3xl mx-auto mt-10">
         <div className="flex items-center gap-3 mb-6">
@@ -404,12 +364,12 @@ export default function EditarEvento() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Editar Evento</h1>
-            <p className="text-slate-500 text-sm">Eventos encerrados não podem ser editados.</p>
+            <p className="text-slate-500 text-sm">Eventos cancelados ou encerrados não podem ser editados.</p>
           </div>
         </div>
 
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-amber-800 text-sm">
-          Este evento está encerrado. Para alterar informações, crie um novo evento.
+          Este evento está {isEncerrado ? 'encerrado' : 'cancelado'}. Para alterar informações, crie um novo evento.
           <div className="mt-3">
             <Link to="/admin/agendamentos" className="text-amber-900 font-semibold hover:underline">
               Voltar para Agendamentos
@@ -432,19 +392,15 @@ export default function EditarEvento() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Editar Evento</h1>
-          <p className="text-slate-500 text-sm">
-            {isRascunho
-              ? 'Rascunho — salve as alterações ou publique o evento.'
-              : 'Atualize os detalhes do evento.'}
-          </p>
+          <p className="text-slate-500 text-sm">Atualize os detalhes do evento.</p>
         </div>
         {statusEvento && (
           <span className={`ml-auto px-3 py-1 rounded-full text-xs font-semibold ${
-            statusEvento === 'ATIVO' ? 'bg-emerald-100 text-emerald-700' :
-            statusEvento === 'RASCUNHO' ? 'bg-slate-100 text-slate-600' :
+            normalizedStatus === 'ATIVO' ? 'bg-emerald-100 text-emerald-700' :
+            normalizedStatus === 'CANCELADO' ? 'bg-rose-100 text-rose-700' :
             'bg-amber-100 text-amber-700'
           }`}>
-            {normalizedStatus === 'ATIVO' ? 'Publicado' : normalizedStatus === 'RASCUNHO' ? 'Rascunho' : 'Encerrado'}
+            {normalizedStatus === 'ATIVO' ? 'Publicado' : normalizedStatus === 'CANCELADO' ? 'Cancelado' : 'Encerrado'}
           </span>
         )}
       </div>
@@ -584,26 +540,15 @@ export default function EditarEvento() {
         )}
 
         {/* Botões */}
-        <div className={`flex flex-col sm:flex-row gap-3 ${isRascunho ? '' : ''}`}>
+        <div className="flex flex-col sm:flex-row gap-3">
           <button type="button" onClick={handleSalvar}
-            disabled={salvando || publicando}
+            disabled={salvando}
             className="flex-1 py-3 px-6 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
             {salvando
               ? <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
               : <Save className="w-4 h-4" />}
-            {salvando ? 'Salvando...' : isRascunho ? 'Salvar Rascunho' : 'Salvar Alterações'}
+            {salvando ? 'Salvando...' : 'Salvar Alterações'}
           </button>
-
-          {isRascunho && (
-            <button type="button" onClick={handleSalvarEPublicar}
-              disabled={salvando || publicando}
-              className="flex-1 py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
-              {publicando
-                ? <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
-                : <Send className="w-4 h-4" />}
-              {publicando ? 'Publicando...' : 'Salvar e Publicar'}
-            </button>
-          )}
         </div>
       </div>
     </div>

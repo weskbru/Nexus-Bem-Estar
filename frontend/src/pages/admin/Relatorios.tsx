@@ -3,7 +3,6 @@ import { Download, Award, FileText } from 'lucide-react';
 import { adminDashboardApi, adminEventosApi, type EventoDTO, type AgendamentoDTO } from '../../services/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
 function exportarCSV(eventos: EventoDTO[], agendamentos: AgendamentoDTO[]) {
   const linhas = [
     ['=== EVENTOS ==='],
@@ -107,7 +106,8 @@ export default function Relatorios() {
   // Distribuição por status dos eventos
   const totalEventos = eventos.length;
   const statusDist = eventos.reduce<Record<string, number>>((acc, e) => {
-    const s = e.status === 'ATIVO' ? 'PUBLICADO' : e.status;
+    const statusNormalizado = e.status.toUpperCase();
+    const s = statusNormalizado === 'ATIVO' ? 'PUBLICADO' : statusNormalizado;
     acc[s] = (acc[s] ?? 0) + 1;
     return acc;
   }, {});
@@ -153,7 +153,7 @@ export default function Relatorios() {
             <div className="space-y-3">
               {[
                 { key: 'PUBLICADO', label: 'Publicados',  color: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
-                { key: 'RASCUNHO',  label: 'Rascunhos',   color: 'bg-slate-400',   text: 'text-slate-700',   bg: 'bg-slate-50'   },
+                { key: 'CANCELADO', label: 'Cancelados',  color: 'bg-rose-400',    text: 'text-rose-700',    bg: 'bg-rose-50'    },
                 { key: 'ENCERRADO', label: 'Encerrados',  color: 'bg-red-400',     text: 'text-red-700',     bg: 'bg-red-50'     },
               ].map(({ key, label, color, text, bg }) => {
                 const qty = statusDist[key] ?? 0;
