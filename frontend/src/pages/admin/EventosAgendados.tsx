@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -16,6 +17,7 @@ import {
   ClipboardList,
   Printer,
   Loader2,
+  FileDown,
 } from 'lucide-react';
 import { adminEventosApi, type EventoDTO, type HorarioDTO, type ListaPresencaDTO } from '../../services/api';
 
@@ -204,6 +206,56 @@ function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProps) {
       .finally(() => setLoading(false));
   }, [eventoId]);
 
+  function exportarXlsx() {
+    if (!dados) return;
+
+    const rows: (string | number)[][] = [];
+
+    // Informações do evento
+    rows.push([`Lista de Presença – ${dados.evento.titulo}`]);
+    rows.push([
+      `Data: ${dados.evento.data}`,
+      `Horário: ${dados.evento.hora_inicio} – ${dados.evento.hora_fim}`,
+      dados.evento.nome_profissional ? `Profissional: ${dados.evento.nome_profissional}` : '',
+    ]);
+    rows.push([`Total de participantes: ${dados.total}`]);
+    rows.push([]);
+
+    // Para cada horário, listar participantes
+    for (const h of dados.horarios) {
+      if (h.participantes.length === 0) continue;
+      rows.push([`Horário: ${h.hora_inicio} – ${h.hora_fim} (${h.participantes.length} participante${h.participantes.length !== 1 ? 's' : ''})`]);
+      rows.push(['Nome', 'Matrícula', 'Departamento', 'Tipo']);
+      for (const p of h.participantes) {
+        rows.push([
+          p.nome,
+          p.matricula,
+          p.departamento,
+          p.tipo === 'email' ? 'E-mail' : 'Manual',
+        ]);
+      }
+      rows.push([]);
+    }
+
+    rows.push([`Gerado em ${new Date().toLocaleString('pt-BR')}`]);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Ajusta largura das colunas
+    ws['!cols'] = [{ wch: 40 }, { wch: 20 }, { wch: 30 }, { wch: 14 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Lista de Presença');
+
+    const nomeArquivo = `lista-presenca-${dados.evento.titulo
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, '-')
+      .toLowerCase()}.xlsx`;
+
+    XLSX.writeFile(wb, nomeArquivo);
+  }
+
   function imprimir() {
     window.print();
   }
@@ -213,9 +265,18 @@ function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProps) {
       {/* Estilos de impressão */}
       <style>{`
         @media print {
-          body > * { display: none !important; }
-          #lista-presenca-print { display: block !important; position: static !important; }
-          #lista-presenca-print .no-print { display: none !important; }
+          body * { visibility: hidden; }
+          #lista-presenca-print,
+          #lista-presenca-print * { visibility: visible; }
+          #lista-presenca-print {
+            position: fixed !important;
+            left: 0; top: 0;
+            width: 100%;
+            background: white !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+          }
+          #lista-presenca-print .no-print { display: none !important; visibility: hidden; }
         }
       `}</style>
 
@@ -238,9 +299,17 @@ function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProps) {
               {dados && (
                 <button
                   onClick={imprimir}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
                 >
                   <Printer className="w-4 h-4" /> Imprimir
+                </button>
+              )}
+              {dados && (
+                <button
+                  onClick={exportarXlsx}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  <FileDown className="w-4 h-4" /> Exportar XLSX
                 </button>
               )}
               <button onClick={onClose} className="text-slate-400 hover:text-slate-600 ml-1">
