@@ -1,0 +1,64 @@
+# docker-compose.locust.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Sobe o Locust em modo distribuído (1 master + N workers) dentro da mesma
+# rede Docker do projeto.
+#
+# Uso básico (UI web):
+#   docker compose -f docker-compose.yml -f load_tests/docker-compose.locust.yml up locust-master
+#   Acesse: http://localhost:8089
+#
+# Uso headless (CI/automação):
+#   docker compose -f docker-compose.yml -f load_tests/docker-compose.locust.yml \
+#     run --rm locust-master \
+#     locust --headless -u 500 -r 50 -t 120s --only-summary
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Master: expõe a UI web e coordena os workers ────────────────────────
+  locust-master:
+    image: locustio/locust:2.32.3
+    container_name: locust_master
+    ports:
+      - "8089:8089"       # UI web do Locust
+    volumes:
+      - .:/mnt/locust     # raiz do projeto montada em /mnt/locust
+    working_dir: /mnt/locust
+    environment:
+      TOKENS_CSV: load_tests/tokens.csv
+      STRESS_EVENTO_ID: ${STRESS_EVENTO_ID:-1}
+      STRESS_SLOT_ID: ${STRESS_SLOT_ID:-1}
+    command: >
+      locust
+        -f load_tests/locustfile.py
+        --master
+        --host http://backend:8000
+    networks:
+      - sis_bem_estar_default
+    depends_on:
+      - locust-worker
+
+  # ── Worker: executa os usuários virtuais ────────────────────────────────
+  locust-worker:
+    image: locustio/locust:2.32.3
+    volumes:
+      - .:/mnt/locust
+    working_dir: /mnt/locust
+    environment:
+      TOKENS_CSV: load_tests/tokens.csv
+      STRESS_EVENTO_ID: ${STRESS_EVENTO_ID:-1}
+      STRESS_SLOT_ID: ${STRESS_SLOT_ID:-1}
+    command: >
+      locust
+        -f load_tests/locustfile.py
+        --worker
+        --master-host locust-master
+    networks:
+      - sis_bem_estar_default
+    deploy:
+      replicas: 4   # ajuste conforme a CPU disponível (regra: 1 worker por núcleo)
+
+networks:
+  sis_bem_estar_default:
+    external: true
+    name: sis-bem-estar_default   # nome gerado pelo docker compose do projeto principal
