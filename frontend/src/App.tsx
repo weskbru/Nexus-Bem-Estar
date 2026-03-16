@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginColaborador from './pages/LoginColaborador';
 import LoginAdmin from './pages/Login';
 import AcessoViaToken from './pages/AcessoViaToken';
+import AcessarEvento from './pages/AcessarEvento';
 import AdminLayout from './layouts/AdminLayout';
 import Dashboard from './pages/admin/Dashboard';
 import AdminEventos from './pages/admin/EventosAgendados';
@@ -31,6 +32,9 @@ function App() {
 
           {/* Acesso via link de token (e-mail) */}
           <Route path="/acesso/:token" element={<AcessoViaToken />} />
+
+          {/* Acesso via e-mail + palavra-chave (fluxo lista de distribuição) */}
+          <Route path="/evento/:eventoId/entrar" element={<AcessarEvento />} />
 
           <Route
             path="/admin/*"

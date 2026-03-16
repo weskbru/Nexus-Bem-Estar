@@ -528,12 +528,15 @@ function RegistrarParticipanteModal({ evento, onClose, onSuccess }: RegistrarPar
                     className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
                     <option value="">Selecione um horário...</option>
-                    {horarios.map(h => (
-                      <option key={h.id} value={h.id}>
-                        {h.hora_inicio.substring(0, 5)} – {h.hora_fim.substring(0, 5)}
-                        {' '}({h.vagas_livres}/{h.vagas_disponiveis} vagas)
-                      </option>
-                    ))}
+                    {horarios.map(h => {
+                      const lotado = h.vagas_livres === 0;
+                      return (
+                        <option key={h.id} value={h.id} disabled={lotado}>
+                          {h.hora_inicio.substring(0, 5)} – {h.hora_fim.substring(0, 5)}
+                          {' '}{lotado ? '(Lotado)' : `(${h.vagas_livres}/${h.vagas_disponiveis} vagas)`}
+                        </option>
+                      );
+                    })}
                   </select>
                 )}
               </div>
@@ -785,7 +788,9 @@ export default function AdminEventos() {
     setLoading(true);
     setErro('');
     try {
-      setEventos(await adminEventosApi.listar());
+      const lista = await adminEventosApi.listar();
+      setEventos(lista);
+      setRegistrarTarget(prev => prev ? (lista.find(e => e.id === prev.id) ?? null) : null);
     } catch {
       setErro('Não foi possível carregar os eventos. Tente novamente.');
     } finally {

@@ -64,6 +64,17 @@ export type AcessoTokenResponse =
   | (LoginResponse & { evento_id: number; chave_mensagem: string })
   | AcessoPreviewDTO;
 
+export interface EventoPublicoDTO {
+  id: number;
+  titulo: string;
+  tipo: string;
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
+  nome_profissional: string;
+  requer_palavra_chave: boolean;
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     request<LoginResponse>('/auth/login/', {
@@ -83,6 +94,18 @@ export const authApi = {
     request<LoginResponse & { evento_id: number; chave_mensagem: string }>(
       `/auth/acesso/${token}/`,
       { method: 'POST', body: JSON.stringify({ palavra_chave }) }
+    ),
+
+  eventoPublico: (eventoId: number) =>
+    request<EventoPublicoDTO>(`/auth/evento-publico/${eventoId}/`),
+
+  acessarEvento: (eventoId: number, email: string, palavraChave?: string) =>
+    request<LoginResponse & { evento_id: number }>(
+      '/auth/acessar-evento/',
+      {
+        method: 'POST',
+        body: JSON.stringify({ evento_id: eventoId, email, palavra_chave: palavraChave ?? '' }),
+      }
     ),
 };
 
