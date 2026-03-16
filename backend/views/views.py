@@ -4,7 +4,9 @@ from django.contrib.auth import authenticate
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Q
 from django.http import StreamingHttpResponse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.html import strip_tags
 from django.views.decorators.cache import cache_page
@@ -57,6 +59,20 @@ class IsSuperAdmin(permissions.BasePermission):
             and request.user.is_authenticated
             and request.user.is_superuser
         )
+
+
+def _encerrar_eventos_expirados() -> int:
+    """Move para encerrado os eventos publicados cujo horario final ja passou."""
+    hoje = timezone.localdate()
+    agora = timezone.localtime().time()
+    return Evento.objects.filter(
+        status='publicado'
+    ).filter(
+        Q(data__lt=hoje) | Q(data=hoje, hora_fim__lte=agora)
+    ).update(
+        status='encerrado',
+        atualizado_em=timezone.now(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -201,13 +217,17 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     PATCH  /api/admin/eventos/<id>/
     DELETE /api/admin/eventos/<id>/
     POST   /api/admin/eventos/<id>/publicar/
-    POST   /api/admin/eventos/<id>/encerrar/
+    POST   /api/admin/eventos/<id>/cancelar/
     POST   /api/admin/eventos/<id>/enviar-emails/
     GET    /api/admin/eventos/<id>/exportar-csv/
     """
     queryset = Evento.objects.all().prefetch_related('horarios__agendamentos')
     serializer_class = EventoAdminSerializer
     permission_classes = [IsAdminUsuario]
+
+    def get_queryset(self):
+        _encerrar_eventos_expirados()
+        return super().get_queryset()
 
     @action(detail=True, methods=['post'], url_path='publicar')
     def publicar(self, request, pk=None):
@@ -218,6 +238,11 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 {'erro': 'Eventos encerrados não podem ser publicados novamente.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if evento.status == 'publicado':
+            return Response(
+                {'erro': 'Este evento já está publicado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         evento.status = 'publicado'
         evento.save(update_fields=['status'])
         try:
@@ -225,7 +250,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return Response({'erro': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Auto-assign pending manual participants (saved during draft) to horarios
+        # Auto-assign pending manual participants to horarios ao publicar.
         horarios = list(evento.horarios.order_by('hora_inicio'))
         pendentes = list(evento.participantes_manuais.filter(horario__isnull=True))
         if horarios and pendentes:
@@ -238,13 +263,19 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             'horarios_gerados': evento.horarios.count(),
         })
 
-    @action(detail=True, methods=['post'], url_path='encerrar')
-    def encerrar(self, request, pk=None):
-        """Encerra o evento, impedindo novos agendamentos."""
+    @action(detail=True, methods=['post'], url_path='cancelar')
+    def cancelar(self, request, pk=None):
+        """Cancela o evento, impedindo novos agendamentos."""
         evento = self.get_object()
-        evento.status = 'encerrado'
+        if evento.status != 'publicado':
+            return Response(
+                {'erro': 'Somente eventos publicados podem ser cancelados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        evento.status = 'cancelado'
         evento.save(update_fields=['status'])
-        return Response({'mensagem': 'Evento encerrado com sucesso.'})
+        return Response({'mensagem': 'Evento cancelado com sucesso.'})
 
     @action(detail=True, methods=['post'], url_path='enviar-emails')
     def enviar_emails(self, request, pk=None):
@@ -277,110 +308,12 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         #         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         #     )
 
-        link_sistema = f"{settings.FRONTEND_URL}/eventos"
-
-        secao_chave = ''
-        if evento.palavra_chave:
-            secao_chave = f"""
-        <tr>
-          <td style="padding:16px 24px;background:#fffbeb;border-left:4px solid #f59e0b;">
-            <p style="margin:0;font-size:14px;color:#92400e;">
-              🔑 <strong>Palavra-chave de acesso:</strong>
-              <span style="font-size:18px;font-weight:bold;letter-spacing:2px;color:#78350f;">
-                &nbsp;{evento.palavra_chave}
-              </span>
-            </p>
-            <p style="margin:6px 0 0;font-size:12px;color:#92400e;">
-              Você precisará informar esta palavra-chave ao acessar o evento pelo link abaixo.
-            </p>
-          </td>
-        </tr>"""
-
-        profissional_linha = ''
-        if evento.nome_profissional:
-            profissional_linha = f'<tr><td style="padding:4px 24px;font-size:14px;color:#6b7280;">👤 Profissional: <strong>{evento.nome_profissional}</strong></td></tr>'
-
-        corpo_html = f"""<!DOCTYPE html>
-<html lang="pt-BR">
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td align="center" style="padding:32px 16px;">
-        <table width="600" cellpadding="0" cellspacing="0"
-               style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
-          <!-- Cabeçalho -->
-          <tr>
-            <td style="background:#1d4ed8;padding:24px;text-align:center;">
-              <p style="margin:0;font-size:22px;font-weight:bold;color:#ffffff;">
-                🌿 Programa de Bem-Estar AEB
-              </p>
-            </td>
-          </tr>
-          <!-- Chamada -->
-          <tr>
-            <td style="padding:24px 24px 8px;">
-              <p style="margin:0;font-size:16px;color:#111827;">
-                Prezado(a) colaborador(a),
-              </p>
-              <p style="margin:12px 0 0;font-size:15px;color:#374151;line-height:1.6;">
-                Um novo evento de bem-estar está disponível para agendamento.
-                Acesse o sistema e garanta sua vaga!
-              </p>
-            </td>
-          </tr>
-          <!-- Detalhes do evento -->
-          <tr>
-            <td style="padding:16px 24px 8px;">
-              <table width="100%" cellpadding="0" cellspacing="0"
-                     style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;">
-                <tr>
-                  <td style="padding:14px 16px;font-size:18px;font-weight:bold;color:#1d4ed8;border-bottom:1px solid #e5e7eb;">
-                    {evento.titulo}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:8px 16px 4px;font-size:14px;color:#6b7280;">
-                    📅 Data: <strong>{evento.data.strftime('%d/%m/%Y')}</strong>
-                    &nbsp;&nbsp;
-                    🕐 Horário: <strong>{evento.hora_inicio.strftime('%H:%M')} às {evento.hora_fim.strftime('%H:%M')}</strong>
-                  </td>
-                </tr>
-                {profissional_linha}
-                <tr><td style="padding:8px;"></td></tr>
-              </table>
-            </td>
-          </tr>
-          {secao_chave}
-          <!-- Botão -->
-          <tr>
-            <td style="padding:24px;text-align:center;">
-              <a href="{link_sistema}"
-                 style="display:inline-block;padding:12px 32px;background:#1d4ed8;color:#ffffff;
-                        font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px;">
-                Acessar o Sistema e Agendar
-              </a>
-            </td>
-          </tr>
-          <!-- Rodapé -->
-          <tr>
-            <td style="padding:16px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;
-                       text-align:center;font-size:12px;color:#9ca3af;">
-              Este e-mail foi enviado automaticamente pelo Sistema de Bem-Estar da AEB.<br>
-              Por favor, não responda a esta mensagem.
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>"""
+        corpo_html = evento.corpo_email or ''
 
         try:
             send_mail(
-                subject=f'[Bem-Estar AEB] Novo evento disponível: {evento.titulo}',
-                message=f"Novo evento disponível: {evento.titulo} — {evento.data.strftime('%d/%m/%Y')} {evento.hora_inicio.strftime('%H:%M')} às {evento.hora_fim.strftime('%H:%M')}. Acesse: {link_sistema}",
+                subject=evento.titulo,
+                message='',
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[destinatario],
                 html_message=corpo_html,
@@ -400,15 +333,13 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     def registrar_participante(self, request, pk=None):
         """
         POST /api/admin/eventos/<id>/registrar-participante/
-        Registra manualmente um colaborador sem e-mail corporativo.
-        - Rascunho: horario_id não é necessário (participante fica pendente).
-        - Publicado: horario_id obrigatório.
+        Registra manualmente um colaborador sem e-mail corporativo em evento publicado.
         Body: { nome, horario_id?, matricula?, departamento? }
         """
         evento = self.get_object()
-        if evento.status == 'encerrado':
+        if evento.status != 'publicado':
             return Response(
-                {'erro': 'Não é possível registrar participantes em eventos encerrados.'},
+                {'erro': 'Só é possível registrar participantes em eventos publicados.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -423,18 +354,27 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        horario = None
-        if horario_id:
-            try:
-                horario = Horario.objects.get(id=horario_id, evento=evento)
-            except Horario.DoesNotExist:
-                return Response(
-                    {'erro': 'Horário não encontrado neste evento.'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        elif evento.status == 'publicado':
+        if not horario_id:
             return Response(
                 {'erro': 'Selecione um horário para eventos publicados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            horario = Horario.objects.get(id=horario_id, evento=evento)
+        except Horario.DoesNotExist:
+            return Response(
+                {'erro': 'Horário não encontrado neste evento.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        confirmados = horario.agendamentos.filter(status='confirmado').count()
+        manuais = horario.participantes_manuais.count()
+        ocupados = confirmados + manuais
+
+        if ocupados >= evento.capacidade_por_horario:
+            return Response(
+                {'erro': f'Horário lotado. Capacidade máxima de {evento.capacidade_por_horario} pessoa(s) atingida.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -578,6 +518,7 @@ class AdminDashboardView(APIView):
     permission_classes = [IsAdminUsuario]
 
     def get(self, request):
+        _encerrar_eventos_expirados()
         horarios = Horario.objects.all()
         total_vagas = sum(h.vagas_disponiveis for h in horarios)
         vagas_ocupadas = Agendamento.objects.filter(status='confirmado').count()
@@ -611,6 +552,7 @@ class EventoListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        _encerrar_eventos_expirados()
         return (
             Evento.objects
             .filter(status='publicado')
@@ -624,13 +566,16 @@ class EventoDetailView(generics.RetrieveAPIView):
     Detalhe do evento com todos os horários e disponibilidade.
     Cache de 3 segundos — reduz carga no banco durante pico de acesso.
     """
-    queryset = (
-        Evento.objects
-        .filter(status='publicado')
-        .prefetch_related('horarios__agendamentos')
-    )
     serializer_class = EventoDetailSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        _encerrar_eventos_expirados()
+        return (
+            Evento.objects
+            .filter(status='publicado')
+            .prefetch_related('horarios__agendamentos')
+        )
 
     @method_decorator(cache_page(3))
     def get(self, *args, **kwargs):
@@ -652,6 +597,7 @@ class ReservarHorarioView(APIView):
 
     @transaction.atomic
     def post(self, request, evento_id, horario_id):
+        _encerrar_eventos_expirados()
         # Bloqueia a linha do horário para leitura e escrita simultânea
         try:
             horario = (

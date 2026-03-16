@@ -51,7 +51,7 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              python manage.py criar_admin &&
-             gunicorn backend.core.wsgi:application --bind 0.0.0.0:8000 --workers 9 --threads 4 --timeout 60 --reload"
+             gunicorn backend.core.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 2 --timeout 60 --reload"
 
   # ─── Frontend (Vite + React) ──────────────────────────────────────────────
   frontend:
@@ -66,10 +66,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: >
-      sh -c "npm install --legacy-peer-deps && npm run dev"
+      # Monta apenas o código-fonte para hot reload.
+      # O node_modules fica dentro da imagem (instalado no build),
+      # evitando conflito e tornando o startup imediato.
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
     depends_on:
       - backend
 

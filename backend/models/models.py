@@ -83,8 +83,8 @@ class Evento(models.Model):
         ('outro', 'Outro'),
     ]
     STATUS_CHOICES = [
-        ('rascunho', 'Rascunho'),
         ('publicado', 'Publicado'),
+        ('cancelado', 'Cancelado'),
         ('encerrado', 'Encerrado'),
     ]
 
@@ -107,7 +107,7 @@ class Evento(models.Model):
     )
     imagem_url = models.URLField(blank=True, verbose_name='URL da imagem')
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='rascunho', verbose_name='Status'
+        max_length=20, choices=STATUS_CHOICES, default='publicado', verbose_name='Status'
     )
     # Template do corpo do e-mail editável pelo admin.
     # Variáveis disponíveis: {nome}, {titulo}, {data}, {hora_inicio}, {hora_fim}, {link}, {chave}
@@ -132,7 +132,7 @@ class Evento(models.Model):
     class Meta:
         verbose_name = 'Evento'
         verbose_name_plural = 'Eventos'
-        ordering = ['-data', '-hora_inicio']
+        ordering = ['data', 'hora_inicio']
 
     def __str__(self):
         return f'{self.titulo} – {self.data}'

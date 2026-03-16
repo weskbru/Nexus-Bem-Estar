@@ -123,7 +123,6 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 # Destinatário único do disparo de e-mails de evento.
 # Em teste: e-mail pessoal. Em produção: Lista de Distribuição (ex: ld-usuarios@aeb.gov.br)
 EMAIL_DESTINO_EVENTO = config('EMAIL_DESTINO_EVENTO', default='')
-
 # Cache — Redis em produção, memória local em dev
 _REDIS_URL = os.getenv('REDIS_URL', '')
 if _REDIS_URL:
@@ -142,4 +141,3 @@ else:
 
 # Janela maxima para agendamento de eventos no futuro (em meses)
 EVENTO_MAX_MESES_FUTURO = config('EVENTO_MAX_MESES_FUTURO', default=6, cast=int)
-

@@ -125,8 +125,8 @@ export const adminEventosApi = {
     request<EventoDTO>(`/admin/eventos/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   publicar: (id: number) =>
     request<{ mensagem: string; horarios_gerados: number }>(`/admin/eventos/${id}/publicar/`, { method: 'POST' }),
-  encerrar: (id: number) =>
-    request<{ mensagem: string }>(`/admin/eventos/${id}/encerrar/`, { method: 'POST' }),
+  cancelar: (id: number) =>
+    request<{ mensagem: string }>(`/admin/eventos/${id}/cancelar/`, { method: 'POST' }),
   enviarEmails: (id: number) =>
     request<{ mensagem: string; enviados: number; erros: unknown[] }>(`/admin/eventos/${id}/enviar-emails/`, { method: 'POST' }),
   registrarParticipanteManual: (id: number, dados: { horario_id: number; nome: string; matricula?: string; departamento?: string }) =>
