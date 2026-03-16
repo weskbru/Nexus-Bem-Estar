@@ -9,11 +9,12 @@ Cobertura:
   - Regras de negócio: vaga esgotada, duplicata de agendamento, concorrência
 """
 import uuid
-from datetime import date, time
+from datetime import date, time, timedelta
 
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -33,7 +34,7 @@ def cria_colaborador(email='joao@empresa.com.br', nome='João Silva', password='
     return Usuario.objects.create_user(email=email, nome=nome, password=password)
 
 
-def cria_evento(status_evento='rascunho', **kwargs):
+def cria_evento(status_evento='publicado', **kwargs):
     defaults = {
         'titulo': 'Massagem – Março 2026',
         'tipo': 'massagem',
@@ -188,7 +189,7 @@ class AdminEventoTest(APITestCase):
         self.admin = cria_admin()
         self.client.force_authenticate(user=self.admin)
 
-    def test_criar_evento_rascunho(self):
+    def test_criar_evento_publicado_por_padrao(self):
         resp = self.client.post('/api/admin/eventos/', {
             'titulo': 'Yoga – Abril 2026',
             'tipo': 'yoga',
@@ -197,15 +198,15 @@ class AdminEventoTest(APITestCase):
             'hora_fim': '09:00:00',
             'duracao_sessao': 60,
             'capacidade_por_horario': 5,
-            'status': 'rascunho',
         })
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Evento.objects.count(), 1)
-        # Rascunho não gera slots ainda
-        self.assertEqual(Horario.objects.count(), 0)
+        evento = Evento.objects.first()
+        self.assertEqual(evento.status, 'publicado')
+        self.assertGreater(Horario.objects.count(), 0)
 
     def test_publicar_evento_gera_horarios(self):
-        evento = cria_evento()
+        evento = cria_evento(status_evento='cancelado')
         resp = self.client.post(f'/api/admin/eventos/{evento.id}/publicar/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         evento.refresh_from_db()
@@ -213,13 +214,18 @@ class AdminEventoTest(APITestCase):
         self.assertGreater(evento.horarios.count(), 0)
         self.assertEqual(resp.data['horarios_gerados'], evento.horarios.count())
 
-    def test_encerrar_evento(self):
+    def test_cancelar_evento(self):
         evento = cria_evento(status_evento='publicado')
         evento.gerar_horarios()
-        resp = self.client.post(f'/api/admin/eventos/{evento.id}/encerrar/')
+        resp = self.client.post(f'/api/admin/eventos/{evento.id}/cancelar/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         evento.refresh_from_db()
-        self.assertEqual(evento.status, 'encerrado')
+        self.assertEqual(evento.status, 'cancelado')
+
+    def test_nao_pode_cancelar_evento_nao_publicado(self):
+        evento = cria_evento(status_evento='cancelado')
+        resp = self.client.post(f'/api/admin/eventos/{evento.id}/cancelar/')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_editar_corpo_email(self):
         evento = cria_evento()
@@ -257,6 +263,23 @@ class AdminEventoTest(APITestCase):
         evento = cria_evento(status_evento='encerrado')
         resp = self.client.post(f'/api/admin/eventos/{evento.id}/publicar/')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_evento_publicado_e_encerrado_automaticamente_apos_horario(self):
+        agora = timezone.localtime()
+        inicio = (agora - timedelta(hours=2)).time().replace(microsecond=0)
+        fim = (agora - timedelta(hours=1)).time().replace(microsecond=0)
+        evento = cria_evento(
+            status_evento='publicado',
+            data=agora.date(),
+            hora_inicio=inicio,
+            hora_fim=fim,
+        )
+
+        resp = self.client.get('/api/admin/eventos/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        evento.refresh_from_db()
+        self.assertEqual(evento.status, 'encerrado')
 
     def test_colaborador_nao_acessa_admin(self):
         colaborador = cria_colaborador()
@@ -302,8 +325,8 @@ class EnviarEmailsTest(APITestCase):
         self.assertEqual(ConviteEmail.objects.count(), qtd_convites_antes)
 
     def test_nao_envia_para_evento_nao_publicado(self):
-        evento_rascunho = cria_evento()
-        resp = self.client.post(f'/api/admin/eventos/{evento_rascunho.id}/enviar-emails/')
+        evento_cancelado = cria_evento(status_evento='cancelado')
+        resp = self.client.post(f'/api/admin/eventos/{evento_cancelado.id}/enviar-emails/')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
 
@@ -347,7 +370,7 @@ class ColaboradorEventoTest(APITestCase):
         self.horario = self.evento.horarios.first()
 
     def test_lista_apenas_eventos_publicados(self):
-        cria_evento(titulo='Rascunho', status_evento='rascunho')
+        cria_evento(titulo='Cancelado', status_evento='cancelado')
         resp = self.client.get('/api/colaborador/eventos/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(len(resp.data), 1)

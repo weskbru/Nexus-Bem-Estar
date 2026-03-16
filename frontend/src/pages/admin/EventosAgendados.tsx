@@ -39,17 +39,18 @@ const TIPO_GRADIENT: Record<string, string> = {
   acupuntura: 'from-amber-400 to-amber-600',
 };
 
-// Normaliza o status — backend retorna lowercase ('publicado', 'rascunho', 'encerrado')
-function normalizeStatus(status: string): 'ATIVO' | 'RASCUNHO' | 'ENCERRADO' {
+// Normaliza o status — backend retorna lowercase ('publicado', 'cancelado', 'encerrado')
+function normalizeStatus(status: string): 'ATIVO' | 'CANCELADO' | 'ENCERRADO' {
   const s = status.toUpperCase();
   if (s === 'ATIVO' || s === 'PUBLICADO') return 'ATIVO';
+  if (s === 'CANCELADO') return 'CANCELADO';
   if (s === 'ENCERRADO') return 'ENCERRADO';
-  return 'RASCUNHO';
+  return 'CANCELADO';
 }
 
 const STATUS_CONFIG: Record<string, { label: string; badgeClass: string }> = {
   ATIVO:     { label: 'Disponível',  badgeClass: 'bg-emerald-500 text-white' },
-  RASCUNHO:  { label: 'Rascunho',    badgeClass: 'bg-slate-600 text-white' },
+  CANCELADO: { label: 'Cancelado',   badgeClass: 'bg-rose-600 text-white' },
   ENCERRADO: { label: 'Encerrado',   badgeClass: 'bg-slate-800 text-white' },
 };
 
@@ -74,7 +75,7 @@ interface ConfirmDeleteProps {
 
 interface ConfirmActionProps {
   evento: EventoDTO;
-  tipo: 'emails' | 'encerrar';
+  tipo: 'emails' | 'cancelar';
   loading: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -125,11 +126,11 @@ function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: ConfirmDel
 }
 
 function ConfirmActionModal({ evento, tipo, loading, onConfirm, onCancel }: ConfirmActionProps) {
-  const titulo = tipo === 'emails' ? 'Enviar e-mails' : 'Encerrar evento';
+  const titulo = tipo === 'emails' ? 'Enviar e-mails' : 'Cancelar evento';
   const descricao = tipo === 'emails'
     ? 'Deseja enviar e-mails para os colaboradores sobre este evento?'
-    : 'Deseja encerrar este evento? Após encerrar, ele não ficará mais disponível para novos agendamentos.';
-  const botao = tipo === 'emails' ? 'Enviar e-mails' : 'Encerrar evento';
+    : 'Deseja cancelar este evento? Após cancelar, ele não ficará mais disponível para novos agendamentos.';
+  const botao = tipo === 'emails' ? 'Enviar e-mails' : 'Cancelar evento';
   const botaoClasse = tipo === 'emails'
     ? 'bg-blue-600 hover:bg-blue-700'
     : 'bg-amber-600 hover:bg-amber-700';
@@ -179,60 +180,6 @@ function ConfirmActionModal({ evento, tipo, loading, onConfirm, onCancel }: Conf
             {botao}
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Modal de publicação com sucesso ─────────────────────────────────────────
-
-interface PublishSuccessModalProps {
-  evento: EventoDTO;
-  emailStatus: 'sent' | 'no_users' | 'error';
-  onClose: () => void;
-}
-
-function PublishSuccessModal({ evento, emailStatus, onClose }: PublishSuccessModalProps) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center" onClick={e => e.stopPropagation()}>
-        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-        </div>
-
-        <h2 className="text-xl font-bold text-slate-900 mb-2">Evento Publicado!</h2>
-
-        <div className="space-y-2 mb-6">
-          <div className="flex items-center gap-2 justify-center text-sm text-emerald-700">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span><span className="font-semibold">"{evento.titulo}"</span> disponível para agendamento</span>
-          </div>
-
-          {emailStatus === 'sent' && (
-            <div className="flex items-center gap-2 justify-center text-sm text-emerald-700">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              E-mails enviados para todos os colaboradores
-            </div>
-          )}
-
-          {emailStatus === 'no_users' && (
-            <div className="flex items-center gap-2 justify-center text-sm text-slate-500">
-              <Mail className="w-4 h-4 shrink-0" />
-              Nenhum colaborador cadastrado para notificar
-            </div>
-          )}
-
-          {emailStatus === 'error' && (
-            <div className="flex items-center gap-2 justify-center text-sm text-amber-600">
-              <Mail className="w-4 h-4 shrink-0" />
-              Evento publicado, mas falha ao enviar e-mails
-            </div>
-          )}
-        </div>
-
-        <button onClick={onClose} className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors">
-          Fechar
-        </button>
       </div>
     </div>
   );
@@ -577,8 +524,7 @@ interface EventActionsModalProps {
   evento: EventoDTO;
   isActing: boolean;
   isEmailActing: boolean;
-  onPublicar: () => void;
-  onEncerrar: () => void;
+  onCancelar: () => void;
   onDelete: () => void;
   onEnviarEmails: () => void;
   onRegistrar: () => void;
@@ -586,7 +532,7 @@ interface EventActionsModalProps {
   onClose: () => void;
 }
 
-function EventActionsModal({ evento, isActing, isEmailActing, onPublicar, onEncerrar, onDelete, onEnviarEmails, onRegistrar, onListaPresenca, onClose }: EventActionsModalProps) {
+function EventActionsModal({ evento, isActing, isEmailActing, onCancelar, onDelete, onEnviarEmails, onRegistrar, onListaPresenca, onClose }: EventActionsModalProps) {
   const status = normalizeStatus(evento.status);
 
   const Spinner = () => (
@@ -608,14 +554,6 @@ function EventActionsModal({ evento, isActing, isEmailActing, onPublicar, onEnce
         <p className="text-sm text-slate-500 mb-4 truncate">{evento.titulo}</p>
 
         <div className="space-y-2">
-          {status === 'RASCUNHO' && (
-            <button onClick={onPublicar} disabled={isActing}
-              className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
-              {isActing ? <Spinner /> : <CheckCircle2 className="w-4 h-4" />}
-              {isActing ? 'Publicando...' : 'Publicar Evento'}
-            </button>
-          )}
-
           {status === 'ATIVO' && (
             <>
               <button onClick={onRegistrar}
@@ -633,11 +571,24 @@ function EventActionsModal({ evento, isActing, isEmailActing, onPublicar, onEnce
                 {isEmailActing ? <Spinner /> : <Mail className="w-4 h-4" />}
                 {isEmailActing ? 'Enviando...' : 'Enviar E-mails'}
               </button>
-              <button onClick={onEncerrar} disabled={isActing || isEmailActing}
+              <button onClick={onCancelar} disabled={isActing || isEmailActing}
                 className="w-full py-2 px-4 bg-slate-100 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60 text-slate-600 rounded-lg font-medium text-sm border border-slate-200 hover:border-amber-200 transition-colors flex items-center justify-center gap-2">
                 {isActing ? <Spinner /> : <EyeOff className="w-4 h-4" />}
-                {isActing ? 'Encerrando...' : 'Encerrar Evento'}
+                {isActing ? 'Cancelando...' : 'Cancelar Evento'}
               </button>
+            </>
+          )}
+
+          {status === 'CANCELADO' && (
+            <>
+              <button onClick={onListaPresenca}
+                className="w-full py-2 px-4 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+                <ClipboardList className="w-4 h-4" />
+                Lista de Presença
+              </button>
+              <div className="w-full py-2 px-4 bg-rose-50 text-rose-700 rounded-lg font-medium text-sm text-center border border-rose-200">
+                Evento cancelado
+              </div>
             </>
           )}
 
@@ -752,13 +703,11 @@ export default function AdminEventos() {
   const [emailLoadingId, setEmailLoadingId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EventoDTO | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [filtro, setFiltro] = useState<'todos' | 'ATIVO' | 'RASCUNHO' | 'ENCERRADO'>('todos');
-  const [publishedEvento, setPublishedEvento] = useState<EventoDTO | null>(null);
-  const [publishEmailStatus, setPublishEmailStatus] = useState<'sent' | 'no_users' | 'error'>('sent');
+  const [filtro, setFiltro] = useState<'todos' | 'ATIVO' | 'CANCELADO' | 'ENCERRADO'>('todos');
   const [registrarTarget, setRegistrarTarget] = useState<EventoDTO | null>(null);
   const [listaPresencaId, setListaPresencaId] = useState<number | null>(null);
   const [actionTarget, setActionTarget] = useState<EventoDTO | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ evento: EventoDTO; tipo: 'emails' | 'encerrar' } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ evento: EventoDTO; tipo: 'emails' | 'cancelar' } | null>(null);
 
   useEffect(() => { carregarEventos(); }, []);
 
@@ -774,28 +723,9 @@ export default function AdminEventos() {
     }
   }
 
-  async function handlePublicar(evento: EventoDTO) {
+  async function handleCancelar(evento: EventoDTO) {
     setActionLoadingId(evento.id);
-    try {
-      await adminEventosApi.publicar(evento.id);
-      let emailStatus: 'sent' | 'no_users' | 'error' = 'sent';
-      try {
-        await adminEventosApi.enviarEmails(evento.id);
-      } catch (emailErr) {
-        const msg = emailErr instanceof Error ? emailErr.message : '';
-        emailStatus = msg.toLowerCase().includes('nenhum') ? 'no_users' : 'error';
-      }
-      await carregarEventos();
-      setPublishEmailStatus(emailStatus);
-      setPublishedEvento(evento);
-    }
-    catch (err) { console.error(err); }
-    finally { setActionLoadingId(null); }
-  }
-
-  async function handleEncerrar(evento: EventoDTO) {
-    setActionLoadingId(evento.id);
-    try { await adminEventosApi.encerrar(evento.id); await carregarEventos(); }
+    try { await adminEventosApi.cancelar(evento.id); await carregarEventos(); }
     catch (err) { console.error(err); }
     finally { setActionLoadingId(null); }
   }
@@ -830,7 +760,7 @@ export default function AdminEventos() {
   const FILTROS = [
     { key: 'todos',     label: 'Todos' },
     { key: 'ATIVO',     label: 'Publicados' },
-    { key: 'RASCUNHO',  label: 'Rascunhos' },
+    { key: 'CANCELADO', label: 'Cancelados' },
     { key: 'ENCERRADO', label: 'Encerrados' },
   ] as const;
 
@@ -916,8 +846,7 @@ export default function AdminEventos() {
           evento={actionTarget}
           isActing={actionLoadingId === actionTarget.id}
           isEmailActing={emailLoadingId === actionTarget.id}
-          onPublicar={() => handlePublicar(actionTarget)}
-          onEncerrar={() => { setConfirmAction({ evento: actionTarget, tipo: 'encerrar' }); setActionTarget(null); }}
+          onCancelar={() => { setConfirmAction({ evento: actionTarget, tipo: 'cancelar' }); setActionTarget(null); }}
           onDelete={() => { setDeleteTarget(actionTarget); setActionTarget(null); }}
           onEnviarEmails={() => { setConfirmAction({ evento: actionTarget, tipo: 'emails' }); setActionTarget(null); }}
           onRegistrar={() => { setRegistrarTarget(actionTarget); setActionTarget(null); }}
@@ -940,7 +869,7 @@ export default function AdminEventos() {
             if (confirmAction.tipo === 'emails') {
               await handleEnviarEmails(confirmAction.evento);
             } else {
-              await handleEncerrar(confirmAction.evento);
+              await handleCancelar(confirmAction.evento);
             }
             setConfirmAction(null);
           }}
@@ -953,14 +882,6 @@ export default function AdminEventos() {
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
           loading={deleteLoading}
-        />
-      )}
-
-      {publishedEvento && (
-        <PublishSuccessModal
-          evento={publishedEvento}
-          emailStatus={publishEmailStatus}
-          onClose={() => setPublishedEvento(null)}
         />
       )}
 

@@ -4,7 +4,9 @@ from django.contrib.auth import authenticate
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Q
 from django.http import StreamingHttpResponse
+from django.utils import timezone
 from django.utils.html import strip_tags
 
 from rest_framework import generics, viewsets, status, permissions
@@ -55,6 +57,20 @@ class IsSuperAdmin(permissions.BasePermission):
             and request.user.is_authenticated
             and request.user.is_superuser
         )
+
+
+def _encerrar_eventos_expirados() -> int:
+    """Move para encerrado os eventos publicados cujo horario final ja passou."""
+    hoje = timezone.localdate()
+    agora = timezone.localtime().time()
+    return Evento.objects.filter(
+        status='publicado'
+    ).filter(
+        Q(data__lt=hoje) | Q(data=hoje, hora_fim__lte=agora)
+    ).update(
+        status='encerrado',
+        atualizado_em=timezone.now(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -160,13 +176,17 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     PATCH  /api/admin/eventos/<id>/
     DELETE /api/admin/eventos/<id>/
     POST   /api/admin/eventos/<id>/publicar/
-    POST   /api/admin/eventos/<id>/encerrar/
+    POST   /api/admin/eventos/<id>/cancelar/
     POST   /api/admin/eventos/<id>/enviar-emails/
     GET    /api/admin/eventos/<id>/exportar-csv/
     """
     queryset = Evento.objects.all().prefetch_related('horarios__agendamentos')
     serializer_class = EventoAdminSerializer
     permission_classes = [IsAdminUsuario]
+
+    def get_queryset(self):
+        _encerrar_eventos_expirados()
+        return super().get_queryset()
 
     @action(detail=True, methods=['post'], url_path='publicar')
     def publicar(self, request, pk=None):
@@ -177,6 +197,11 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 {'erro': 'Eventos encerrados não podem ser publicados novamente.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if evento.status == 'publicado':
+            return Response(
+                {'erro': 'Este evento já está publicado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         evento.status = 'publicado'
         evento.save(update_fields=['status'])
         try:
@@ -184,7 +209,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return Response({'erro': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Auto-assign pending manual participants (saved during draft) to horarios
+        # Auto-assign pending manual participants to horarios ao publicar.
         horarios = list(evento.horarios.order_by('hora_inicio'))
         pendentes = list(evento.participantes_manuais.filter(horario__isnull=True))
         if horarios and pendentes:
@@ -197,13 +222,19 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             'horarios_gerados': evento.horarios.count(),
         })
 
-    @action(detail=True, methods=['post'], url_path='encerrar')
-    def encerrar(self, request, pk=None):
-        """Encerra o evento, impedindo novos agendamentos."""
+    @action(detail=True, methods=['post'], url_path='cancelar')
+    def cancelar(self, request, pk=None):
+        """Cancela o evento, impedindo novos agendamentos."""
         evento = self.get_object()
-        evento.status = 'encerrado'
+        if evento.status != 'publicado':
+            return Response(
+                {'erro': 'Somente eventos publicados podem ser cancelados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        evento.status = 'cancelado'
         evento.save(update_fields=['status'])
-        return Response({'mensagem': 'Evento encerrado com sucesso.'})
+        return Response({'mensagem': 'Evento cancelado com sucesso.'})
 
     @action(detail=True, methods=['post'], url_path='enviar-emails')
     def enviar_emails(self, request, pk=None):
@@ -275,15 +306,13 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     def registrar_participante(self, request, pk=None):
         """
         POST /api/admin/eventos/<id>/registrar-participante/
-        Registra manualmente um colaborador sem e-mail corporativo.
-        - Rascunho: horario_id não é necessário (participante fica pendente).
-        - Publicado: horario_id obrigatório.
+        Registra manualmente um colaborador sem e-mail corporativo em evento publicado.
         Body: { nome, horario_id?, matricula?, departamento? }
         """
         evento = self.get_object()
-        if evento.status == 'encerrado':
+        if evento.status != 'publicado':
             return Response(
-                {'erro': 'Não é possível registrar participantes em eventos encerrados.'},
+                {'erro': 'Só é possível registrar participantes em eventos publicados.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -298,19 +327,18 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        horario = None
-        if horario_id:
-            try:
-                horario = Horario.objects.get(id=horario_id, evento=evento)
-            except Horario.DoesNotExist:
-                return Response(
-                    {'erro': 'Horário não encontrado neste evento.'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        elif evento.status == 'publicado':
+        if not horario_id:
             return Response(
                 {'erro': 'Selecione um horário para eventos publicados.'},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            horario = Horario.objects.get(id=horario_id, evento=evento)
+        except Horario.DoesNotExist:
+            return Response(
+                {'erro': 'Horário não encontrado neste evento.'},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         participante = AgendamentoManual.objects.create(
@@ -453,6 +481,7 @@ class AdminDashboardView(APIView):
     permission_classes = [IsAdminUsuario]
 
     def get(self, request):
+        _encerrar_eventos_expirados()
         horarios = Horario.objects.all()
         total_vagas = sum(h.vagas_disponiveis for h in horarios)
         vagas_ocupadas = Agendamento.objects.filter(status='confirmado').count()
@@ -486,6 +515,7 @@ class EventoListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        _encerrar_eventos_expirados()
         return (
             Evento.objects
             .filter(status='publicado')
@@ -498,13 +528,16 @@ class EventoDetailView(generics.RetrieveAPIView):
     GET /api/colaborador/eventos/<id>/
     Detalhe do evento com todos os horários e disponibilidade.
     """
-    queryset = (
-        Evento.objects
-        .filter(status='publicado')
-        .prefetch_related('horarios__agendamentos')
-    )
     serializer_class = EventoDetailSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        _encerrar_eventos_expirados()
+        return (
+            Evento.objects
+            .filter(status='publicado')
+            .prefetch_related('horarios__agendamentos')
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -522,6 +555,7 @@ class ReservarHorarioView(APIView):
 
     @transaction.atomic
     def post(self, request, evento_id, horario_id):
+        _encerrar_eventos_expirados()
         # Bloqueia a linha do horário para leitura e escrita simultânea
         try:
             horario = (

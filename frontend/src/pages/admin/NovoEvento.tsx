@@ -280,6 +280,7 @@ export default function NovoEvento() {
         capacidade_por_horario: Number(form.capacidade_por_horario),
         nome_profissional:      form.nome_profissional.trim(),
         corpo_email:            form.corpo_email.trim(),
+        status:                 'publicado',
       });
       navigate('/admin/agendamentos');
     } catch (err) {
@@ -453,9 +454,8 @@ export default function NovoEvento() {
         <div className="flex items-start gap-2 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-4">
           <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
           <p>
-            O evento será salvo como <span className="font-semibold text-slate-700">Rascunho</span>.
-            Para disponibilizá-lo aos colaboradores, acesse <span className="font-semibold text-slate-700">Agendamentos</span> e clique em <span className="font-semibold text-slate-700">Publicar</span> no card do evento.
-            Após publicar, você poderá enviar e-mails de notificação para todos os colaboradores e registrar participantes sem e-mail diretamente no card do evento.
+            O evento será criado diretamente como <span className="font-semibold text-slate-700">Publicado</span>.
+            Depois de criado, você pode enviar e-mails de notificação para os colaboradores ou cancelar o evento na tela de agendamentos.
           </p>
         </div>
       </div>
