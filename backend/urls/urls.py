@@ -16,9 +16,11 @@ urlpatterns = [
     path('auth/login/', views.AdminLoginView.as_view(), name='admin-login'),
 
     # Acesso do colaborador via link mágico do e-mail (token UUID → JWT)
-    # GET: preview do evento (+ JWT se não exige palavra-chave)
-    # POST: valida palavra-chave e emite JWT
     path('auth/acesso/<uuid:token>/', views.AcessoViaTokenView.as_view(), name='acesso-via-token'),
+
+    # Acesso via e-mail + palavra-chave (fluxo lista de distribuição)
+    path('auth/acessar-evento/', views.AcessarEventoView.as_view(), name='acessar-evento'),
+    path('auth/evento-publico/<int:evento_id>/', views.EventoPublicoView.as_view(), name='evento-publico'),
 
     # -----------------------------------------------------------------------
     # Admin

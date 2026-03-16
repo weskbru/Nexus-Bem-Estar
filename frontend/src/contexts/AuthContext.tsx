@@ -9,6 +9,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   loginAdmin: (email: string, password: string) => Promise<void>;
   loginViaToken: (token: string) => Promise<{ evento_id: number }>;
+  loginViaEmail: (access: string, usuario: UsuarioDTO) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -44,6 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { evento_id: data.evento_id };
   }, [salvarSessao]);
 
+  const loginViaEmail = useCallback((access: string, usuario: UsuarioDTO) => {
+    salvarSessao(access, usuario);
+  }, [salvarSessao]);
+
   const logout = useCallback(() => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('usuario');
@@ -55,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...state,
       loginAdmin,
       loginViaToken,
+      loginViaEmail,
       logout,
       isAuthenticated: !!state.token,
       isAdmin: !!state.usuario?.is_admin,

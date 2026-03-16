@@ -182,6 +182,87 @@ class AcessoViaTokenView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# AUTH — Acesso via e-mail + palavra-chave (fluxo lista de distribuição)
+# ---------------------------------------------------------------------------
+
+class AcessarEventoView(APIView):
+    """
+    POST /api/auth/acessar-evento/
+    Fluxo de acesso para colaboradores que receberam o e-mail da LD.
+    Body: { evento_id, email, palavra_chave? }
+    Retorna JWT se e-mail pertence a usuário cadastrado e palavra-chave for válida.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        evento_id    = request.data.get('evento_id')
+        email        = (request.data.get('email') or '').strip().lower()
+        palavra_chave = (request.data.get('palavra_chave') or '').strip()
+
+        if not evento_id or not email:
+            return Response(
+                {'erro': 'Informe o evento e o e-mail.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            evento = Evento.objects.get(id=evento_id, status='publicado')
+        except Evento.DoesNotExist:
+            return Response(
+                {'erro': 'Evento não encontrado ou não está disponível.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if evento.palavra_chave and palavra_chave.lower() != evento.palavra_chave.strip().lower():
+            return Response(
+                {'erro': 'Palavra-chave incorreta. Verifique o e-mail recebido e tente novamente.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            usuario = Usuario.objects.get(email__iexact=email)
+        except Usuario.DoesNotExist:
+            nome_padrao = email.split('@')[0].replace('.', ' ').replace('-', ' ').title()
+            usuario = Usuario.objects.create_user(email=email, nome=nome_padrao, password=None)
+
+
+        refresh = RefreshToken.for_user(usuario)
+        return Response({
+            'access':   str(refresh.access_token),
+            'refresh':  str(refresh),
+            'usuario':  UsuarioSerializer(usuario).data,
+            'evento_id': evento.id,
+        })
+
+
+class EventoPublicoView(APIView):
+    """
+    GET /api/auth/evento-publico/<evento_id>/
+    Retorna dados públicos do evento para exibir na página de acesso (sem autenticação).
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, _request, evento_id):
+        try:
+            evento = Evento.objects.get(id=evento_id, status='publicado')
+        except Evento.DoesNotExist:
+            return Response(
+                {'erro': 'Evento não encontrado ou não está disponível.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({
+            'id':               evento.id,
+            'titulo':           evento.titulo,
+            'tipo':             evento.tipo,
+            'data':             str(evento.data),
+            'hora_inicio':      str(evento.hora_inicio),
+            'hora_fim':         str(evento.hora_fim),
+            'nome_profissional': evento.nome_profissional,
+            'requer_palavra_chave': bool(evento.palavra_chave),
+        })
+
+
+# ---------------------------------------------------------------------------
 # ADMIN — Usuários
 # ---------------------------------------------------------------------------
 
@@ -296,7 +377,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         # Para ativar o envio real à Lista de Distribuição, comente o bloco
         # "MODO TESTE" e descomente o bloco "MODO PRODUÇÃO" abaixo.
         # ---------------------------------------------------------------------------
-        destinatario = 'jonas.silva@aeb.gov.br'  # MODO TESTE
+        destinatario = 'wesley.pereira@aeb.gov.br'  # MODO TESTE
 
         # ---------------------------------------------------------------------------
         # MODO PRODUÇÃO — descomente quando for ao ar com a LD real.
@@ -309,6 +390,27 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         #     )
 
         corpo_html = evento.corpo_email or ''
+        link_acesso = f"{settings.FRONTEND_URL}/evento/{evento.id}/entrar"
+
+        if evento.palavra_chave:
+            corpo_html += (
+                f'<div style="margin-top:24px;padding:16px 20px;background:#fffbeb;'
+                f'border-left:4px solid #f59e0b;border-radius:6px;">'
+                f'<p style="margin:0 0 6px;font-size:13px;color:#92400e;font-weight:600;">'
+                f'🔑 PALAVRA-CHAVE DE ACESSO</p>'
+                f'<p style="margin:0;font-size:22px;font-weight:bold;letter-spacing:3px;color:#78350f;">'
+                f'{evento.palavra_chave}</p>'
+                f'<p style="margin:8px 0 0;font-size:12px;color:#92400e;">'
+                f'Você precisará informar esta palavra-chave ao clicar no link abaixo.</p>'
+                f'</div>'
+            )
+
+        corpo_html += (
+            f'<p style="margin-top:24px;text-align:center;">'
+            f'<a href="{link_acesso}" style="display:inline-block;padding:12px 32px;'
+            f'background:#1d4ed8;color:#fff;font-size:15px;font-weight:bold;'
+            f'text-decoration:none;border-radius:6px;">Acessar e Agendar</a></p>'
+        )
 
         try:
             send_mail(

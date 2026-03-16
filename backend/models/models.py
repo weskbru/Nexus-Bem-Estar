@@ -198,7 +198,9 @@ class Horario(models.Model):
 
     @property
     def vagas_ocupadas(self):
-        return self.agendamentos.filter(status='confirmado').count()
+        confirmados = self.agendamentos.filter(status='confirmado').count()
+        manuais = self.participantes_manuais.count()
+        return confirmados + manuais
 
     @property
     def vagas_livres(self):
