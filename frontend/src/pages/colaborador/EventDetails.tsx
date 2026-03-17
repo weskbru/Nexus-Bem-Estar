@@ -268,7 +268,7 @@ export default function EventDetails() {
                         {filaInfo.posicao}º de {filaInfo.total_na_fila}
                       </p>
                     </div>
-                  ) : (
+                  ) : !agendamentoExistente ? (
                     <button
                       onClick={() => handleEntrarFila(h.id)}
                       disabled={carregandoFila}
@@ -276,7 +276,7 @@ export default function EventDetails() {
                     >
                       {carregandoFila ? 'Entrando...' : 'Entrar na fila'}
                     </button>
-                  )}
+                  ) : null}
                 </div>
               );
             }
