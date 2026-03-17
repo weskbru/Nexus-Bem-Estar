@@ -61,6 +61,19 @@ urlpatterns = [
     ),
 
     # -----------------------------------------------------------------------
+    # Colaborador — Lista de Espera
+    # -----------------------------------------------------------------------
+    path(
+        'colaborador/horarios/<int:horario_id>/lista-espera/',
+        views.EntrarListaEsperaView.as_view(),
+        name='entrar-lista-espera',
+    ),
+    path('colaborador/lista-espera/', views.MinhaListaEsperaView.as_view(), name='minha-lista-espera'),
+
+    # Confirmação pública via link do e-mail
+    path('auth/confirmar-vaga/<uuid:token>/', views.ConfirmarVagaListaEsperaView.as_view(), name='confirmar-vaga'),
+
+    # -----------------------------------------------------------------------
     # Router (ViewSets)
     # -----------------------------------------------------------------------
     path('', include(router.urls)),
