@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState } from 'react';
-import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User } from 'lucide-react';
+import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User, RefreshCw } from 'lucide-react';
 import { parseFetchError } from '../../services/api';
 import ModalDetalhesAgendamento, { type AgendamentoDetalhes } from '../../components/ModalDetalhesAgendamento';
 
@@ -85,6 +85,10 @@ export default function EventDetails() {
       if (!res.ok) throw new Error(data.erro ?? 'Erro ao reservar.');
       setModoModal('sucesso');
       await carregarEvento();
+      setTimeout(() => {
+        setModalAgendamento(null);
+        setModoModal('detalhes');
+      }, 3000);
     } catch (err) {
       setErroReserva(parseFetchError(err, 'Não foi possível reservar o horário. Tente novamente.'));
     } finally {
@@ -180,9 +184,22 @@ export default function EventDetails() {
       </div>
 
       {/* Seleção de horário */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+      <div className={`rounded-2xl shadow-sm border p-6 mb-6 transition-colors ${alterando ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200'}`}>
+        {alterando && agendamentoExistente && (
+          <div className="flex items-center gap-3 bg-amber-100 border border-amber-300 rounded-xl px-4 py-3 mb-5">
+            <RefreshCw className="w-5 h-5 text-amber-600 shrink-0 animate-spin [animation-duration:3s]" />
+            <div>
+              <p className="text-amber-800 font-bold text-sm">Você está remarcando seu horário</p>
+              <p className="text-amber-700 text-xs mt-0.5">
+                Horário atual: <strong>{agendamentoExistente.horario.hora_inicio.substring(0, 5)} às {agendamentoExistente.horario.hora_fim.substring(0, 5)}</strong> — escolha um novo horário abaixo
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-bold text-slate-900">Escolha seu horário</h2>
+          <h2 className={`text-base font-bold ${alterando ? 'text-amber-900' : 'text-slate-900'}`}>
+            {alterando ? 'Escolha o novo horário' : 'Escolha seu horário'}
+          </h2>
           <span className="text-sm text-slate-500">
             <Users className="w-4 h-4 inline mr-1" />
             {horariosDisponiveis.length} horário{horariosDisponiveis.length !== 1 ? 's' : ''} disponível{horariosDisponiveis.length !== 1 ? 'is' : ''}
@@ -272,11 +289,6 @@ export default function EventDetails() {
             >
               Alterar Horário
             </button>
-            <Link to={`/colaborador/eventos/${evento.id}`} className="flex-1">
-              <button className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors">
-                Recarregar Evento
-              </button>
-            </Link>
           </div>
         </div>
       )}
@@ -321,6 +333,8 @@ export default function EventDetails() {
           onConfirmarReserva={modoModal === 'confirmacao' ? handleReservar : undefined}
           confirmandoReserva={modoModal === 'confirmacao' ? reservando : false}
           textoConfirmar={alterando ? 'Confirmar Novo Horário' : 'Confirmar Agendamento'}
+          textoSucesso={alterando ? 'Horário remarcado com sucesso!' : 'Agendamento confirmado com sucesso'}
+          descricaoSucesso={alterando ? 'Seu agendamento foi remarcado para o novo horário.' : 'Seu horário foi reservado.'}
           onAlterarHorario={() => {
             setAlterando(true);
             setErroReserva('');

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, CheckCircle2, XCircle, AlertCircle, User, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { parseFetchError } from '../services/api';
@@ -32,6 +32,8 @@ interface ModalDetalhesAgendamentoProps {
   onConfirmarReserva?: () => void;
   confirmandoReserva?: boolean;
   textoConfirmar?: string;
+  textoSucesso?: string;
+  descricaoSucesso?: string;
 }
 
 export default function ModalDetalhesAgendamento({
@@ -43,6 +45,8 @@ export default function ModalDetalhesAgendamento({
   onConfirmarReserva,
   confirmandoReserva = false,
   textoConfirmar = 'Confirmar Agendamento',
+  textoSucesso = 'Agendamento confirmado com sucesso',
+  descricaoSucesso = 'Seu horário foi reservado.',
 }: ModalDetalhesAgendamentoProps) {
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -93,7 +97,7 @@ export default function ModalDetalhesAgendamento({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <h2 className="font-bold text-slate-900 text-lg">
-            {emModoSucesso ? 'Agendamento confirmado com sucesso' : 'Detalhes do Agendamento'}
+            {emModoSucesso ? textoSucesso : 'Detalhes do Agendamento'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X className="w-5 h-5" />
@@ -166,7 +170,7 @@ export default function ModalDetalhesAgendamento({
           </div>
 
           {emModoSucesso && (
-            <p className="text-sm text-slate-500 text-center">Seu horário foi reservado.</p>
+            <p className="text-sm text-slate-500 text-center">{descricaoSucesso}</p>
           )}
         </div>
 
@@ -232,20 +236,14 @@ export default function ModalDetalhesAgendamento({
             </div>
           )}
 
-          {emModoSucesso && (
-            <Link to={`/colaborador/eventos/${ag.evento_id}`} className="block">
-              <button className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm transition-colors">
-                Voltar ao Evento
-              </button>
-            </Link>
+          {!emModoConfirmacao && (
+            <button
+              onClick={onClose}
+              className="w-full h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-sm transition-colors"
+            >
+              Fechar
+            </button>
           )}
-
-          <button
-            onClick={onClose}
-            className="w-full h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-sm transition-colors"
-          >
-            Fechar
-          </button>
         </div>
       </div>
     </div>
