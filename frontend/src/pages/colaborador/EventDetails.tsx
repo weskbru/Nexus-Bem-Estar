@@ -1,8 +1,10 @@
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState } from 'react';
-import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User, ClockIcon } from 'lucide-react';
+import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User, RefreshCw } from 'lucide-react';
+import { ClockIcon } from 'lucide-react';
 import { parseFetchError } from '../../services/api';
+import ModalDetalhesAgendamento, { type AgendamentoDetalhes } from '../../components/ModalDetalhesAgendamento';
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 
@@ -44,10 +46,11 @@ export default function EventDetails() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [horarioSelecionado, setHorarioSelecionado] = useState<number | null>(null);
+  const [modalAgendamento, setModalAgendamento] = useState<AgendamentoDetalhes | null>(null);
+  const [modoModal, setModoModal] = useState<'detalhes' | 'confirmacao' | 'sucesso'>('detalhes');
   const [reservando, setReservando] = useState(false);
   const [erroReserva, setErroReserva] = useState('');
-  const [agendado, setAgendado] = useState(false);
-  const [agendamentoExistente, setAgendamentoExistente] = useState<{ horario: { hora_inicio: string; hora_fim: string } } | null>(null);
+  const [agendamentoExistente, setAgendamentoExistente] = useState<AgendamentoDetalhes | null>(null);
   const [alterando, setAlterando] = useState(false);
 
   // Lista de espera
@@ -60,7 +63,6 @@ export default function EventDetails() {
 
   async function carregarEvento() {
     setCarregando(true);
-    setAgendado(false);
     setAlterando(false);
     try {
       const [resEvento, resAg, resLista] = await Promise.all([
@@ -70,7 +72,7 @@ export default function EventDetails() {
       ]);
       if (!resEvento.ok) throw new Error();
       setEvento(await resEvento.json());
-      const ags = resAg.ok ? await resAg.json() : [];
+      const ags: AgendamentoDetalhes[] = resAg.ok ? await resAg.json() : [];
       setAgendamentoExistente(ags.length > 0 ? ags[0] : null);
       const lista: ListaEsperaInfo[] = resLista.ok ? await resLista.json() : [];
       const mapa: Record<number, ListaEsperaInfo> = {};
@@ -98,8 +100,12 @@ export default function EventDetails() {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro ?? 'Erro ao reservar.');
-      setAgendado(true);
-      carregarEvento();
+      setModoModal('sucesso');
+      await carregarEvento();
+      setTimeout(() => {
+        setModalAgendamento(null);
+        setModoModal('detalhes');
+      }, 3000);
     } catch (err) {
       setErroReserva(parseFetchError(err, 'Não foi possível reservar o horário. Tente novamente.'));
     } finally {
@@ -152,21 +158,15 @@ export default function EventDetails() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
           <p className="text-red-800 font-medium mb-4">{erro}</p>
-          <Link to="/colaborador/eventos">
+          <Link to="/login">
             <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">
-              Voltar aos Eventos
+              Voltar ao Login
             </button>
           </Link>
         </div>
       </div>
     );
   }
-
-  const tipoEmoji: Record<string, string> = {
-    massagem: '💆', yoga: '🧘', meditacao: '🕉️',
-    nutricao: '🥗', pilates: '🤸', acupuntura: '🪡',
-  };
-  const emoji = tipoEmoji[evento.tipo] ?? '✨';
 
   const dataFormatada = new Date(evento.data + 'T00:00:00').toLocaleDateString('pt-BR', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -184,17 +184,14 @@ export default function EventDetails() {
         <span className="text-blue-600 font-medium">{evento.titulo}</span>
       </div>
 
-      {/* Header */}
-      <div className="flex items-start gap-5 mb-8">
-        <div className="text-6xl">{emoji}</div>
-        <div>
+      {/* Info card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
+        <div className="pb-5 mb-5 border-b border-slate-100 text-center">
           <h1 className="text-3xl font-bold text-slate-900 mb-1">{evento.titulo}</h1>
           {evento.descricao && <p className="text-slate-500">{evento.descricao}</p>}
         </div>
-      </div>
 
-      {/* Info card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8 grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
             <CalendarIcon className="w-5 h-5 text-blue-600" />
@@ -228,12 +225,26 @@ export default function EventDetails() {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Seleção de horário */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+      <div className={`rounded-2xl shadow-sm border p-6 mb-6 transition-colors ${alterando ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200'}`}>
+        {alterando && agendamentoExistente && (
+          <div className="flex items-center gap-3 bg-amber-100 border border-amber-300 rounded-xl px-4 py-3 mb-5">
+            <RefreshCw className="w-5 h-5 text-amber-600 shrink-0 animate-spin [animation-duration:3s]" />
+            <div>
+              <p className="text-amber-800 font-bold text-sm">Você está remarcando seu horário</p>
+              <p className="text-amber-700 text-xs mt-0.5">
+                Horário atual: <strong>{agendamentoExistente.horario.hora_inicio.substring(0, 5)} às {agendamentoExistente.horario.hora_fim.substring(0, 5)}</strong> — escolha um novo horário abaixo
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-bold text-slate-900">Escolha seu horário</h2>
+          <h2 className={`text-base font-bold ${alterando ? 'text-amber-900' : 'text-slate-900'}`}>
+            {alterando ? 'Escolha o novo horário' : 'Escolha seu horário'}
+          </h2>
           <span className="text-sm text-slate-500">
             <Users className="w-4 h-4 inline mr-1" />
             {horariosDisponiveis.length} horário{horariosDisponiveis.length !== 1 ? 's' : ''} disponível{horariosDisponiveis.length !== 1 ? 'is' : ''}
@@ -284,7 +295,26 @@ export default function EventDetails() {
             return (
               <button
                 key={h.id}
-                onClick={() => { setHorarioSelecionado(h.id); setErroReserva(''); }}
+                onClick={() => {
+                  if (agendamentoExistente && !alterando) {
+                    setModalAgendamento(agendamentoExistente);
+                    setModoModal('detalhes');
+                    return;
+                  }
+                  setHorarioSelecionado(h.id);
+                  setModalAgendamento({
+                    id: 0,
+                    status: 'pendente',
+                    evento_id: evento.id,
+                    evento_titulo: evento.titulo,
+                    evento_data: evento.data,
+                    nome_profissional: evento.nome_profissional,
+                    horario: { hora_inicio: h.hora_inicio, hora_fim: h.hora_fim },
+                    criado_em: new Date().toISOString(),
+                  });
+                  setModoModal('confirmacao');
+                  setErroReserva('');
+                }}
                 className={`relative rounded-xl border-2 p-3 text-center transition-all
                   ${selecionado
                     ? 'border-blue-600 bg-blue-50 shadow-md'
@@ -319,8 +349,8 @@ export default function EventDetails() {
         )}
       </div>
 
-      {/* Já tem agendamento */}
-      {agendamentoExistente && !alterando && !agendado && (
+      {/* Já tem agendamento — exibe card e bloqueia nova reserva */}
+      {agendamentoExistente && !alterando && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -336,25 +366,7 @@ export default function EventDetails() {
             >
               Alterar Horário
             </button>
-            <Link to="/colaborador/agendamentos" className="flex-1">
-              <button className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors">
-                Ver Meus Agendamentos
-              </button>
-            </Link>
           </div>
-        </div>
-      )}
-
-      {/* Sucesso após nova reserva */}
-      {agendado && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <p className="text-emerald-800 text-sm font-semibold">Agendamento confirmado!</p>
-          </div>
-          <Link to="/colaborador/agendamentos" className="text-sm text-emerald-700 underline font-medium whitespace-nowrap">
-            Ver agendamentos
-          </Link>
         </div>
       )}
 
@@ -365,8 +377,8 @@ export default function EventDetails() {
         </div>
       )}
 
-      {/* Ações */}
-      {(!agendamentoExistente || alterando) && !agendado && (
+      {/* Ações — só mostra se não tem agendamento ou está no modo alterar */}
+      {(!agendamentoExistente || alterando) && (
         <div className="flex flex-col sm:flex-row gap-3">
           {alterando && (
             <button
@@ -376,34 +388,41 @@ export default function EventDetails() {
               Cancelar alteração
             </button>
           )}
-          {horariosDisponiveis.length > 0 && (
-            <button
-              onClick={handleReservar}
-              disabled={!horarioSelecionado || reservando}
-              className="flex-1 h-12 px-6 rounded-xl font-semibold text-white transition-all
-                bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl
-                disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {reservando ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  Reservando...
-                </>
-              ) : alterando ? 'Confirmar Novo Horário' : 'Confirmar Agendamento'}
-            </button>
-          )}
           {!alterando && (
-            <Link to="/colaborador/eventos" className="flex-1">
+            <Link to="/login" className="flex-1">
               <button className="w-full h-12 px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2">
                 <ArrowLeft className="w-4 h-4" />
-                Voltar aos Eventos
+                Voltar ao Login
               </button>
             </Link>
           )}
         </div>
+      )}
+
+      {modalAgendamento && (
+        <ModalDetalhesAgendamento
+          ag={modalAgendamento}
+          modo={modoModal}
+          onClose={() => {
+            setModalAgendamento(null);
+            setModoModal('detalhes');
+          }}
+          onConfirmarReserva={modoModal === 'confirmacao' ? handleReservar : undefined}
+          confirmandoReserva={modoModal === 'confirmacao' ? reservando : false}
+          textoConfirmar={alterando ? 'Confirmar Novo Horário' : 'Confirmar Agendamento'}
+          textoSucesso={alterando ? 'Horário remarcado com sucesso!' : 'Agendamento confirmado com sucesso'}
+          descricaoSucesso={alterando ? 'Seu agendamento foi remarcado para o novo horário.' : 'Seu horário foi reservado.'}
+          onAlterarHorario={() => {
+            setAlterando(true);
+            setErroReserva('');
+          }}
+          onCancelado={() => {
+            setAgendamentoExistente(null);
+            setAlterando(false);
+            setErroReserva('');
+            carregarEvento();
+          }}
+        />
       )}
     </div>
   );
