@@ -313,7 +313,8 @@ export default function EventDetails() {
             const filaInfo = listaEsperaMap[h.id];
             const naFila = !!filaInfo;
             const carregandoFila = entrandoFila === h.id;
-            const selecaoBloqueada = !!agendamentoExistente && !alterando;
+            const podeSelecionarHorario = h.disponivel && (!agendamentoExistente || alterando);
+            const selecaoBloqueada = !podeSelecionarHorario;
 
             if (!h.disponivel) {
               // Horário lotado — mostra botão de lista de espera
@@ -367,6 +368,7 @@ export default function EventDetails() {
                 key={h.id}
                 disabled={selecaoBloqueada}
                 onClick={() => {
+                  if (!podeSelecionarHorario) return;
                   setHorarioSelecionado(h.id);
                   setModalAgendamento({
                     id: 0,
