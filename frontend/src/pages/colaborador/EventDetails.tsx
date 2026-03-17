@@ -119,12 +119,6 @@ export default function EventDetails() {
     );
   }
 
-  const tipoEmoji: Record<string, string> = {
-    massagem: '💆', yoga: '🧘', meditacao: '🕉️',
-    nutricao: '🥗', pilates: '🤸', acupuntura: '🪡',
-  };
-  const emoji = tipoEmoji[evento.tipo] ?? '✨';
-
   const dataFormatada = new Date(evento.data + 'T00:00:00').toLocaleDateString('pt-BR', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
@@ -141,17 +135,14 @@ export default function EventDetails() {
         <span className="text-blue-600 font-medium">{evento.titulo}</span>
       </div>
 
-      {/* Header */}
-      <div className="flex items-start gap-5 mb-8">
-        <div className="text-6xl">{emoji}</div>
-        <div>
+      {/* Info card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
+        <div className="pb-5 mb-5 border-b border-slate-100 text-center">
           <h1 className="text-3xl font-bold text-slate-900 mb-1">{evento.titulo}</h1>
           {evento.descricao && <p className="text-slate-500">{evento.descricao}</p>}
         </div>
-      </div>
 
-      {/* Info card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8 grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
             <CalendarIcon className="w-5 h-5 text-blue-600" />
@@ -185,6 +176,7 @@ export default function EventDetails() {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Seleção de horário */}
