@@ -15,7 +15,6 @@ import GestaoUsuarios from './pages/admin/GestaoUsuarios';
 import ColaboradorLayout from './layouts/ColaboradorLayout';
 import EventDetails from './pages/colaborador/EventDetails';
 import Confirmacao from './pages/colaborador/Confirmacao';
-import MeusAgendamentos from './pages/colaborador/MeusAgendamentos';
 
 function App() {
   return (
@@ -61,11 +60,11 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="agendamentos" replace />} />
-            <Route path="eventos" element={<Navigate to="/colaborador/agendamentos" replace />} />
+            <Route index element={<Navigate to="/login" replace />} />
+            <Route path="eventos" element={<Navigate to="/login" replace />} />
             <Route path="eventos/:id" element={<EventDetails />} />
             <Route path="confirmacao" element={<Confirmacao />} />
-            <Route path="agendamentos" element={<MeusAgendamentos />} />
+            <Route path="agendamentos" element={<Navigate to="/login" replace />} />
           </Route>
         </Routes>
       </AuthProvider>

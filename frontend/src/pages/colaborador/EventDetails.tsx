@@ -109,9 +109,9 @@ export default function EventDetails() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
           <p className="text-red-800 font-medium mb-4">{erro}</p>
-          <Link to="/colaborador/agendamentos">
+          <Link to="/login">
             <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">
-              Voltar aos Agendamentos
+              Voltar ao Login
             </button>
           </Link>
         </div>
@@ -272,9 +272,9 @@ export default function EventDetails() {
             >
               Alterar Horário
             </button>
-            <Link to="/colaborador/agendamentos" className="flex-1">
+            <Link to={`/colaborador/eventos/${evento.id}`} className="flex-1">
               <button className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors">
-                Ver Meus Agendamentos
+                Recarregar Evento
               </button>
             </Link>
           </div>
@@ -300,10 +300,10 @@ export default function EventDetails() {
             </button>
           )}
           {!alterando && (
-            <Link to="/colaborador/agendamentos" className="flex-1">
+            <Link to="/login" className="flex-1">
               <button className="w-full h-12 px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2">
                 <ArrowLeft className="w-4 h-4" />
-                Voltar aos Agendamentos
+                Voltar ao Login
               </button>
             </Link>
           )}

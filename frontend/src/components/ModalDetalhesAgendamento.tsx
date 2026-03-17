@@ -233,9 +233,9 @@ export default function ModalDetalhesAgendamento({
           )}
 
           {emModoSucesso && (
-            <Link to="/colaborador/agendamentos" className="block">
+            <Link to={`/colaborador/eventos/${ag.evento_id}`} className="block">
               <button className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm transition-colors">
-                Ver Meus Agendamentos
+                Voltar ao Evento
               </button>
             </Link>
           )}

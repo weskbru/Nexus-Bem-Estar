@@ -1,4 +1,4 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import logoAeb from '../images/logoaeb.png';
@@ -25,11 +25,6 @@ export default function ColaboradorLayout() {
               <span className="font-semibold text-lg text-slate-900">Agenda Bem-Estar</span>
             </div>
             <div className="flex items-center gap-6">
-              <nav className="hidden md:flex gap-6">
-                <Link to="/colaborador/agendamentos" className="text-slate-600 hover:text-blue-600 font-medium px-1 py-5 transition-colors">
-                  Meus Agendamentos
-                </Link>
-              </nav>
               <div className="flex items-center gap-4 ml-4 border-l border-slate-200 pl-4">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">

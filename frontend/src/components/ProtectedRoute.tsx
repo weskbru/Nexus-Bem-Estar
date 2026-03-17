@@ -14,7 +14,7 @@ export default function ProtectedRoute({ children, adminOnly = false }: Props) {
   }
 
   if (adminOnly && !isAdmin) {
-    return <Navigate to="/colaborador/agendamentos" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
