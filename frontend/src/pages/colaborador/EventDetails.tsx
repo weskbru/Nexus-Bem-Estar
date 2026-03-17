@@ -1,7 +1,8 @@
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User } from 'lucide-react';
+import { parseFetchError } from '../../services/api';
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 
@@ -30,7 +31,6 @@ interface EventoData {
 
 export default function EventDetails() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { token } = useAuth();
 
   const [evento, setEvento] = useState<EventoData | null>(null);
@@ -39,6 +39,9 @@ export default function EventDetails() {
   const [horarioSelecionado, setHorarioSelecionado] = useState<number | null>(null);
   const [reservando, setReservando] = useState(false);
   const [erroReserva, setErroReserva] = useState('');
+  const [agendado, setAgendado] = useState(false);
+  const [agendamentoExistente, setAgendamentoExistente] = useState<{ horario: { hora_inicio: string; hora_fim: string } } | null>(null);
+  const [alterando, setAlterando] = useState(false);
 
   useEffect(() => {
     carregarEvento();
@@ -46,12 +49,17 @@ export default function EventDetails() {
 
   async function carregarEvento() {
     setCarregando(true);
+    setAgendado(false);
+    setAlterando(false);
     try {
-      const res = await fetch(`${API}/colaborador/eventos/${id}/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error();
-      setEvento(await res.json());
+      const [resEvento, resAg] = await Promise.all([
+        fetch(`${API}/colaborador/eventos/${id}/`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/colaborador/agendamentos/?evento_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (!resEvento.ok) throw new Error();
+      setEvento(await resEvento.json());
+      const ags = resAg.ok ? await resAg.json() : [];
+      setAgendamentoExistente(ags.length > 0 ? ags[0] : null);
     } catch {
       setErro('Erro ao carregar evento. Tente novamente.');
     } finally {
@@ -69,13 +77,15 @@ export default function EventDetails() {
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alterar: alterando }),
         }
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro ?? 'Erro ao reservar.');
-      navigate('/colaborador/confirmacao', { state: { status: 'sucesso', evento } });
+      setAgendado(true);
+      carregarEvento();
     } catch (err) {
-      setErroReserva(err instanceof Error ? err.message : 'Erro ao reservar horário.');
+      setErroReserva(parseFetchError(err, 'Não foi possível reservar o horário. Tente novamente.'));
     } finally {
       setReservando(false);
     }
@@ -233,6 +243,45 @@ export default function EventDetails() {
         )}
       </div>
 
+      {/* Já tem agendamento — exibe card e bloqueia nova reserva */}
+      {agendamentoExistente && !alterando && !agendado && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <p className="text-emerald-800 font-semibold text-sm">Você já tem um horário reservado neste evento</p>
+          </div>
+          <p className="text-emerald-700 text-sm mb-4">
+            Horário: <strong>{agendamentoExistente.horario.hora_inicio.substring(0, 5)} às {agendamentoExistente.horario.hora_fim.substring(0, 5)}</strong>
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setAlterando(true)}
+              className="flex-1 h-10 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-xl text-sm font-semibold transition-colors"
+            >
+              Alterar Horário
+            </button>
+            <Link to="/colaborador/agendamentos" className="flex-1">
+              <button className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors">
+                Ver Meus Agendamentos
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Sucesso após nova reserva */}
+      {agendado && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <p className="text-emerald-800 text-sm font-semibold">Agendamento confirmado!</p>
+          </div>
+          <Link to="/colaborador/agendamentos" className="text-sm text-emerald-700 underline font-medium whitespace-nowrap">
+            Ver agendamentos
+          </Link>
+        </div>
+      )}
+
       {/* Erro reserva */}
       {erroReserva && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
@@ -240,43 +289,47 @@ export default function EventDetails() {
         </div>
       )}
 
-      {/* Ações */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {horariosDisponiveis.length > 0 && (
-          <button
-            onClick={handleReservar}
-            disabled={!horarioSelecionado || reservando}
-            className="flex-1 px-6 py-3 rounded-xl font-semibold text-white transition-all
-              bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl
-              disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {reservando ? (
-              <>
-                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                Reservando...
-              </>
-            ) : (
-              'Confirmar Agendamento'
-            )}
-          </button>
-        )}
+      {/* Ações — só mostra se não tem agendamento ou está no modo alterar */}
+      {(!agendamentoExistente || alterando) && !agendado && (
+        <div className="flex flex-col sm:flex-row gap-3">
+          {alterando && (
+            <button
+              onClick={() => setAlterando(false)}
+              className="h-12 px-5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold text-sm transition-colors"
+            >
+              Cancelar alteração
+            </button>
+          )}
+          {horariosDisponiveis.length > 0 && (
+            <button
+              onClick={handleReservar}
+              disabled={!horarioSelecionado || reservando}
+              className="flex-1 h-12 px-6 rounded-xl font-semibold text-white transition-all
+                bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl
+                disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {reservando ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Reservando...
+                </>
+              ) : alterando ? 'Confirmar Novo Horário' : 'Confirmar Agendamento'}
+            </button>
+          )}
+          {!alterando && (
+            <Link to="/colaborador/eventos" className="flex-1">
+              <button className="w-full h-12 px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2">
+                <ArrowLeft className="w-4 h-4" />
+                Voltar aos Eventos
+              </button>
+            </Link>
+          )}
+        </div>
+      )}
 
-        <Link to="/colaborador/eventos" className={horariosDisponiveis.length === 0 ? 'flex-1' : ''}>
-          <button className="w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2">
-            <ArrowLeft className="w-4 h-4" />
-            Voltar aos Eventos
-          </button>
-        </Link>
-      </div>
-
-      <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-        <p className="text-sm text-blue-900">
-          <span className="font-semibold">📌 Importante:</span> Chegue com 10 minutos de antecedência. Se precisar cancelar, avise com antecedência através do seu gestor.
-        </p>
-      </div>
     </div>
   );
 }

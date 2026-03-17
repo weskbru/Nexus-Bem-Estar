@@ -1,5 +1,28 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 
+/** Lê o corpo da resposta como JSON com segurança.
+ *  Se o servidor devolver HTML (ex: erro 500 do nginx), retorna null em vez de explodir. */
+async function safeJson(res: Response): Promise<Record<string, unknown> | null> {
+  const ct = res.headers.get('content-type') ?? '';
+  if (!ct.includes('application/json')) return null;
+  return res.json().catch(() => null);
+}
+
+/** Converte qualquer erro capturado em mensagem amigável para o usuário. */
+export function parseFetchError(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  const raw = err.message;
+  if (
+    raw.includes('DOCTYPE') || raw.includes('<!') ||
+    raw.includes('JSON') || raw.includes('token') ||
+    raw.includes('fetch') || raw.includes('Failed to fetch') ||
+    raw.includes('NetworkError')
+  ) {
+    return 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.';
+  }
+  return raw || fallback;
+}
+
 function getToken(): string | null {
   return localStorage.getItem('access_token');
 }
@@ -25,11 +48,15 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const erro = await res.json().catch(() => ({ erro: 'Erro desconhecido' }));
-    throw new Error(erro.erro ?? erro.detail ?? 'Erro na requisição');
+    const erro = await safeJson(res);
+    throw new Error(
+      (erro?.erro as string) ?? (erro?.detail as string) ??
+      'Não foi possível completar a operação. Tente novamente.'
+    );
   }
 
-  return res.json() as Promise<T>;
+  const body = await safeJson(res);
+  return body as T;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────
