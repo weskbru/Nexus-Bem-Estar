@@ -503,7 +503,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='cancelar')
     def cancelar(self, request, pk=None):
-        """Cancela o evento, impedindo novos agendamentos."""
+        """Cancela o evento, impedindo novos agendamentos, e notifica todos os inscritos."""
         evento = self.get_object()
         if evento.status != 'publicado':
             return Response(
@@ -513,6 +513,9 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
 
         evento.status = 'cancelado'
         evento.save(update_fields=['status'])
+
+        _notificar_cancelamento_evento(evento)
+
         return Response({'mensagem': 'Evento cancelado com sucesso.'})
 
     @action(detail=True, methods=['post'], url_path='enviar-emails')
@@ -1146,6 +1149,53 @@ def _enviar_email_confirmacao(agendamento: Agendamento) -> None:
         pass  # Log em produção; não bloqueia o fluxo
 
 
+def _notificar_cancelamento_evento(evento: Evento) -> None:
+    """
+    Enviado quando o admin cancela um evento.
+    Notifica todos os colaboradores com agendamento confirmado naquele evento.
+    """
+    agendamentos = (
+        Agendamento.objects
+        .filter(horario__evento=evento, status='confirmado')
+        .select_related('usuario', 'horario')
+    )
+
+    for ag in agendamentos:
+        usuario = ag.usuario
+        horario = ag.horario
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;">
+          <h2 style="color:#dc2626;margin-bottom:4px;">Evento Cancelado</h2>
+          <p style="color:#374151;">Olá <strong>{usuario.nome}</strong>,</p>
+          <p style="color:#374151;">
+            Infelizmente o evento <strong>{evento.titulo}</strong> foi cancelado pelo organizador.
+          </p>
+          <div style="background:#fef2f2;border:2px solid #fecaca;border-radius:12px;padding:20px;margin:20px 0;">
+            <p style="margin:0 0 6px;color:#991b1b;font-weight:600;">📅 {evento.data.strftime('%d/%m/%Y')}</p>
+            <p style="margin:0 0 6px;color:#991b1b;">
+              ⏰ {horario.hora_inicio.strftime('%H:%M')} às {horario.hora_fim.strftime('%H:%M')}
+            </p>
+            <p style="margin:0;color:#991b1b;">Seu agendamento foi cancelado automaticamente.</p>
+          </div>
+          <p style="color:#6b7280;font-size:13px;">
+            Se você tiver dúvidas, entre em contato com a equipe de bem-estar da AEB.
+          </p>
+          <p style="color:#6b7280;font-size:13px;">Att,<br>Equipe de Bem-Estar</p>
+        </div>"""
+
+        try:
+            send_mail(
+                subject=f'Evento cancelado: {evento.titulo}',
+                message='',
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[usuario.email],
+                html_message=html,
+                fail_silently=True,
+            )
+        except Exception:
+            pass
+
+
 def _notificar_proximo_lista_espera(horario: Horario) -> None:
     """
     Chamado após um cancelamento. Expira entradas vencidas e notifica
@@ -1257,6 +1307,17 @@ class EntrarListaEsperaView(APIView):
             return Response(
                 {'erro': 'Este horário ainda tem vagas. Faça seu agendamento normalmente.'},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Bloqueia se já tem agendamento confirmado neste evento
+        if Agendamento.objects.filter(
+            usuario=request.user,
+            horario__evento=horario.evento,
+            status='confirmado',
+        ).exists():
+            return Response(
+                {'erro': 'Você já possui um agendamento confirmado neste evento. Cancele-o antes de entrar na lista de espera.'},
+                status=status.HTTP_409_CONFLICT,
             )
 
         # Verifica se já está na lista de espera deste horário
