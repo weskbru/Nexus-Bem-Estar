@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -159,6 +159,90 @@ function FieldError({ msg }: { msg?: string }) {
     <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
       <AlertCircle className="w-3 h-3 shrink-0" />{msg}
     </p>
+  );
+}
+
+function minutosParaHora(totalMinutos: number): string {
+  const horas = Math.floor(totalMinutos / 60);
+  const minutos = totalMinutos % 60;
+  return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
+}
+
+const HORARIOS_OPCOES = Array.from({ length: 24 * 12 }, (_, index) => minutosParaHora(index * 5));
+
+function TimePickerSelect({
+  value,
+  onChange,
+  error,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className={`w-full px-4 py-2.5 rounded-xl border text-sm text-left outline-none transition-all bg-white
+          hover:border-blue-300 hover:bg-slate-50/60
+          focus-visible:ring-4 focus-visible:ring-blue-100 focus-visible:border-blue-500
+          ${error ? 'border-red-400' : 'border-slate-300'}`}
+      >
+        <span className={value ? 'text-slate-800' : 'text-slate-400'}>{value || placeholder || 'Selecione um horário'}</span>
+      </button>
+
+      {open && (
+        <div className="absolute z-30 mt-2 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_14px_30px_-16px_rgba(15,23,42,0.35)]">
+          <div className="max-h-56 overflow-y-auto pr-1">
+            {HORARIOS_OPCOES.map((horario) => {
+              const isSelected = value === horario;
+              return (
+                <button
+                  key={horario}
+                  type="button"
+                  onClick={() => {
+                    onChange(horario);
+                    setOpen(false);
+                  }}
+                  className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors mb-1 last:mb-0
+                    ${isSelected
+                      ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                      : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                >
+                  {horario}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -338,14 +422,15 @@ export default function NovoEvento() {
           </div>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
                   Início <span className="text-red-500">*</span>
                 </label>
-                <input type="time" value={form.hora_inicio}
-                  onChange={e => update('hora_inicio', e.target.value)}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.hora_inicio ? 'border-red-400' : 'border-slate-300'}`}
+                <TimePickerSelect
+                  value={form.hora_inicio}
+                  onChange={(value) => update('hora_inicio', value)}
+                  error={erros.hora_inicio}
                 />
                 <FieldError msg={erros.hora_inicio} />
               </div>
@@ -353,9 +438,10 @@ export default function NovoEvento() {
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
                   Término <span className="text-red-500">*</span>
                 </label>
-                <input type="time" value={form.hora_fim}
-                  onChange={e => update('hora_fim', e.target.value)}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.hora_fim ? 'border-red-400' : 'border-slate-300'}`}
+                <TimePickerSelect
+                  value={form.hora_fim}
+                  onChange={(value) => update('hora_fim', value)}
+                  error={erros.hora_fim}
                 />
                 <FieldError msg={erros.hora_fim} />
               </div>
