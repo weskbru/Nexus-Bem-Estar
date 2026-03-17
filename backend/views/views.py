@@ -6,6 +6,8 @@ from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
 from django.http import StreamingHttpResponse
+from datetime import timedelta
+
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.html import strip_tags
@@ -17,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, ListaEspera
 from ..services.ldap_service import buscar_usuarios as ldap_buscar, MOCK_SENHA_PADRAO
 from ..serializers.serializers import (
     UsuarioSerializer,
@@ -501,7 +503,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='cancelar')
     def cancelar(self, request, pk=None):
-        """Cancela o evento, impedindo novos agendamentos."""
+        """Cancela o evento, impedindo novos agendamentos, e notifica todos os inscritos."""
         evento = self.get_object()
         if evento.status != 'publicado':
             return Response(
@@ -511,6 +513,9 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
 
         evento.status = 'cancelado'
         evento.save(update_fields=['status'])
+
+        _notificar_cancelamento_evento(evento)
+
         return Response({'mensagem': 'Evento cancelado com sucesso.'})
 
     @action(detail=True, methods=['post'], url_path='enviar-emails')
@@ -941,8 +946,13 @@ class CancelarAgendamentoView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        horario = agendamento.horario
         agendamento.status = 'cancelado'
         agendamento.save(update_fields=['status', 'atualizado_em'])
+
+        # Notifica próximo da lista de espera
+        _notificar_proximo_lista_espera(horario)
+
         return Response({'mensagem': 'Agendamento cancelado com sucesso.'})
 
 
@@ -1137,3 +1147,330 @@ def _enviar_email_confirmacao(agendamento: Agendamento) -> None:
         )
     except Exception:
         pass  # Log em produção; não bloqueia o fluxo
+
+
+def _notificar_cancelamento_evento(evento: Evento) -> None:
+    """
+    Enviado quando o admin cancela um evento.
+    Notifica todos os colaboradores com agendamento confirmado naquele evento.
+    """
+    agendamentos = (
+        Agendamento.objects
+        .filter(horario__evento=evento, status='confirmado')
+        .select_related('usuario', 'horario')
+    )
+
+    for ag in agendamentos:
+        usuario = ag.usuario
+        horario = ag.horario
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;">
+          <h2 style="color:#dc2626;margin-bottom:4px;">Evento Cancelado</h2>
+          <p style="color:#374151;">Olá <strong>{usuario.nome}</strong>,</p>
+          <p style="color:#374151;">
+            Infelizmente o evento <strong>{evento.titulo}</strong> foi cancelado pelo organizador.
+          </p>
+          <div style="background:#fef2f2;border:2px solid #fecaca;border-radius:12px;padding:20px;margin:20px 0;">
+            <p style="margin:0 0 6px;color:#991b1b;font-weight:600;">📅 {evento.data.strftime('%d/%m/%Y')}</p>
+            <p style="margin:0 0 6px;color:#991b1b;">
+              ⏰ {horario.hora_inicio.strftime('%H:%M')} às {horario.hora_fim.strftime('%H:%M')}
+            </p>
+            <p style="margin:0;color:#991b1b;">Seu agendamento foi cancelado automaticamente.</p>
+          </div>
+          <p style="color:#6b7280;font-size:13px;">
+            Se você tiver dúvidas, entre em contato com a equipe de bem-estar da AEB.
+          </p>
+          <p style="color:#6b7280;font-size:13px;">Att,<br>Equipe de Bem-Estar</p>
+        </div>"""
+
+        try:
+            send_mail(
+                subject=f'Evento cancelado: {evento.titulo}',
+                message='',
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[usuario.email],
+                html_message=html,
+                fail_silently=True,
+            )
+        except Exception:
+            pass
+
+
+def _notificar_proximo_lista_espera(horario: Horario) -> None:
+    """
+    Chamado após um cancelamento. Expira entradas vencidas e notifica
+    o próximo colaborador aguardando na lista de espera do horário.
+    """
+    agora = timezone.now()
+
+    # Expira quem não confirmou dentro do prazo de 2h
+    ListaEspera.objects.filter(
+        horario=horario,
+        status='notificado',
+        expira_em__lt=agora,
+    ).update(status='expirado')
+
+    # Só notifica se o slot realmente abriu vaga
+    if not horario.disponivel:
+        return
+
+    proximo = (
+        ListaEspera.objects
+        .filter(horario=horario, status='aguardando')
+        .order_by('posicao')
+        .first()
+    )
+    if not proximo:
+        return
+
+    proximo.status = 'notificado'
+    proximo.notificado_em = agora
+    proximo.expira_em = agora + timedelta(hours=2)
+    proximo.save(update_fields=['status', 'notificado_em', 'expira_em'])
+
+    _enviar_email_lista_espera(proximo)
+
+
+def _enviar_email_lista_espera(entrada: ListaEspera) -> None:
+    """Envia e-mail avisando que uma vaga abriu para o colaborador na lista de espera."""
+    horario = entrada.horario
+    evento = horario.evento
+    usuario = entrada.usuario
+    link = f"{settings.FRONTEND_URL}/confirmar-vaga/{entrada.token_confirmacao}"
+
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;">
+      <h2 style="color:#1d4ed8;margin-bottom:4px;">Agenda Bem-Estar</h2>
+      <p style="color:#374151;">Olá <strong>{usuario.nome}</strong>,</p>
+      <p style="color:#374151;">
+        Uma vaga abriu para o evento <strong>{evento.titulo}</strong>!
+      </p>
+      <div style="background:#f0fdf4;border:2px solid #bbf7d0;border-radius:12px;padding:20px;margin:20px 0;">
+        <p style="margin:0 0 6px;color:#166534;font-weight:600;">📅 {evento.data.strftime('%d/%m/%Y')}</p>
+        <p style="margin:0 0 6px;color:#166534;">
+          ⏰ {horario.hora_inicio.strftime('%H:%M')} às {horario.hora_fim.strftime('%H:%M')}
+        </p>
+        {f'<p style="margin:0;color:#166534;">👤 {evento.nome_profissional}</p>' if evento.nome_profissional else ''}
+      </div>
+      <p style="color:#dc2626;font-weight:600;">
+        ⚠️ Você tem <strong>2 horas</strong> para confirmar sua participação.
+        Após esse prazo a vaga será oferecida ao próximo da fila.
+      </p>
+      <p style="text-align:center;margin:28px 0;">
+        <a href="{link}"
+           style="display:inline-block;padding:14px 36px;background:#16a34a;color:#fff;
+                  font-size:15px;font-weight:bold;text-decoration:none;border-radius:8px;">
+          Confirmar Minha Vaga
+        </a>
+      </p>
+      <p style="color:#9ca3af;font-size:12px;">
+        Se você não quiser mais participar, basta ignorar este e-mail.
+      </p>
+    </div>"""
+
+    try:
+        send_mail(
+            subject=f'Vaga disponível: {evento.titulo}',
+            message='',
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[usuario.email],
+            html_message=html,
+            fail_silently=True,
+        )
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# COLABORADOR — Lista de Espera
+# ---------------------------------------------------------------------------
+
+class EntrarListaEsperaView(APIView):
+    """
+    POST /api/colaborador/horarios/<horario_id>/lista-espera/
+    Insere o colaborador autenticado na lista de espera do horário lotado.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, horario_id):
+        try:
+            horario = Horario.objects.select_related('evento').get(
+                id=horario_id, evento__status='publicado'
+            )
+        except Horario.DoesNotExist:
+            return Response(
+                {'erro': 'Horário não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if horario.disponivel:
+            return Response(
+                {'erro': 'Este horário ainda tem vagas. Faça seu agendamento normalmente.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Bloqueia se já tem agendamento confirmado neste evento
+        if Agendamento.objects.filter(
+            usuario=request.user,
+            horario__evento=horario.evento,
+            status='confirmado',
+        ).exists():
+            return Response(
+                {'erro': 'Você já possui um agendamento confirmado neste evento. Cancele-o antes de entrar na lista de espera.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Verifica se já está na lista de espera deste horário
+        if ListaEspera.objects.filter(horario=horario, usuario=request.user).exists():
+            entrada = ListaEspera.objects.get(horario=horario, usuario=request.user)
+            total = ListaEspera.objects.filter(
+                horario=horario, status__in=['aguardando', 'notificado']
+            ).count()
+            return Response({
+                'posicao': entrada.posicao,
+                'total_na_fila': total,
+                'status': entrada.status,
+                'ja_inscrito': True,
+            })
+
+        proxima_posicao = (
+            ListaEspera.objects.filter(horario=horario).count() + 1
+        )
+        entrada = ListaEspera.objects.create(
+            horario=horario,
+            usuario=request.user,
+            posicao=proxima_posicao,
+        )
+
+        total = ListaEspera.objects.filter(
+            horario=horario, status__in=['aguardando', 'notificado']
+        ).count()
+
+        return Response({
+            'posicao': entrada.posicao,
+            'total_na_fila': total,
+            'status': entrada.status,
+            'ja_inscrito': False,
+        }, status=status.HTTP_201_CREATED)
+
+
+class MinhaListaEsperaView(APIView):
+    """
+    GET /api/colaborador/lista-espera/?evento_id=<id>
+    Retorna as entradas ativas do usuário na lista de espera, filtradas por evento.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        evento_id = request.query_params.get('evento_id')
+        qs = ListaEspera.objects.filter(
+            usuario=request.user,
+            status__in=['aguardando', 'notificado'],
+        ).select_related('horario')
+
+        if evento_id:
+            qs = qs.filter(horario__evento_id=evento_id)
+
+        resultado = []
+        for entrada in qs:
+            total = ListaEspera.objects.filter(
+                horario=entrada.horario,
+                status__in=['aguardando', 'notificado'],
+            ).count()
+            resultado.append({
+                'horario_id': entrada.horario_id,
+                'posicao': entrada.posicao,
+                'total_na_fila': total,
+                'status': entrada.status,
+                'expira_em': entrada.expira_em,
+            })
+
+        return Response(resultado)
+
+
+class ConfirmarVagaListaEsperaView(APIView):
+    """
+    POST /api/auth/confirmar-vaga/<token>/
+    Endpoint público (sem autenticação). O colaborador clica no link do e-mail,
+    o frontend chama este endpoint com o token e recebe um JWT.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @transaction.atomic
+    def post(self, request, token):
+        try:
+            entrada = ListaEspera.objects.select_related(
+                'usuario', 'horario__evento'
+            ).get(token_confirmacao=token)
+        except ListaEspera.DoesNotExist:
+            return Response(
+                {'erro': 'Link inválido ou não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if entrada.status == 'confirmado':
+            return Response(
+                {'erro': 'Esta vaga já foi confirmada anteriormente.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if entrada.status == 'expirado':
+            return Response(
+                {'erro': 'O prazo para confirmar esta vaga expirou. Você foi removido da fila.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if entrada.status == 'aguardando':
+            return Response(
+                {'erro': 'Você ainda não foi notificado. Aguarde sua vez na fila.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # status == 'notificado' — verifica prazo
+        if entrada.expira_em and timezone.now() > entrada.expira_em:
+            entrada.status = 'expirado'
+            entrada.save(update_fields=['status'])
+            _notificar_proximo_lista_espera(entrada.horario)
+            return Response(
+                {'erro': 'O prazo de 2 horas para confirmar expirou. A vaga foi oferecida ao próximo da fila.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        horario = Horario.objects.select_for_update().get(id=entrada.horario_id)
+
+        if not horario.disponivel:
+            # Vaga fechou de novo (caso raro) — passa para o próximo
+            entrada.status = 'expirado'
+            entrada.save(update_fields=['status'])
+            _notificar_proximo_lista_espera(horario)
+            return Response(
+                {'erro': 'A vaga foi preenchida antes de sua confirmação. O próximo da fila foi notificado.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Cancela agendamento anterior do mesmo evento, se houver
+        Agendamento.objects.filter(
+            usuario=entrada.usuario,
+            horario__evento=horario.evento,
+            status='confirmado',
+        ).update(status='cancelado')
+
+        agendamento = Agendamento.objects.create(
+            usuario=entrada.usuario,
+            horario=horario,
+            status='confirmado',
+        )
+
+        entrada.status = 'confirmado'
+        entrada.save(update_fields=['status'])
+
+        _enviar_email_confirmacao(agendamento)
+
+        refresh = RefreshToken.for_user(entrada.usuario)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'usuario': UsuarioSerializer(entrada.usuario).data,
+            'evento_id': horario.evento_id,
+            'mensagem': 'Vaga confirmada com sucesso! Seu agendamento foi criado.',
+        })

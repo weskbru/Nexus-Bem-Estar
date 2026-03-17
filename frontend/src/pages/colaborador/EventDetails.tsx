@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User, RefreshCw } from 'lucide-react';
+import { ClockIcon } from 'lucide-react';
 import { parseFetchError } from '../../services/api';
 import ModalDetalhesAgendamento, { type AgendamentoDetalhes } from '../../components/ModalDetalhesAgendamento';
 
@@ -30,6 +31,13 @@ interface EventoData {
   horarios: HorarioData[];
 }
 
+interface ListaEsperaInfo {
+  horario_id: number;
+  posicao: number;
+  total_na_fila: number;
+  status: string;
+}
+
 export default function EventDetails() {
   const { id } = useParams<{ id: string }>();
   const { token } = useAuth();
@@ -45,6 +53,10 @@ export default function EventDetails() {
   const [agendamentoExistente, setAgendamentoExistente] = useState<AgendamentoDetalhes | null>(null);
   const [alterando, setAlterando] = useState(false);
 
+  // Lista de espera
+  const [listaEsperaMap, setListaEsperaMap] = useState<Record<number, ListaEsperaInfo>>({});
+  const [entrandoFila, setEntrandoFila] = useState<number | null>(null); // horario_id sendo processado
+
   useEffect(() => {
     carregarEvento();
   }, [id, token]);
@@ -53,14 +65,19 @@ export default function EventDetails() {
     setCarregando(true);
     setAlterando(false);
     try {
-      const [resEvento, resAg] = await Promise.all([
+      const [resEvento, resAg, resLista] = await Promise.all([
         fetch(`${API}/colaborador/eventos/${id}/`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/colaborador/agendamentos/?evento_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/colaborador/lista-espera/?evento_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (!resEvento.ok) throw new Error();
       setEvento(await resEvento.json());
       const ags: AgendamentoDetalhes[] = resAg.ok ? await resAg.json() : [];
       setAgendamentoExistente(ags.length > 0 ? ags[0] : null);
+      const lista: ListaEsperaInfo[] = resLista.ok ? await resLista.json() : [];
+      const mapa: Record<number, ListaEsperaInfo> = {};
+      lista.forEach(e => { mapa[e.horario_id] = e; });
+      setListaEsperaMap(mapa);
     } catch {
       setErro('Erro ao carregar evento. Tente novamente.');
     } finally {
@@ -93,6 +110,34 @@ export default function EventDetails() {
       setErroReserva(parseFetchError(err, 'Não foi possível reservar o horário. Tente novamente.'));
     } finally {
       setReservando(false);
+    }
+  }
+
+  async function handleEntrarFila(horarioId: number) {
+    setEntrandoFila(horarioId);
+    try {
+      const res = await fetch(
+        `${API}/colaborador/horarios/${horarioId}/lista-espera/`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro ?? 'Erro ao entrar na fila.');
+      setListaEsperaMap(prev => ({
+        ...prev,
+        [horarioId]: {
+          horario_id: horarioId,
+          posicao: data.posicao,
+          total_na_fila: data.total_na_fila,
+          status: data.status,
+        },
+      }));
+    } catch (err) {
+      setErroReserva(parseFetchError(err, 'Não foi possível entrar na lista de espera.'));
+    } finally {
+      setEntrandoFila(null);
     }
   }
 
@@ -206,69 +251,101 @@ export default function EventDetails() {
           </span>
         </div>
 
-        {horariosDisponiveis.length === 0 ? (
-          <div className="text-center py-8 text-slate-400">
-            <Clock className="w-10 h-10 mx-auto mb-2 opacity-40" />
-            <p className="font-medium">Todos os horários estão esgotados.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {evento.horarios.map(h => {
-              const selecionado = horarioSelecionado === h.id;
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {evento.horarios.map(h => {
+            const selecionado = horarioSelecionado === h.id;
+            const filaInfo = listaEsperaMap[h.id];
+            const naFila = !!filaInfo;
+            const carregandoFila = entrandoFila === h.id;
+
+            if (!h.disponivel) {
+              // Horário lotado — mostra botão de lista de espera
               return (
-                <button
+                <div
                   key={h.id}
-                  disabled={!h.disponivel}
-                  onClick={() => {
-                    if (agendamentoExistente && !alterando) {
-                      setModalAgendamento(agendamentoExistente);
-                      setModoModal('detalhes');
-                      return;
-                    }
-                    setHorarioSelecionado(h.id);
-                    setModalAgendamento({
-                      id: 0,
-                      status: 'pendente',
-                      evento_id: evento.id,
-                      evento_titulo: evento.titulo,
-                      evento_data: evento.data,
-                      nome_profissional: evento.nome_profissional,
-                      horario: { hora_inicio: h.hora_inicio, hora_fim: h.hora_fim },
-                      criado_em: new Date().toISOString(),
-                    });
-                    setModoModal('confirmacao');
-                    setErroReserva('');
-                  }}
-                  className={`relative rounded-xl border-2 p-3 text-center transition-all
-                    ${!h.disponivel
-                      ? 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
-                      : selecionado
-                        ? 'border-blue-600 bg-blue-50 shadow-md'
-                        : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
-                    }`}
+                  className="rounded-xl border-2 border-slate-100 bg-slate-50 p-3 text-center flex flex-col gap-1.5"
                 >
-                  {selecionado && (
-                    <div className="absolute -top-2 -right-2 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
-                      <CheckCircle2 className="w-3 h-3 text-white" />
+                  <p className="text-sm font-bold text-slate-400">{h.hora_inicio.substring(0, 5)}</p>
+                  <p className="text-xs text-slate-300">até {h.hora_fim.substring(0, 5)}</p>
+                  <p className="text-xs font-medium text-slate-400">Lotado</p>
+
+                  {naFila ? (
+                    <div className="mt-1 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                      <p className="text-[10px] font-semibold text-amber-700 flex items-center justify-center gap-1">
+                        <ClockIcon className="w-3 h-3" />
+                        Na fila
+                      </p>
+                      <p className="text-[10px] text-amber-600">
+                        {filaInfo.posicao}º de {filaInfo.total_na_fila}
+                      </p>
                     </div>
-                  )}
-                  <p className={`text-sm font-bold ${selecionado ? 'text-blue-700' : 'text-slate-800'}`}>
-                    {h.hora_inicio.substring(0, 5)}
-                  </p>
-                  <p className={`text-xs ${selecionado ? 'text-blue-500' : 'text-slate-400'}`}>
-                    até {h.hora_fim.substring(0, 5)}
-                  </p>
-                  <p className={`text-xs mt-1 font-medium ${
-                    h.disponivel
-                      ? selecionado ? 'text-blue-600' : 'text-emerald-600'
-                      : 'text-slate-400'
-                  }`}>
-                    {h.disponivel ? `${h.vagas_livres}/${h.vagas_disponiveis} vagas` : 'Lotado'}
-                  </p>
-                </button>
+                  ) : !agendamentoExistente ? (
+                    <button
+                      onClick={() => handleEntrarFila(h.id)}
+                      disabled={carregandoFila}
+                      className="mt-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700 underline disabled:opacity-50 leading-tight"
+                    >
+                      {carregandoFila ? 'Entrando...' : 'Entrar na fila'}
+                    </button>
+                  ) : null}
+                </div>
               );
-            })}
-          </div>
+            }
+
+            return (
+              <button
+                key={h.id}
+                onClick={() => {
+                  if (agendamentoExistente && !alterando) {
+                    setModalAgendamento(agendamentoExistente);
+                    setModoModal('detalhes');
+                    return;
+                  }
+                  setHorarioSelecionado(h.id);
+                  setModalAgendamento({
+                    id: 0,
+                    status: 'pendente',
+                    evento_id: evento.id,
+                    evento_titulo: evento.titulo,
+                    evento_data: evento.data,
+                    nome_profissional: evento.nome_profissional,
+                    horario: { hora_inicio: h.hora_inicio, hora_fim: h.hora_fim },
+                    criado_em: new Date().toISOString(),
+                  });
+                  setModoModal('confirmacao');
+                  setErroReserva('');
+                }}
+                className={`relative rounded-xl border-2 p-3 text-center transition-all
+                  ${selecionado
+                    ? 'border-blue-600 bg-blue-50 shadow-md'
+                    : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
+                  }`}
+              >
+                {selecionado && (
+                  <div className="absolute -top-2 -right-2 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+                    <CheckCircle2 className="w-3 h-3 text-white" />
+                  </div>
+                )}
+                <p className={`text-sm font-bold ${selecionado ? 'text-blue-700' : 'text-slate-800'}`}>
+                  {h.hora_inicio.substring(0, 5)}
+                </p>
+                <p className={`text-xs ${selecionado ? 'text-blue-500' : 'text-slate-400'}`}>
+                  até {h.hora_fim.substring(0, 5)}
+                </p>
+                <p className={`text-xs mt-1 font-medium ${selecionado ? 'text-blue-600' : 'text-emerald-600'}`}>
+                  {h.vagas_livres}/{h.vagas_disponiveis} vagas
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Aviso sobre lista de espera */}
+        {Object.keys(listaEsperaMap).length > 0 && (
+          <p className="mt-4 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Você está na lista de espera de {Object.keys(listaEsperaMap).length} horário{Object.keys(listaEsperaMap).length > 1 ? 's' : ''}.
+            Há outras pessoas na fila — você será notificado por e-mail se uma vaga abrir.
+          </p>
         )}
       </div>
 
@@ -347,7 +424,6 @@ export default function EventDetails() {
           }}
         />
       )}
-
     </div>
   );
 }

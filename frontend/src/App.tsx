@@ -15,6 +15,7 @@ import GestaoUsuarios from './pages/admin/GestaoUsuarios';
 import ColaboradorLayout from './layouts/ColaboradorLayout';
 import EventDetails from './pages/colaborador/EventDetails';
 import Confirmacao from './pages/colaborador/Confirmacao';
+import ConfirmarVagaListaEspera from './pages/ConfirmarVagaListaEspera';
 
 function App() {
   return (
@@ -35,6 +36,9 @@ function App() {
 
           {/* Acesso via e-mail + palavra-chave (fluxo lista de distribuição) */}
           <Route path="/evento/:eventoId/entrar" element={<AcessarEvento />} />
+
+          {/* Confirmação de vaga da lista de espera via link do e-mail */}
+          <Route path="/confirmar-vaga/:token" element={<ConfirmarVagaListaEspera />} />
 
           <Route
             path="/admin/*"
