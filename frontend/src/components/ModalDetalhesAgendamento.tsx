@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, CheckCircle2, XCircle, AlertCircle, User, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { parseFetchError } from '../services/api';
@@ -40,7 +39,6 @@ export default function ModalDetalhesAgendamento({
   ag,
   onClose,
   onCancelado,
-  onAlterarHorario,
   modo = 'detalhes',
   onConfirmarReserva,
   confirmandoReserva = false,
@@ -49,7 +47,6 @@ export default function ModalDetalhesAgendamento({
   descricaoSucesso = 'Seu horário foi reservado.',
 }: ModalDetalhesAgendamentoProps) {
   const { token } = useAuth();
-  const navigate = useNavigate();
   const cfg = statusConfig[ag.status] ?? statusConfig.pendente;
   const Icon = cfg.icon;
   const [confirmando, setConfirmando] = useState(false);
@@ -75,16 +72,6 @@ export default function ModalDetalhesAgendamento({
       setCancelando(false);
       setConfirmando(false);
     }
-  }
-
-  function handleAlterarHorario() {
-    if (onAlterarHorario) {
-      onClose();
-      onAlterarHorario(ag);
-      return;
-    }
-    onClose();
-    navigate(`/colaborador/eventos/${ag.evento_id}`);
   }
 
   const tipoEmoji: Record<string, string> = {
@@ -201,38 +188,11 @@ export default function ModalDetalhesAgendamento({
           {modo === 'detalhes' && ag.status === 'confirmado' && !confirmando && (
             <div className="flex gap-2">
               <button
-                onClick={handleAlterarHorario}
-                className="flex-1 h-11 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl font-semibold text-sm transition-colors"
-              >
-                Alterar Horário
-              </button>
-              <button
                 onClick={() => setConfirmando(true)}
-                className="flex-1 h-11 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-semibold text-sm transition-colors"
+                className="w-full h-11 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-semibold text-sm transition-colors"
               >
-                Cancelar
+                Cancelar Agendamento
               </button>
-            </div>
-          )}
-
-          {modo === 'detalhes' && confirmando && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-              <p className="text-sm text-amber-800 font-medium text-center">Confirma o cancelamento?</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setConfirmando(false)}
-                  className="flex-1 h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
-                >
-                  Não
-                </button>
-                <button
-                  onClick={handleCancelar}
-                  disabled={cancelando}
-                  className="flex-1 h-10 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
-                >
-                  {cancelando ? 'Cancelando...' : 'Sim, cancelar'}
-                </button>
-              </div>
             </div>
           )}
 
@@ -246,6 +206,36 @@ export default function ModalDetalhesAgendamento({
           )}
         </div>
       </div>
+
+      {modo === 'detalhes' && confirmando && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50"
+          onClick={() => setConfirmando(false)}
+        >
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-900 text-center">Deseja cancelar?</h3>
+            <p className="text-sm text-slate-500 text-center mt-2">
+              Esta ação vai cancelar seu agendamento.
+            </p>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setConfirmando(false)}
+                disabled={cancelando}
+                className="flex-1 h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+              >
+                Não
+              </button>
+              <button
+                onClick={handleCancelar}
+                disabled={cancelando}
+                className="flex-1 h-10 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+              >
+                {cancelando ? 'Cancelando...' : 'Sim, cancelar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
