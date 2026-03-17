@@ -27,7 +27,7 @@ export default function Confirmacao() {
     const state = location.state as ConfirmacaoData | null;
     if (!state) {
       // Redirecionar se veio sem dados
-      navigate('/colaborador/eventos');
+      navigate('/colaborador/agendamentos');
       return;
     }
     setDados(state);
@@ -135,9 +135,9 @@ export default function Confirmacao() {
                   Ver Meus Agendamentos
                 </button>
               </Link>
-              <Link to="/colaborador/eventos" className="flex-1">
+              <Link to="/colaborador/agendamentos" className="flex-1">
                 <button className="w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors">
-                  Explorar Outros Eventos
+                  Ir para Agendamentos
                 </button>
               </Link>
             </div>
@@ -169,9 +169,9 @@ export default function Confirmacao() {
               Sua recusa foi registrada. Se mudar de ideia, entre em contato com o administrador do sistema.
             </p>
 
-            <Link to="/colaborador/eventos">
+            <Link to="/colaborador/agendamentos">
               <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
-                Voltar para Eventos
+                Voltar para Agendamentos
               </button>
             </Link>
           </div>
@@ -201,9 +201,9 @@ export default function Confirmacao() {
             {dados.mensagem || 'Tente novamente mais tarde ou entre em contato com o administrador.'}
           </p>
 
-          <Link to="/colaborador/eventos">
+          <Link to="/colaborador/agendamentos">
             <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
-              Voltar para Eventos
+              Voltar para Agendamentos
             </button>
           </Link>
         </div>

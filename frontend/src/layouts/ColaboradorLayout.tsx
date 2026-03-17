@@ -27,9 +27,6 @@ export default function ColaboradorLayout() {
             </div>
             <div className="flex items-center gap-6">
               <nav className="hidden md:flex gap-6">
-                <Link to="/colaborador/eventos" className="text-slate-600 hover:text-blue-600 font-medium px-1 py-5 transition-colors">
-                  Eventos
-                </Link>
                 <Link to="/colaborador/agendamentos" className="text-slate-600 hover:text-blue-600 font-medium px-1 py-5 transition-colors">
                   Meus Agendamentos
                 </Link>

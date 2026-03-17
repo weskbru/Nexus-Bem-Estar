@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User } from 'lucide-react';
 import { parseFetchError } from '../../services/api';
+import ModalDetalhesAgendamento, { type AgendamentoDetalhes } from '../../components/ModalDetalhesAgendamento';
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 
@@ -37,10 +38,11 @@ export default function EventDetails() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [horarioSelecionado, setHorarioSelecionado] = useState<number | null>(null);
+  const [modalAgendamento, setModalAgendamento] = useState<AgendamentoDetalhes | null>(null);
+  const [modoModal, setModoModal] = useState<'detalhes' | 'confirmacao' | 'sucesso'>('detalhes');
   const [reservando, setReservando] = useState(false);
   const [erroReserva, setErroReserva] = useState('');
-  const [agendado, setAgendado] = useState(false);
-  const [agendamentoExistente, setAgendamentoExistente] = useState<{ horario: { hora_inicio: string; hora_fim: string } } | null>(null);
+  const [agendamentoExistente, setAgendamentoExistente] = useState<AgendamentoDetalhes | null>(null);
   const [alterando, setAlterando] = useState(false);
 
   useEffect(() => {
@@ -49,7 +51,6 @@ export default function EventDetails() {
 
   async function carregarEvento() {
     setCarregando(true);
-    setAgendado(false);
     setAlterando(false);
     try {
       const [resEvento, resAg] = await Promise.all([
@@ -58,7 +59,7 @@ export default function EventDetails() {
       ]);
       if (!resEvento.ok) throw new Error();
       setEvento(await resEvento.json());
-      const ags = resAg.ok ? await resAg.json() : [];
+      const ags: AgendamentoDetalhes[] = resAg.ok ? await resAg.json() : [];
       setAgendamentoExistente(ags.length > 0 ? ags[0] : null);
     } catch {
       setErro('Erro ao carregar evento. Tente novamente.');
@@ -82,8 +83,8 @@ export default function EventDetails() {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro ?? 'Erro ao reservar.');
-      setAgendado(true);
-      carregarEvento();
+      setModoModal('sucesso');
+      await carregarEvento();
     } catch (err) {
       setErroReserva(parseFetchError(err, 'Não foi possível reservar o horário. Tente novamente.'));
     } finally {
@@ -108,9 +109,9 @@ export default function EventDetails() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
           <p className="text-red-800 font-medium mb-4">{erro}</p>
-          <Link to="/colaborador/eventos">
+          <Link to="/colaborador/agendamentos">
             <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">
-              Voltar aos Eventos
+              Voltar aos Agendamentos
             </button>
           </Link>
         </div>
@@ -209,7 +210,26 @@ export default function EventDetails() {
                 <button
                   key={h.id}
                   disabled={!h.disponivel}
-                  onClick={() => { setHorarioSelecionado(h.id); setErroReserva(''); }}
+                  onClick={() => {
+                    if (agendamentoExistente && !alterando) {
+                      setModalAgendamento(agendamentoExistente);
+                      setModoModal('detalhes');
+                      return;
+                    }
+                    setHorarioSelecionado(h.id);
+                    setModalAgendamento({
+                      id: 0,
+                      status: 'pendente',
+                      evento_id: evento.id,
+                      evento_titulo: evento.titulo,
+                      evento_data: evento.data,
+                      nome_profissional: evento.nome_profissional,
+                      horario: { hora_inicio: h.hora_inicio, hora_fim: h.hora_fim },
+                      criado_em: new Date().toISOString(),
+                    });
+                    setModoModal('confirmacao');
+                    setErroReserva('');
+                  }}
                   className={`relative rounded-xl border-2 p-3 text-center transition-all
                     ${!h.disponivel
                       ? 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
@@ -244,7 +264,7 @@ export default function EventDetails() {
       </div>
 
       {/* Já tem agendamento — exibe card e bloqueia nova reserva */}
-      {agendamentoExistente && !alterando && !agendado && (
+      {agendamentoExistente && !alterando && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -269,19 +289,6 @@ export default function EventDetails() {
         </div>
       )}
 
-      {/* Sucesso após nova reserva */}
-      {agendado && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <p className="text-emerald-800 text-sm font-semibold">Agendamento confirmado!</p>
-          </div>
-          <Link to="/colaborador/agendamentos" className="text-sm text-emerald-700 underline font-medium whitespace-nowrap">
-            Ver agendamentos
-          </Link>
-        </div>
-      )}
-
       {/* Erro reserva */}
       {erroReserva && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
@@ -290,7 +297,7 @@ export default function EventDetails() {
       )}
 
       {/* Ações — só mostra se não tem agendamento ou está no modo alterar */}
-      {(!agendamentoExistente || alterando) && !agendado && (
+      {(!agendamentoExistente || alterando) && (
         <div className="flex flex-col sm:flex-row gap-3">
           {alterando && (
             <button
@@ -300,34 +307,39 @@ export default function EventDetails() {
               Cancelar alteração
             </button>
           )}
-          {horariosDisponiveis.length > 0 && (
-            <button
-              onClick={handleReservar}
-              disabled={!horarioSelecionado || reservando}
-              className="flex-1 h-12 px-6 rounded-xl font-semibold text-white transition-all
-                bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl
-                disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {reservando ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  Reservando...
-                </>
-              ) : alterando ? 'Confirmar Novo Horário' : 'Confirmar Agendamento'}
-            </button>
-          )}
           {!alterando && (
-            <Link to="/colaborador/eventos" className="flex-1">
+            <Link to="/colaborador/agendamentos" className="flex-1">
               <button className="w-full h-12 px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2">
                 <ArrowLeft className="w-4 h-4" />
-                Voltar aos Eventos
+                Voltar aos Agendamentos
               </button>
             </Link>
           )}
         </div>
+      )}
+
+      {modalAgendamento && (
+        <ModalDetalhesAgendamento
+          ag={modalAgendamento}
+          modo={modoModal}
+          onClose={() => {
+            setModalAgendamento(null);
+            setModoModal('detalhes');
+          }}
+          onConfirmarReserva={modoModal === 'confirmacao' ? handleReservar : undefined}
+          confirmandoReserva={modoModal === 'confirmacao' ? reservando : false}
+          textoConfirmar={alterando ? 'Confirmar Novo Horário' : 'Confirmar Agendamento'}
+          onAlterarHorario={() => {
+            setAlterando(true);
+            setErroReserva('');
+          }}
+          onCancelado={() => {
+            setAgendamentoExistente(null);
+            setAlterando(false);
+            setErroReserva('');
+            carregarEvento();
+          }}
+        />
       )}
 
     </div>

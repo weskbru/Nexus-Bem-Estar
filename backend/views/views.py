@@ -532,7 +532,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         # Para ativar o envio real à Lista de Distribuição, comente o bloco
         # "MODO TESTE" e descomente o bloco "MODO PRODUÇÃO" abaixo.
         # ---------------------------------------------------------------------------
-        destinatario = 'wesley.pereira@aeb.gov.br'  # MODO TESTE
+        destinatario = 'jonas.silva@aeb.gov.br'  # MODO TESTE
 
         # ---------------------------------------------------------------------------
         # MODO PRODUÇÃO — descomente quando for ao ar com a LD real.
