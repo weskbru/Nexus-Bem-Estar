@@ -3,7 +3,6 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Calendar,
-  Settings,
   Bell,
   HelpCircle,
   LogOut,
@@ -46,7 +45,6 @@ const NOTIFICACOES_REFRESH_MS = 30000;
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/agendamentos', icon: Calendar, label: 'Agendamentos', end: false },
-  { to: '/admin/configuracoes', icon: Settings, label: 'Configurações', end: false },
 ];
 
 export default function AdminLayout() {

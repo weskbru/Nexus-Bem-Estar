@@ -39,8 +39,7 @@ export default function AcessarEvento() {
         evento?.requer_palavra_chave ? palavraChave.trim() : undefined,
       );
       loginViaEmail(data.access, data.usuario);
-      setEstado('confirmado');
-      setTimeout(() => navigate(`/colaborador/eventos/${data.evento_id}`, { replace: true }), 1500);
+      navigate(`/colaborador/eventos/${data.evento_id}`, { replace: true });
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Erro ao acessar o evento.');
       setEstado('formulario');

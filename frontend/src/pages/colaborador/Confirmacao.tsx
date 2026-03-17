@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { CheckCircle2, Calendar, Clock, User, MapPin, XCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Calendar, Clock, XCircle, AlertCircle } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
@@ -119,29 +119,6 @@ export default function Confirmacao() {
                 </span>
               </div>
 
-              <div className="h-px bg-slate-200"></div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center text-slate-600 gap-3">
-                  <User className="w-5 h-5 text-blue-600" />
-                  <span className="font-medium">Profissional</span>
-                </div>
-                <span className="font-semibold text-slate-900">
-                  {dados.evento?.nome_profissional}
-                </span>
-              </div>
-
-              <div className="h-px bg-slate-200"></div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center text-slate-600 gap-3">
-                  <MapPin className="w-5 h-5 text-blue-600" />
-                  <span className="font-medium">Local</span>
-                </div>
-                <span className="font-semibold text-slate-900">
-                  {dados.evento?.local}
-                </span>
-              </div>
             </div>
 
             {/* Mensagem de Confirmação */}
@@ -153,7 +130,7 @@ export default function Confirmacao() {
 
             {/* Botões de Ação */}
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link to="/colaborador/eventos" className="flex-1">
+              <Link to="/colaborador/agendamentos" className="flex-1">
                 <button className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
                   Ver Meus Agendamentos
                 </button>
@@ -165,12 +142,6 @@ export default function Confirmacao() {
               </Link>
             </div>
 
-            {/* Informação Adicional */}
-            <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-200">
-              <p className="text-sm text-blue-900">
-                <span className="font-semibold">📌 Lembrete:</span> Chegue com 10 minutos de antecedência. Se precisar cancelar, avise com antecedência através do seu gestor.
-              </p>
-            </div>
           </div>
         </div>
       </div>

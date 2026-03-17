@@ -700,11 +700,12 @@ class ReservarHorarioView(APIView):
     @transaction.atomic
     def post(self, request, evento_id, horario_id):
         _encerrar_eventos_expirados()
-        # Bloqueia a linha do horário para leitura e escrita simultânea
+
         try:
             horario = (
                 Horario.objects
                 .select_for_update()
+                .select_related('evento')
                 .get(id=horario_id, evento_id=evento_id, evento__status='publicado')
             )
         except Horario.DoesNotExist:
@@ -715,21 +716,31 @@ class ReservarHorarioView(APIView):
 
         if not horario.disponivel:
             return Response(
-                {'erro': 'Este horário não possui vagas disponíveis.'},
+                {'erro': 'Este horário está lotado. Escolha outro horário disponível.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Garante que o usuário não tem outro agendamento ativo no mesmo evento
-        ja_agendado = Agendamento.objects.filter(
-            usuario=request.user,
-            horario__evento_id=evento_id,
-            status='confirmado',
-        ).exists()
-        if ja_agendado:
+        agendamento_existente = (
+            Agendamento.objects
+            .filter(usuario=request.user, horario__evento_id=evento_id, status='confirmado')
+            .select_related('horario')
+            .first()
+        )
+
+        alterar = request.data.get('alterar', False)
+
+        if agendamento_existente and not alterar:
+            hi = agendamento_existente.horario.hora_inicio.strftime('%H:%M')
+            hf = agendamento_existente.horario.hora_fim.strftime('%H:%M')
             return Response(
-                {'erro': 'Você já possui um agendamento confirmado para este evento.'},
-                status=status.HTTP_400_BAD_REQUEST,
+                {'erro': f'Você já tem um agendamento confirmado neste evento ({hi} às {hf}). '
+                         'Use a opção "Alterar Horário" caso queira trocar.'},
+                status=status.HTTP_409_CONFLICT,
             )
+
+        if agendamento_existente and alterar:
+            agendamento_existente.status = 'cancelado'
+            agendamento_existente.save(update_fields=['status', 'atualizado_em'])
 
         convite = ConviteEmail.objects.filter(
             usuario=request.user, evento_id=evento_id
@@ -789,12 +800,16 @@ class MeusAgendamentosView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return (
+        qs = (
             Agendamento.objects
-            .filter(usuario=self.request.user)
+            .filter(usuario=self.request.user, status='confirmado')
             .select_related('usuario', 'horario__evento')
             .order_by('-criado_em')
         )
+        evento_id = self.request.query_params.get('evento_id')
+        if evento_id:
+            qs = qs.filter(horario__evento_id=evento_id)
+        return qs
 
 
 # ---------------------------------------------------------------------------
