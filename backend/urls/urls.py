@@ -18,7 +18,9 @@ urlpatterns = [
     # Acesso do colaborador via link mágico do e-mail (token UUID → JWT)
     path('auth/acesso/<uuid:token>/', views.AcessoViaTokenView.as_view(), name='acesso-via-token'),
 
-    # Acesso via e-mail + palavra-chave (fluxo lista de distribuição)
+    # Acesso via e-mail + palavra-chave com verificação OTP (fluxo lista de distribuição)
+    path('auth/solicitar-acesso/', views.SolicitarAcessoView.as_view(), name='solicitar-acesso'),
+    path('auth/verificar-codigo/', views.VerificarCodigoView.as_view(), name='verificar-codigo'),
     path('auth/acessar-evento/', views.AcessarEventoView.as_view(), name='acessar-evento'),
     path('auth/evento-publico/<int:evento_id>/', views.EventoPublicoView.as_view(), name='evento-publico'),
 
