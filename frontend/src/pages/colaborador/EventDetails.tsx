@@ -313,6 +313,7 @@ export default function EventDetails() {
             const filaInfo = listaEsperaMap[h.id];
             const naFila = !!filaInfo;
             const carregandoFila = entrandoFila === h.id;
+            const selecaoBloqueada = !!agendamentoExistente && !alterando;
 
             if (!h.disponivel) {
               // Horário lotado — mostra botão de lista de espera
@@ -364,12 +365,8 @@ export default function EventDetails() {
             return (
               <button
                 key={h.id}
+                disabled={selecaoBloqueada}
                 onClick={() => {
-                  if (agendamentoExistente && !alterando) {
-                    setHorarioSelecionado(h.id);
-                    setErroReserva('');
-                    return;
-                  }
                   setHorarioSelecionado(h.id);
                   setModalAgendamento({
                     id: 0,
@@ -385,9 +382,13 @@ export default function EventDetails() {
                   setErroReserva('');
                 }}
                 className={`relative rounded-xl border-2 p-3 text-center transition-all
-                  ${selecionado
-                    ? 'border-blue-600 bg-blue-50 shadow-md'
-                    : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
+                  ${selecaoBloqueada
+                    ? selecionado
+                      ? 'border-blue-600 bg-blue-50 shadow-md'
+                      : 'border-slate-200 bg-white opacity-70'
+                    : selecionado
+                      ? 'border-blue-600 bg-blue-50 shadow-md'
+                      : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
                   }`}
               >
                 {selecionado && (
