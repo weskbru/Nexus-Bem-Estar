@@ -100,6 +100,17 @@ MOCK_USUARIOS: list[dict] = [
 # Função pública
 # ---------------------------------------------------------------------------
 
+def email_existe_no_ad(email: str) -> bool:
+    """
+    Verifica se um e-mail pertence a um colaborador registrado no AD.
+
+    Em desenvolvimento: verifica na lista Mock.
+    Em produção: substituir pela consulta real ao LDAP.
+    """
+    email = email.strip().lower()
+    return any(u['email'].lower() == email for u in MOCK_USUARIOS)
+
+
 def buscar_usuarios(query: str) -> list[dict]:
     """
     Busca usuários no LDAP/AD por nome, e-mail ou matrícula.
