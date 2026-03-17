@@ -71,9 +71,20 @@ export default function EventDetails() {
         fetch(`${API}/colaborador/lista-espera/?evento_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (!resEvento.ok) throw new Error();
-      setEvento(await resEvento.json());
+      const eventoData: EventoData = await resEvento.json();
+      setEvento(eventoData);
       const ags: AgendamentoDetalhes[] = resAg.ok ? await resAg.json() : [];
-      setAgendamentoExistente(ags.length > 0 ? ags[0] : null);
+      const agendamentoAtual = ags.length > 0 ? ags[0] : null;
+      setAgendamentoExistente(agendamentoAtual);
+      if (agendamentoAtual) {
+        const horarioAtual = eventoData.horarios.find((h) => (
+          h.hora_inicio === agendamentoAtual.horario.hora_inicio
+          && h.hora_fim === agendamentoAtual.horario.hora_fim
+        ));
+        setHorarioSelecionado(horarioAtual?.id ?? null);
+      } else {
+        setHorarioSelecionado(null);
+      }
       const lista: ListaEsperaInfo[] = resLista.ok ? await resLista.json() : [];
       const mapa: Record<number, ListaEsperaInfo> = {};
       lista.forEach(e => { mapa[e.horario_id] = e; });
@@ -226,6 +237,45 @@ export default function EventDetails() {
           </div>
         )}
         </div>
+
+        {agendamentoExistente && !alterando && (
+          <div
+            onClick={() => {
+              setModalAgendamento(agendamentoExistente);
+              setModoModal('detalhes');
+            }}
+            className="mt-6 bg-white border border-slate-200 rounded-xl p-5 cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <p className="text-slate-800 font-semibold text-sm">Você já tem um horário reservado neste evento</p>
+            </div>
+            <p className="text-slate-600 text-sm mb-4">
+              Horário: <strong>{agendamentoExistente.horario.hora_inicio.substring(0, 5)} às {agendamentoExistente.horario.hora_fim.substring(0, 5)}</strong>
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setModalAgendamento(agendamentoExistente);
+                  setModoModal('detalhes');
+                }}
+                className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors"
+              >
+                Ver detalhes
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAlterando(true);
+                }}
+                className="flex-1 h-10 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
+              >
+                Alterar Horário
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Seleção de horário */}
@@ -233,12 +283,18 @@ export default function EventDetails() {
         {alterando && agendamentoExistente && (
           <div className="flex items-center gap-3 bg-amber-100 border border-amber-300 rounded-xl px-4 py-3 mb-5">
             <RefreshCw className="w-5 h-5 text-amber-600 shrink-0 animate-spin [animation-duration:3s]" />
-            <div>
+            <div className="flex-1">
               <p className="text-amber-800 font-bold text-sm">Você está remarcando seu horário</p>
               <p className="text-amber-700 text-xs mt-0.5">
                 Horário atual: <strong>{agendamentoExistente.horario.hora_inicio.substring(0, 5)} às {agendamentoExistente.horario.hora_fim.substring(0, 5)}</strong> — escolha um novo horário abaixo
               </p>
             </div>
+            <button
+              onClick={() => setAlterando(false)}
+              className="h-10 px-4 bg-white border border-red-300 hover:bg-red-50 hover:border-red-400 text-red-600 rounded-xl text-sm font-semibold transition-colors"
+            >
+              Cancelar alteração
+            </button>
           </div>
         )}
         <div className="flex items-center justify-between mb-5">
@@ -257,17 +313,32 @@ export default function EventDetails() {
             const filaInfo = listaEsperaMap[h.id];
             const naFila = !!filaInfo;
             const carregandoFila = entrandoFila === h.id;
+            const podeSelecionarHorario = h.disponivel && (!agendamentoExistente || alterando);
+            const selecaoBloqueada = !podeSelecionarHorario;
 
             if (!h.disponivel) {
               // Horário lotado — mostra botão de lista de espera
               return (
                 <div
                   key={h.id}
-                  className="rounded-xl border-2 border-slate-100 bg-slate-50 p-3 text-center flex flex-col gap-1.5"
+                  className={`rounded-xl border-2 p-3 text-center flex flex-col gap-1.5 ${
+                    selecionado
+                      ? 'border-emerald-400 bg-emerald-50'
+                      : 'border-slate-100 bg-slate-50'
+                  }`}
                 >
-                  <p className="text-sm font-bold text-slate-400">{h.hora_inicio.substring(0, 5)}</p>
-                  <p className="text-xs text-slate-300">até {h.hora_fim.substring(0, 5)}</p>
-                  <p className="text-xs font-medium text-slate-400">Lotado</p>
+                  {selecionado && (
+                    <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Seu horário atual</p>
+                  )}
+                  <p className={`text-sm font-bold ${selecionado ? 'text-emerald-800' : 'text-slate-400'}`}>
+                    {h.hora_inicio.substring(0, 5)}
+                  </p>
+                  <p className={`text-xs ${selecionado ? 'text-emerald-600' : 'text-slate-300'}`}>
+                    até {h.hora_fim.substring(0, 5)}
+                  </p>
+                  <p className={`text-xs font-medium ${selecionado ? 'text-emerald-700' : 'text-slate-400'}`}>
+                    {selecionado ? 'Reservado' : 'Lotado'}
+                  </p>
 
                   {naFila ? (
                     <div className="mt-1 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
@@ -295,12 +366,9 @@ export default function EventDetails() {
             return (
               <button
                 key={h.id}
+                disabled={selecaoBloqueada}
                 onClick={() => {
-                  if (agendamentoExistente && !alterando) {
-                    setModalAgendamento(agendamentoExistente);
-                    setModoModal('detalhes');
-                    return;
-                  }
+                  if (!podeSelecionarHorario) return;
                   setHorarioSelecionado(h.id);
                   setModalAgendamento({
                     id: 0,
@@ -316,9 +384,13 @@ export default function EventDetails() {
                   setErroReserva('');
                 }}
                 className={`relative rounded-xl border-2 p-3 text-center transition-all
-                  ${selecionado
-                    ? 'border-blue-600 bg-blue-50 shadow-md'
-                    : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
+                  ${selecaoBloqueada
+                    ? selecionado
+                      ? 'border-blue-600 bg-blue-50 shadow-md'
+                      : 'border-slate-200 bg-white opacity-70'
+                    : selecionado
+                      ? 'border-blue-600 bg-blue-50 shadow-md'
+                      : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
                   }`}
               >
                 {selecionado && (
@@ -349,27 +421,6 @@ export default function EventDetails() {
         )}
       </div>
 
-      {/* Já tem agendamento — exibe card e bloqueia nova reserva */}
-      {agendamentoExistente && !alterando && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <p className="text-emerald-800 font-semibold text-sm">Você já tem um horário reservado neste evento</p>
-          </div>
-          <p className="text-emerald-700 text-sm mb-4">
-            Horário: <strong>{agendamentoExistente.horario.hora_inicio.substring(0, 5)} às {agendamentoExistente.horario.hora_fim.substring(0, 5)}</strong>
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setAlterando(true)}
-              className="flex-1 h-10 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-xl text-sm font-semibold transition-colors"
-            >
-              Alterar Horário
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Erro reserva */}
       {erroReserva && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
@@ -378,16 +429,8 @@ export default function EventDetails() {
       )}
 
       {/* Ações — só mostra se não tem agendamento ou está no modo alterar */}
-      {(!agendamentoExistente || alterando) && (
+      {!agendamentoExistente && (
         <div className="flex flex-col sm:flex-row gap-3">
-          {alterando && (
-            <button
-              onClick={() => setAlterando(false)}
-              className="h-12 px-5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold text-sm transition-colors"
-            >
-              Cancelar alteração
-            </button>
-          )}
           {!alterando && (
             <Link to="/login" className="flex-1">
               <button className="w-full h-12 px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2">
