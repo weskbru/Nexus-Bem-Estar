@@ -1,0 +1,71 @@
+services:
+
+  # ─── Banco de dados ───────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: sis_bem_estar_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-sis_bem_estar}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Porta NÃO exposta — acessível apenas internamente pela rede Docker
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-sis_bem_estar}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Cache (Redis) ────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sis_bem_estar_redis
+    restart: unless-stopped
+    # Porta NÃO exposta — acessível apenas internamente
+
+  # ─── Backend (Django + Gunicorn) ──────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: sis_bem_estar_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    # SEM volume de código — usa apenas o que foi copiado no build
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py criar_admin &&
+             python manage.py collectstatic --noinput &&
+             gunicorn backend.core.wsgi:application
+               --bind 0.0.0.0:8000
+               --workers 4
+               --threads 2
+               --timeout 60"
+
+  # ─── Frontend (nginx servindo build estático) ────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.prod
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: sis_bem_estar_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
