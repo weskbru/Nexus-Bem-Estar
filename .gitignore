@@ -21,3 +21,5 @@ Thumbs.db
 # Logs (inclui gunicorn)
 *.log
 gunicorn.log
+.vscode
+.venv/

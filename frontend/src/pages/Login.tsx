@@ -36,7 +36,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* 1 a 9. Cabeçalho Institucional Refatorado */}
       <header className="w-full bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center">
         <div className="flex items-center gap-4">
@@ -46,7 +46,7 @@ export default function Login() {
             className="h-12 sm:h-14 w-auto"
           />
           <div className="flex flex-col justify-center">
-            <span className="font-sans font-bold text-lg sm:text-xl text-slate-800 tracking-tight leading-tight">
+            <span className="font-bold text-lg sm:text-xl text-slate-800 tracking-tight leading-tight">
               Agenda Bem-Estar
             </span>
             <span className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
