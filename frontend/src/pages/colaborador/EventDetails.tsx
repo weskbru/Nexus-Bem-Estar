@@ -1,8 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useEffect, useState } from 'react';
-import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User, RefreshCw } from 'lucide-react';
-import { ClockIcon } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User, RefreshCw, ClockIcon } from 'lucide-react';
 import { parseFetchError } from '../../services/api';
 import ModalDetalhesAgendamento, { type AgendamentoDetalhes } from '../../components/ModalDetalhesAgendamento';
 
@@ -36,6 +35,16 @@ interface ListaEsperaInfo {
   posicao: number;
   total_na_fila: number;
   status: string;
+}
+
+function montarClasseCardDisponivel(selecaoBloqueada: boolean, selecionado: boolean): string {
+  if (selecionado) {
+    return 'border-blue-600 bg-blue-50 shadow-md';
+  }
+  if (selecaoBloqueada) {
+    return 'border-slate-200 bg-white opacity-70';
+  }
+  return 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer';
 }
 
 export default function EventDetails() {
@@ -91,7 +100,7 @@ export default function EventDetails() {
         fetch(`${API}/colaborador/agendamentos/?evento_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/colaborador/lista-espera/?evento_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
-      if (!resEvento.ok) throw new Error();
+      if (!resEvento.ok) throw new Error('Falha ao carregar dados do evento.');
       const eventoData: EventoData = await resEvento.json();
       setEvento(eventoData);
       const ags: AgendamentoDetalhes[] = resAg.ok ? await resAg.json() : [];
@@ -203,8 +212,138 @@ export default function EventDetails() {
   const dataFormatada = new Date(evento.data + 'T00:00:00').toLocaleDateString('pt-BR', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
+  const eventoAtual: EventoData = evento;
 
   const horariosDisponiveis = evento.horarios.filter(h => h.disponivel);
+  const qtdHorariosDisponiveis = horariosDisponiveis.length;
+  const sufixoHorario = qtdHorariosDisponiveis === 1 ? '' : 's';
+  const sufixoDisponivel = qtdHorariosDisponiveis === 1 ? '' : 'is';
+
+  function abrirModalDetalhes(ag: AgendamentoDetalhes) {
+    setModalAgendamento(ag);
+    setModoModal('detalhes');
+  }
+
+  function renderAcaoListaEspera(
+    h: HorarioData,
+    naFila: boolean,
+    filaInfo: ListaEsperaInfo | undefined,
+    carregandoFila: boolean,
+    existeAgendamento: boolean
+  ): ReactNode {
+    if (naFila && filaInfo) {
+      return (
+        <div className="mt-1 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+          <p className="text-[10px] font-semibold text-amber-700 flex items-center justify-center gap-1">
+            <ClockIcon className="w-3 h-3" />
+            Na fila
+          </p>
+          <p className="text-[10px] text-amber-600">
+            {filaInfo.posicao}º de {filaInfo.total_na_fila}
+          </p>
+        </div>
+      );
+    }
+
+    if (existeAgendamento) {
+      return null;
+    }
+
+    return (
+      <button
+        onClick={() => handleEntrarFila(h.id)}
+        disabled={carregandoFila}
+        className="mt-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700 underline disabled:opacity-50 leading-tight"
+      >
+        {carregandoFila ? 'Entrando...' : 'Entrar na fila'}
+      </button>
+    );
+  }
+
+  function montarModalConfirmacao(h: HorarioData): AgendamentoDetalhes {
+    return {
+      id: 0,
+      status: 'pendente',
+      evento_id: eventoAtual.id,
+      evento_titulo: eventoAtual.titulo,
+      evento_data: eventoAtual.data,
+      nome_profissional: eventoAtual.nome_profissional,
+      horario: { hora_inicio: h.hora_inicio, hora_fim: h.hora_fim },
+      criado_em: new Date().toISOString(),
+    };
+  }
+
+  function handleSelecionarHorario(h: HorarioData, podeSelecionarHorario: boolean) {
+    if (!podeSelecionarHorario) return;
+    setHorarioSelecionado(h.id);
+    setModalAgendamento(montarModalConfirmacao(h));
+    setModoModal('confirmacao');
+    setErroReserva('');
+  }
+
+  function renderCardHorario(h: HorarioData): ReactNode {
+    const selecionado = horarioSelecionado === h.id;
+    const filaInfo = listaEsperaMap[h.id];
+    const naFila = Boolean(filaInfo);
+    const carregandoFila = entrandoFila === h.id;
+    const existeAgendamento = Boolean(agendamentoExistente);
+    const podeSelecionarHorario = h.disponivel && (!agendamentoExistente || alterando);
+    const selecaoBloqueada = !podeSelecionarHorario;
+
+    if (!h.disponivel) {
+      const classeCardLotado = selecionado
+        ? 'border-emerald-400 bg-emerald-50'
+        : 'border-slate-100 bg-slate-50';
+
+      return (
+        <div
+          key={h.id}
+          className={`rounded-xl border-2 p-3 text-center flex flex-col gap-1.5 ${classeCardLotado}`}
+        >
+          {selecionado && (
+            <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Seu horário atual</p>
+          )}
+          <p className={`text-sm font-bold ${selecionado ? 'text-emerald-800' : 'text-slate-400'}`}>
+            {h.hora_inicio.substring(0, 5)}
+          </p>
+          <p className={`text-xs ${selecionado ? 'text-emerald-600' : 'text-slate-300'}`}>
+            até {h.hora_fim.substring(0, 5)}
+          </p>
+          <p className={`text-xs font-medium ${selecionado ? 'text-emerald-700' : 'text-slate-400'}`}>
+            {selecionado ? 'Reservado' : 'Lotado'}
+          </p>
+
+          {renderAcaoListaEspera(h, naFila, filaInfo, carregandoFila, existeAgendamento)}
+        </div>
+      );
+    }
+
+    const classeCardDisponivel = montarClasseCardDisponivel(selecaoBloqueada, selecionado);
+
+    return (
+      <button
+        key={h.id}
+        disabled={selecaoBloqueada}
+        onClick={() => handleSelecionarHorario(h, podeSelecionarHorario)}
+        className={`relative rounded-xl border-2 p-3 text-center transition-all ${classeCardDisponivel}`}
+      >
+        {selecionado && (
+          <div className="absolute -top-2 -right-2 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+            <CheckCircle2 className="w-3 h-3 text-white" />
+          </div>
+        )}
+        <p className={`text-sm font-bold ${selecionado ? 'text-blue-700' : 'text-slate-800'}`}>
+          {h.hora_inicio.substring(0, 5)}
+        </p>
+        <p className={`text-xs ${selecionado ? 'text-blue-500' : 'text-slate-400'}`}>
+          até {h.hora_fim.substring(0, 5)}
+        </p>
+        <p className={`text-xs mt-1 font-medium ${selecionado ? 'text-blue-600' : 'text-emerald-600'}`}>
+          {h.vagas_livres}/{h.vagas_disponiveis} vagas
+        </p>
+      </button>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -261,11 +400,7 @@ export default function EventDetails() {
 
         {agendamentoExistente && !alterando && (
           <div
-            onClick={() => {
-              setModalAgendamento(agendamentoExistente);
-              setModoModal('detalhes');
-            }}
-            className="mt-6 bg-white border border-slate-200 rounded-xl p-5 cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors"
+            className="mt-6 bg-white border border-slate-200 rounded-xl p-5 hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors"
           >
             <div className="flex items-center gap-2 mb-3">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -276,18 +411,15 @@ export default function EventDetails() {
             </p>
             <div className="flex gap-2">
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setModalAgendamento(agendamentoExistente);
-                  setModoModal('detalhes');
+                onClick={() => {
+                  abrirModalDetalhes(agendamentoExistente);
                 }}
                 className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors"
               >
                 Ver detalhes
               </button>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
+                onClick={() => {
                   setAlterando(true);
                 }}
                 className="flex-1 h-10 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold transition-colors"
@@ -324,113 +456,12 @@ export default function EventDetails() {
           </h2>
           <span className="text-sm text-slate-500">
             <Users className="w-4 h-4 inline mr-1" />
-            {horariosDisponiveis.length} horário{horariosDisponiveis.length !== 1 ? 's' : ''} disponível{horariosDisponiveis.length !== 1 ? 'is' : ''}
+            {qtdHorariosDisponiveis} horário{sufixoHorario} disponível{sufixoDisponivel}
           </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {evento.horarios.map(h => {
-            const selecionado = horarioSelecionado === h.id;
-            const filaInfo = listaEsperaMap[h.id];
-            const naFila = !!filaInfo;
-            const carregandoFila = entrandoFila === h.id;
-            const podeSelecionarHorario = h.disponivel && (!agendamentoExistente || alterando);
-            const selecaoBloqueada = !podeSelecionarHorario;
-
-            if (!h.disponivel) {
-              // Horário lotado — mostra botão de lista de espera
-              return (
-                <div
-                  key={h.id}
-                  className={`rounded-xl border-2 p-3 text-center flex flex-col gap-1.5 ${
-                    selecionado
-                      ? 'border-emerald-400 bg-emerald-50'
-                      : 'border-slate-100 bg-slate-50'
-                  }`}
-                >
-                  {selecionado && (
-                    <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Seu horário atual</p>
-                  )}
-                  <p className={`text-sm font-bold ${selecionado ? 'text-emerald-800' : 'text-slate-400'}`}>
-                    {h.hora_inicio.substring(0, 5)}
-                  </p>
-                  <p className={`text-xs ${selecionado ? 'text-emerald-600' : 'text-slate-300'}`}>
-                    até {h.hora_fim.substring(0, 5)}
-                  </p>
-                  <p className={`text-xs font-medium ${selecionado ? 'text-emerald-700' : 'text-slate-400'}`}>
-                    {selecionado ? 'Reservado' : 'Lotado'}
-                  </p>
-
-                  {naFila ? (
-                    <div className="mt-1 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                      <p className="text-[10px] font-semibold text-amber-700 flex items-center justify-center gap-1">
-                        <ClockIcon className="w-3 h-3" />
-                        Na fila
-                      </p>
-                      <p className="text-[10px] text-amber-600">
-                        {filaInfo.posicao}º de {filaInfo.total_na_fila}
-                      </p>
-                    </div>
-                  ) : !agendamentoExistente ? (
-                    <button
-                      onClick={() => handleEntrarFila(h.id)}
-                      disabled={carregandoFila}
-                      className="mt-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700 underline disabled:opacity-50 leading-tight"
-                    >
-                      {carregandoFila ? 'Entrando...' : 'Entrar na fila'}
-                    </button>
-                  ) : null}
-                </div>
-              );
-            }
-
-            return (
-              <button
-                key={h.id}
-                disabled={selecaoBloqueada}
-                onClick={() => {
-                  if (!podeSelecionarHorario) return;
-                  setHorarioSelecionado(h.id);
-                  setModalAgendamento({
-                    id: 0,
-                    status: 'pendente',
-                    evento_id: evento.id,
-                    evento_titulo: evento.titulo,
-                    evento_data: evento.data,
-                    nome_profissional: evento.nome_profissional,
-                    horario: { hora_inicio: h.hora_inicio, hora_fim: h.hora_fim },
-                    criado_em: new Date().toISOString(),
-                  });
-                  setModoModal('confirmacao');
-                  setErroReserva('');
-                }}
-                className={`relative rounded-xl border-2 p-3 text-center transition-all
-                  ${selecaoBloqueada
-                    ? selecionado
-                      ? 'border-blue-600 bg-blue-50 shadow-md'
-                      : 'border-slate-200 bg-white opacity-70'
-                    : selecionado
-                      ? 'border-blue-600 bg-blue-50 shadow-md'
-                      : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
-                  }`}
-              >
-                {selecionado && (
-                  <div className="absolute -top-2 -right-2 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="w-3 h-3 text-white" />
-                  </div>
-                )}
-                <p className={`text-sm font-bold ${selecionado ? 'text-blue-700' : 'text-slate-800'}`}>
-                  {h.hora_inicio.substring(0, 5)}
-                </p>
-                <p className={`text-xs ${selecionado ? 'text-blue-500' : 'text-slate-400'}`}>
-                  até {h.hora_fim.substring(0, 5)}
-                </p>
-                <p className={`text-xs mt-1 font-medium ${selecionado ? 'text-blue-600' : 'text-emerald-600'}`}>
-                  {h.vagas_livres}/{h.vagas_disponiveis} vagas
-                </p>
-              </button>
-            );
-          })}
+          {evento.horarios.map(h => renderCardHorario(h))}
         </div>
 
         {/* Aviso sobre lista de espera */}
@@ -453,11 +484,12 @@ export default function EventDetails() {
       {!agendamentoExistente && (
         <div className="flex flex-col sm:flex-row gap-3">
           {!alterando && (
-            <Link to="/login" className="flex-1">
-              <button className="w-full h-12 px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2">
-                <ArrowLeft className="w-4 h-4" />
-                Voltar ao Login
-              </button>
+            <Link
+              to="/login"
+              className="flex-1 w-full h-12 px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Voltar ao Login
             </Link>
           )}
         </div>

@@ -27,7 +27,7 @@ export default function AcessoViaToken() {
       const data = await authApi.verificarToken(token!);
 
       if ('requer_palavra_chave' in data && data.requer_palavra_chave) {
-        setPreview(data as AcessoPreviewDTO);
+        setPreview(data);
         setEstado('aguarda_chave');
       } else {
         // Não exige palavra-chave: já recebemos o JWT — salvar sessão e redirecionar

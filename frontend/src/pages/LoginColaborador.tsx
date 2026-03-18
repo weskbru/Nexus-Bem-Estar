@@ -69,9 +69,9 @@ export default function LoginColaborador() {
 
       {/* Footer Links */}
       <div className="mt-8 flex gap-6 text-sm text-slate-500">
-        <a href="#" className="hover:text-slate-900">Ajuda</a>
-        <a href="#" className="hover:text-slate-900">Privacidade</a>
-        <a href="#" className="hover:text-slate-900">Termos de Uso</a>
+        <button type="button" className="hover:text-slate-900">Ajuda</button>
+        <button type="button" className="hover:text-slate-900">Privacidade</button>
+        <button type="button" className="hover:text-slate-900">Termos de Uso</button>
       </div>
 
       {/* Copyright */}

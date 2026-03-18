@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, type RefObject } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -21,13 +21,23 @@ import {
 
 // ─── Mini Calendário ──────────────────────────────────────────────────────────
 
-const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const DIAS_SEMANA = [
+  { key: 'dom', label: 'D' },
+  { key: 'seg', label: 'S' },
+  { key: 'ter', label: 'T' },
+  { key: 'qua', label: 'Q' },
+  { key: 'qui', label: 'Q' },
+  { key: 'sex', label: 'S' },
+  { key: 'sab', label: 'S' },
+];
 const MESES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-function MiniCalendar({ value, onChange, error }: { value: string; onChange: (d: string) => void; error?: string }) {
+type MiniCalendarProps = Readonly<{ value: string; onChange: (d: string) => void; error?: string }>;
+
+function MiniCalendar({ value, onChange, error }: MiniCalendarProps) {
   const today = getHojeSemHora();
   const maxDate = getDataLimiteFutura();
   const initDate = value ? new Date(value + 'T00:00:00') : today;
@@ -93,15 +103,22 @@ function MiniCalendar({ value, onChange, error }: { value: string; onChange: (d:
         </button>
       </div>
       <div className="grid grid-cols-7 mb-1">
-        {DIAS_SEMANA.map((d, i) => (
-          <div key={i} className="text-center text-xs font-medium text-slate-400 py-1">{d}</div>
+        {DIAS_SEMANA.map(dia => (
+          <div key={dia.key} className="text-center text-xs font-medium text-slate-400 py-1">{dia.label}</div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-0.5">
-        {cells.map((cell, i) => {
+        {cells.map(cell => {
           const isCurrent = cell.offset === 0;
           const mo = (viewMonth + cell.offset + 12) % 12;
-          const yo = viewYear + (cell.offset === -1 && viewMonth === 0 ? -1 : cell.offset === 1 && viewMonth === 11 ? 1 : 0);
+          let yearOffset = 0;
+          if (cell.offset === -1 && viewMonth === 0) {
+            yearOffset = -1;
+          } else if (cell.offset === 1 && viewMonth === 11) {
+            yearOffset = 1;
+          }
+          const yo = viewYear + yearOffset;
+          const cellKey = `${yo}-${String(mo + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
           const dateCell = new Date(yo, mo, cell.day);
           const isPast = dateCell < today;
           const isAfterMax = dateCell > maxDate;
@@ -110,13 +127,13 @@ function MiniCalendar({ value, onChange, error }: { value: string; onChange: (d:
           const isToday = isCurrent &&
             today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === cell.day;
           return (
-            <button key={i} type="button" onClick={() => clickDay(cell)}
+            <button key={cellKey} type="button" onClick={() => clickDay(cell)}
               disabled={isPast || isAfterMax || !isCurrent}
               className={`text-center text-xs py-1.5 rounded-full transition-colors
                 ${isSelected ? 'bg-blue-600 text-white font-bold' : ''}
                 ${isToday && !isSelected ? 'ring-1 ring-blue-400 text-blue-700 font-semibold' : ''}
                 ${isCurrent && !isPast && !isSelected ? 'hover:bg-blue-50 cursor-pointer text-slate-700' : ''}
-                ${!isCurrent ? 'text-slate-200 cursor-default' : ''}
+                ${isCurrent ? '' : 'text-slate-200 cursor-default'}
                 ${(isPast || isAfterMax) && isCurrent ? 'text-slate-300 cursor-not-allowed' : ''}
               `}>
               {cell.day}
@@ -161,13 +178,132 @@ const TIPOS = [
   { value: 'outro',      label: '✨  Outro' },
 ];
 
-function FieldError({ msg }: { msg?: string }) {
+type FieldErrorProps = Readonly<{ msg?: string }>;
+
+function FieldError({ msg }: FieldErrorProps) {
   if (!msg) return null;
   return (
     <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
       <AlertCircle className="w-3 h-3 shrink-0" />{msg}
     </p>
   );
+}
+
+function mapEventoToForm(evento: EventoDTO): FormState {
+  return {
+    titulo: evento.titulo,
+    tipo: evento.tipo,
+    data: evento.data,
+    hora_inicio: evento.hora_inicio.substring(0, 5),
+    hora_fim: evento.hora_fim.substring(0, 5),
+    duracao_sessao: String(evento.duracao_sessao),
+    capacidade_por_horario: String(evento.capacidade_por_horario),
+    palavra_chave: evento.palavra_chave ?? '',
+    corpo_email: evento.corpo_email ?? '',
+  };
+}
+
+function validarCamposBasicos(form: FormState, e: FormErrors): void {
+  if (!form.titulo.trim()) e.titulo = 'Nome do evento é obrigatório.';
+  if (!form.tipo) e.tipo = 'Selecione o tipo de atividade.';
+  if (!form.hora_inicio) e.hora_inicio = 'Informe o horário de início.';
+  if (!form.hora_fim) e.hora_fim = 'Informe o horário de término.';
+}
+
+function validarDataEvento(form: FormState, e: FormErrors): void {
+  const limiteFuturo = getDataLimiteFutura();
+  if (!form.data) {
+    e.data = 'Selecione a data do evento.';
+    return;
+  }
+  if (dataNoPassado(form.data)) {
+    e.data = 'A data do evento não pode ser no passado.';
+  }
+  if (dataAposLimite(form.data)) {
+    e.data = `A data deve ser até ${limiteFuturo.toLocaleDateString('pt-BR')}.`;
+  }
+}
+
+function validarHorario(form: FormState, e: FormErrors): void {
+  if (form.hora_inicio && form.hora_fim && form.hora_fim <= form.hora_inicio) {
+    e.hora_fim = 'Término deve ser após o início.';
+  }
+}
+
+function validarDuracao(form: FormState, e: FormErrors): void {
+  const duracao = Number(form.duracao_sessao);
+  if (!form.duracao_sessao || duracao <= 0) {
+    e.duracao_sessao = 'Informe a duração (min).';
+    return;
+  }
+  if (!(form.hora_inicio && form.hora_fim)) {
+    return;
+  }
+
+  const periodoTotal = periodoEmMinutos(form.hora_inicio, form.hora_fim);
+  if (periodoTotal > 0 && duracao > periodoTotal) {
+    e.duracao_sessao = `A duração não pode ser maior que o período total (${periodoTotal} min).`;
+  }
+}
+
+function validarCapacidade(form: FormState, e: FormErrors): void {
+  if (!form.capacidade_por_horario || Number(form.capacidade_por_horario) <= 0) {
+    e.capacidade_por_horario = 'Informe a capacidade.';
+  }
+}
+
+function validarFormEvento(form: FormState): FormErrors {
+  const e: FormErrors = {};
+
+  validarCamposBasicos(form, e);
+  validarDataEvento(form, e);
+  validarHorario(form, e);
+  validarDuracao(form, e);
+  validarCapacidade(form, e);
+
+  return e;
+}
+
+function inserirImagemNoEditor(file: File, quillRef: RefObject<ReactQuill | null>): void {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const editor = quillRef.current?.getEditor();
+    if (!editor || typeof reader.result !== 'string') return;
+    const range = editor.getSelection(true);
+    const index = range ? range.index : editor.getLength();
+    editor.insertEmbed(index, 'image', reader.result, 'user');
+    editor.setSelection(index + 1);
+  };
+  reader.readAsDataURL(file);
+}
+
+function abrirSeletorImagem(quillRef: RefObject<ReactQuill | null>): void {
+  const input = document.createElement('input');
+  input.setAttribute('type', 'file');
+  input.setAttribute('accept', 'image/png,image/jpeg,image/jpg,image/webp');
+  input.click();
+
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      globalThis.alert('A imagem deve ter no máximo 5MB.');
+      return;
+    }
+    inserirImagemNoEditor(file, quillRef);
+  };
+}
+
+type StatusBadgeInfo = Readonly<{ label: string; className: string }>;
+
+function getStatusBadgeInfo(status: string): StatusBadgeInfo {
+  if (status === 'ATIVO') {
+    return { label: 'Publicado', className: 'bg-emerald-100 text-emerald-700' };
+  }
+  if (status === 'CANCELADO') {
+    return { label: 'Cancelado', className: 'bg-rose-100 text-rose-700' };
+  }
+  return { label: 'Encerrado', className: 'bg-amber-100 text-amber-700' };
 }
 
 const EMAIL_FORMATS = [
@@ -200,32 +336,7 @@ export default function EditarEvento() {
         ['link', 'image', 'clean'],
       ],
       handlers: {
-        image: () => {
-          const input = document.createElement('input');
-          input.setAttribute('type', 'file');
-          input.setAttribute('accept', 'image/png,image/jpeg,image/jpg,image/webp');
-          input.click();
-
-          input.onchange = () => {
-            const file = input.files?.[0];
-            if (!file) return;
-            if (file.size > 5 * 1024 * 1024) {
-              window.alert('A imagem deve ter no máximo 5MB.');
-              return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = () => {
-              const editor = quillRef.current?.getEditor();
-              if (!editor || typeof reader.result !== 'string') return;
-              const range = editor.getSelection(true);
-              const index = range ? range.index : editor.getLength();
-              editor.insertEmbed(index, 'image', reader.result, 'user');
-              editor.setSelection(index + 1);
-            };
-            reader.readAsDataURL(file);
-          };
-        },
+        image: () => abrirSeletorImagem(quillRef),
       },
     },
   }), []);
@@ -247,17 +358,7 @@ export default function EditarEvento() {
     adminEventosApi.obter(Number(id))
       .then((evento) => {
         setStatusEvento(evento.status);
-        setForm({
-          titulo:                 evento.titulo,
-          tipo:                   evento.tipo,
-          data:                   evento.data,
-          hora_inicio:            evento.hora_inicio.substring(0, 5),
-          hora_fim:               evento.hora_fim.substring(0, 5),
-          duracao_sessao:         String(evento.duracao_sessao),
-          capacidade_por_horario: String(evento.capacidade_por_horario),
-          palavra_chave:          evento.palavra_chave ?? '',
-          corpo_email:            evento.corpo_email ?? '',
-        });
+        setForm(mapEventoToForm(evento));
       })
       .catch(() => setErroCarregar('Não foi possível carregar o evento.'))
       .finally(() => setCarregando(false));
@@ -270,31 +371,9 @@ export default function EditarEvento() {
   }
 
   function validar(): boolean {
-    const e: FormErrors = {};
-    const limiteFuturo = getDataLimiteFutura();
-    if (!form.titulo.trim())       e.titulo               = 'Nome do evento é obrigatório.';
-    if (!form.tipo)                e.tipo                 = 'Selecione o tipo de atividade.';
-    if (!form.data)                e.data                 = 'Selecione a data do evento.';
-    if (form.data && dataNoPassado(form.data))
-                                   e.data                 = 'A data do evento não pode ser no passado.';
-    if (form.data && dataAposLimite(form.data))
-                                   e.data                 = `A data deve ser até ${limiteFuturo.toLocaleDateString('pt-BR')}.`;
-    if (!form.hora_inicio)         e.hora_inicio          = 'Informe o horário de início.';
-    if (!form.hora_fim)            e.hora_fim             = 'Informe o horário de término.';
-    if (form.hora_inicio && form.hora_fim && form.hora_fim <= form.hora_inicio)
-                                   e.hora_fim             = 'Término deve ser após o início.';
-    if (!form.duracao_sessao || Number(form.duracao_sessao) <= 0)
-                                   e.duracao_sessao       = 'Informe a duração (min).';
-    if (form.hora_inicio && form.hora_fim && Number(form.duracao_sessao) > 0) {
-      const periodoTotal = periodoEmMinutos(form.hora_inicio, form.hora_fim);
-      if (periodoTotal > 0 && Number(form.duracao_sessao) > periodoTotal) {
-        e.duracao_sessao = `A duração não pode ser maior que o período total (${periodoTotal} min).`;
-      }
-    }
-    if (!form.capacidade_por_horario || Number(form.capacidade_por_horario) <= 0)
-                     e.capacidade_por_horario = 'Informe a capacidade.';
+    const e = validarFormEvento(form);
     setErros(e);
-    if (Object.keys(e).length > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (Object.keys(e).length > 0) globalThis.scrollTo({ top: 0, behavior: 'smooth' });
     return Object.keys(e).length === 0;
   }
 
@@ -355,6 +434,7 @@ export default function EditarEvento() {
   const normalizedStatus = statusEvento.toUpperCase() === 'PUBLICADO' ? 'ATIVO' : statusEvento.toUpperCase();
   const isCancelado = normalizedStatus === 'CANCELADO';
   const isEncerrado = normalizedStatus === 'ENCERRADO';
+  const statusBadgeInfo = getStatusBadgeInfo(normalizedStatus);
 
   if (isEncerrado || isCancelado) {
     return (
@@ -398,12 +478,8 @@ export default function EditarEvento() {
           <p className="text-slate-500 text-sm">Atualize os detalhes do evento.</p>
         </div>
         {statusEvento && (
-          <span className={`ml-auto px-3 py-1 rounded-full text-xs font-semibold ${
-            normalizedStatus === 'ATIVO' ? 'bg-emerald-100 text-emerald-700' :
-            normalizedStatus === 'CANCELADO' ? 'bg-rose-100 text-rose-700' :
-            'bg-amber-100 text-amber-700'
-          }`}>
-            {normalizedStatus === 'ATIVO' ? 'Publicado' : normalizedStatus === 'CANCELADO' ? 'Cancelado' : 'Encerrado'}
+          <span className={`ml-auto px-3 py-1 rounded-full text-xs font-semibold ${statusBadgeInfo.className}`}>
+            {statusBadgeInfo.label}
           </span>
         )}
       </div>
@@ -418,10 +494,11 @@ export default function EditarEvento() {
 
         {/* Nome */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor="evento-titulo" className="block text-sm font-medium text-slate-700 mb-1.5">
             Nome do Evento <span className="text-red-500">*</span>
           </label>
           <input
+            id="evento-titulo"
             type="text"
             value={form.titulo}
             onChange={e => update('titulo', e.target.value)}
@@ -433,9 +510,9 @@ export default function EditarEvento() {
         {/* Data + Config */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <p className="block text-sm font-medium text-slate-700 mb-1.5">
               Data do Evento <span className="text-red-500">*</span>
-            </label>
+            </p>
             <MiniCalendar value={form.data} onChange={v => update('data', v)} error={erros.data} />
             <p className="mt-1 text-xs text-slate-500">
               Permitido entre hoje e {getDataLimiteFutura().toLocaleDateString('pt-BR')} ({MAX_MESES_FUTURO} meses).
@@ -446,20 +523,20 @@ export default function EditarEvento() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                <label htmlFor="hora-inicio" className="block text-sm font-medium text-slate-700 mb-1.5">
                   Início <span className="text-red-500">*</span>
                 </label>
-                <input type="time" value={form.hora_inicio}
+                <input id="hora-inicio" type="time" value={form.hora_inicio}
                   onChange={e => update('hora_inicio', e.target.value)}
                   className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.hora_inicio ? 'border-red-400' : 'border-slate-300'}`}
                 />
                 <FieldError msg={erros.hora_inicio} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                <label htmlFor="hora-fim" className="block text-sm font-medium text-slate-700 mb-1.5">
                   Término <span className="text-red-500">*</span>
                 </label>
-                <input type="time" value={form.hora_fim}
+                <input id="hora-fim" type="time" value={form.hora_fim}
                   onChange={e => update('hora_fim', e.target.value)}
                   className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.hora_fim ? 'border-red-400' : 'border-slate-300'}`}
                 />
@@ -468,11 +545,11 @@ export default function EditarEvento() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="duracao-sessao" className="block text-sm font-medium text-slate-700 mb-1.5">
                 Duração por Sessão (min) <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <input type="number" min={5} max={480} value={form.duracao_sessao}
+                <input id="duracao-sessao" type="number" min={5} max={480} value={form.duracao_sessao}
                   onChange={e => update('duracao_sessao', e.target.value)}
                   className={`w-full px-4 py-2.5 pr-12 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.duracao_sessao ? 'border-red-400' : 'border-slate-300'}`}
                 />
@@ -482,11 +559,11 @@ export default function EditarEvento() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="capacidade-horario" className="block text-sm font-medium text-slate-700 mb-1.5">
                 Capacidade por Horário <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <input type="number" min={1} max={500} value={form.capacidade_por_horario}
+                <input id="capacidade-horario" type="number" min={1} max={500} value={form.capacidade_por_horario}
                   onChange={e => update('capacidade_por_horario', e.target.value)}
                   className={`w-full px-4 py-2.5 pr-16 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.capacidade_por_horario ? 'border-red-400' : 'border-slate-300'}`}
                 />
@@ -500,10 +577,10 @@ export default function EditarEvento() {
         {/* Tipo */}
         <div className="mb-6">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label htmlFor="tipo-atividade" className="block text-sm font-medium text-slate-700 mb-1.5">
               Tipo de Atividade <span className="text-red-500">*</span>
             </label>
-            <select value={form.tipo} onChange={e => update('tipo', e.target.value)}
+            <select id="tipo-atividade" value={form.tipo} onChange={e => update('tipo', e.target.value)}
               className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition bg-white ${erros.tipo ? 'border-red-400' : 'border-slate-300'}`}>
               <option value="">Selecione...</option>
               {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -514,10 +591,11 @@ export default function EditarEvento() {
 
         {/* Palavra-chave de acesso */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor="palavra-chave-acesso" className="block text-sm font-medium text-slate-700 mb-1.5">
             Palavra-chave de Acesso
           </label>
           <input
+            id="palavra-chave-acesso"
             type="text"
             value={form.palavra_chave}
             onChange={e => update('palavra_chave', e.target.value)}
@@ -531,13 +609,14 @@ export default function EditarEvento() {
 
         {/* Corpo do e-mail */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          <p id="mensagem-email-label" className="block text-sm font-medium text-slate-700 mb-1.5">
             Mensagem do E-mail
-          </label>
+          </p>
           <div className="rounded-lg border border-slate-300 overflow-hidden bg-white">
             <ReactQuill
               ref={quillRef}
               className="email-editor"
+              aria-labelledby="mensagem-email-label"
               value={form.corpo_email}
               onChange={(value: string) => update('corpo_email', value)}
               placeholder="Olá! Temos uma nova atividade de bem-estar disponível para você..."
