@@ -154,6 +154,7 @@ export interface EventoDTO {
   palavra_chave: string;
   horarios: HorarioDTO[];
   total_agendamentos?: number;
+  emails_enviados_em?: string | null;
 }
 
 export interface HorarioDTO {
@@ -185,14 +186,18 @@ export const adminEventosApi = {
     request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
   listaPresenca: (id: number) =>
     request<ListaPresencaDTO>(`/admin/eventos/${id}/lista-presenca/`),
+  removerParticipante: (eventoId: number, participanteId: number) =>
+    request<void>(`/admin/eventos/${eventoId}/remover-participante/${participanteId}/`, { method: 'DELETE' }),
 };
 
 // ── Lista de presença ─────────────────────────────────────────────────────────
 
 export interface ParticipantePresencaDTO {
+  participante_id?: number;
   nome: string;
-  matricula: string;
-  departamento: string;
+  email: string;
+  hora_inicio: string;
+  hora_fim: string;
   tipo: 'email' | 'manual';
 }
 

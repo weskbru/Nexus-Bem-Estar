@@ -61,6 +61,27 @@ export default function EventDetails() {
     carregarEvento();
   }, [id, token]);
 
+  // Polling leve: atualiza só os slots a cada 8s sem resetar estado do usuário
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!reservando && !agendamentoExistente) atualizarDisponibilidade();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [id, token, reservando, agendamentoExistente]);
+
+  async function atualizarDisponibilidade() {
+    try {
+      const res = await fetch(`${API}/colaborador/eventos/${id}/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data: EventoData = await res.json();
+      setEvento(prev => prev ? { ...prev, horarios: data.horarios } : prev);
+    } catch {
+      // silencioso — não interrompe o usuário
+    }
+  }
+
   async function carregarEvento() {
     setCarregando(true);
     setAlterando(false);

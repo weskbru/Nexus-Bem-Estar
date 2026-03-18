@@ -126,6 +126,9 @@ class Evento(models.Model):
         verbose_name='Palavra-chave de acesso',
         help_text='Se preenchida, o colaborador precisará informar esta palavra-chave ao clicar no link do convite.',
     )
+    emails_enviados_em = models.DateTimeField(
+        null=True, blank=True, verbose_name='E-mails enviados em'
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -258,10 +261,9 @@ class ConviteEmail(models.Model):
 # ---------------------------------------------------------------------------
 
 class Agendamento(models.Model):
-    STATUS_CHOICES = [
-        ('confirmado', 'Confirmado'),
-        ('cancelado', 'Cancelado'),
-    ]
+    class Status(models.TextChoices):
+        CONFIRMADO = 'confirmado', 'Confirmado'
+        CANCELADO = 'cancelado', 'Cancelado'
 
     usuario = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name='agendamentos'
@@ -276,7 +278,7 @@ class Agendamento(models.Model):
         related_name='agendamento',
     )
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='confirmado',
+        max_length=20, choices=Status.choices, default=Status.CONFIRMADO,
         verbose_name='Status'
     )
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -329,12 +331,11 @@ class AgendamentoManual(models.Model):
 # ---------------------------------------------------------------------------
 
 class ListaEspera(models.Model):
-    STATUS_CHOICES = [
-        ('aguardando', 'Aguardando'),
-        ('notificado', 'Notificado'),
-        ('confirmado', 'Confirmado'),
-        ('expirado', 'Expirado'),
-    ]
+    class Status(models.TextChoices):
+        AGUARDANDO = 'aguardando', 'Aguardando'
+        NOTIFICADO = 'notificado', 'Notificado'
+        CONFIRMADO = 'confirmado', 'Confirmado'
+        EXPIRADO = 'expirado', 'Expirado'
 
     horario = models.ForeignKey(
         Horario, on_delete=models.CASCADE, related_name='lista_espera'
@@ -344,7 +345,7 @@ class ListaEspera(models.Model):
     )
     posicao = models.PositiveIntegerField(verbose_name='Posição na fila')
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='aguardando', verbose_name='Status'
+        max_length=20, choices=Status.choices, default=Status.AGUARDANDO, verbose_name='Status'
     )
     token_confirmacao = models.UUIDField(
         default=uuid.uuid4, unique=True, editable=False, verbose_name='Token de confirmação'

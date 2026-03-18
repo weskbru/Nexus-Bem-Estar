@@ -277,7 +277,7 @@ export default function Relatorios() {
                 <tr className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">
                   <th className="px-6 py-3">Colaborador</th>
                   <th className="px-6 py-3">Evento</th>
-                  <th className="px-6 py-3">Profissional</th>
+                  <th className="px-6 py-3">Horário</th>
                   <th className="px-6 py-3">Data do Evento</th>
                   <th className="px-6 py-3">Status</th>
                 </tr>
@@ -301,7 +301,9 @@ export default function Relatorios() {
                         </div>
                       </td>
                       <td className="px-6 py-3 text-slate-600">{ag.evento_titulo ?? '—'}</td>
-                      <td className="px-6 py-3 text-slate-500">{ag.nome_profissional || '—'}</td>
+                      <td className="px-6 py-3 text-slate-500">
+                        {ag.horario ? `${ag.horario.hora_inicio.substring(0, 5)} – ${ag.horario.hora_fim.substring(0, 5)}` : '—'}
+                      </td>
                       <td className="px-6 py-3 text-slate-500">
                         {ag.evento_data
                           ? new Date(ag.evento_data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
