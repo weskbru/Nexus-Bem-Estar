@@ -1,14 +1,13 @@
 import { LogIn, ShieldCheck } from 'lucide-react';
+import logoAeb from '../images/logoaeb.png';
 
 export default function LoginColaborador() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
       {/* Header Logo */}
       <div className="absolute top-6 left-6 flex items-center gap-2">
-        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-          <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-white">
-            <path d="M12 2L15 8L22 9L17 14L18.5 21L12 17.5L5.5 21L7 14L2 9L9 8L12 2Z" fill="currentColor" />
-          </svg>
+        <div className="w-12 h-12 rounded-lg overflow-hidden bg-white flex items-center justify-center border border-slate-200">
+          <img src={logoAeb} alt="Logo AEB" className="w-full h-full object-contain" />
         </div>
         <span className="font-semibold text-lg text-slate-900">Agenda Bem-Estar</span>
       </div>
