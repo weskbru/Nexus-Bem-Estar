@@ -1,62 +1,62 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from ..views import views
+from ..views.admin.usuario_viewset import AdminUsuarioViewSet
+from ..views.admin.evento_viewset import AdminEventoViewSet, AdminAgendamentoViewSet
+from ..views.admin.dashboard_view import AdminDashboardView
+from ..views.admin.ldap_views import LdapSearchView, PromoverAdminView, RevogarAdminView, ListarAdminsView
+from ..views.auth.login_view import AdminLoginView
+from ..views.auth.acesso_view import AcessoViaTokenView, EventoPublicoView, AcessarEventoView
+from ..views.auth.otp_view import SolicitarAcessoView, VerificarCodigoView
+from ..views.auth.confirmar_vaga_view import ConfirmarVagaListaEsperaView
+from ..views.colaborador.evento_view import EventoListView, EventoDetailView
+from ..views.colaborador.agendamento_view import ReservarHorarioView, CancelarAgendamentoView, MeusAgendamentosView
+from ..views.colaborador.lista_espera_view import EntrarListaEsperaView, MinhaListaEsperaView
 
 router = DefaultRouter()
-router.register(r'admin/usuarios', views.AdminUsuarioViewSet, basename='admin-usuarios')
-router.register(r'admin/eventos', views.AdminEventoViewSet, basename='admin-eventos')
-router.register(r'admin/agendamentos', views.AdminAgendamentoViewSet, basename='admin-agendamentos')
+router.register(r'admin/usuarios',     AdminUsuarioViewSet,    basename='admin-usuarios')
+router.register(r'admin/eventos',      AdminEventoViewSet,     basename='admin-eventos')
+router.register(r'admin/agendamentos', AdminAgendamentoViewSet, basename='admin-agendamentos')
 
 urlpatterns = [
     # -----------------------------------------------------------------------
     # Auth
     # -----------------------------------------------------------------------
-    # Login do admin (email + senha → JWT)
-    path('auth/login/', views.AdminLoginView.as_view(), name='admin-login'),
-
-    # Acesso do colaborador via link mágico do e-mail (token UUID → JWT)
-    path('auth/acesso/<uuid:token>/', views.AcessoViaTokenView.as_view(), name='acesso-via-token'),
-
-    # Acesso via e-mail + palavra-chave com verificação OTP (fluxo lista de distribuição)
-    path('auth/solicitar-acesso/', views.SolicitarAcessoView.as_view(), name='solicitar-acesso'),
-    path('auth/verificar-codigo/', views.VerificarCodigoView.as_view(), name='verificar-codigo'),
-    path('auth/acessar-evento/', views.AcessarEventoView.as_view(), name='acessar-evento'),
-    path('auth/evento-publico/<int:evento_id>/', views.EventoPublicoView.as_view(), name='evento-publico'),
+    path('auth/login/',                          AdminLoginView.as_view(),              name='admin-login'),
+    path('auth/acesso/<uuid:token>/',            AcessoViaTokenView.as_view(),          name='acesso-via-token'),
+    path('auth/solicitar-acesso/',               SolicitarAcessoView.as_view(),         name='solicitar-acesso'),
+    path('auth/verificar-codigo/',               VerificarCodigoView.as_view(),         name='verificar-codigo'),
+    path('auth/acessar-evento/',                 AcessarEventoView.as_view(),           name='acessar-evento'),
+    path('auth/evento-publico/<int:evento_id>/', EventoPublicoView.as_view(),           name='evento-publico'),
+    path('auth/confirmar-vaga/<uuid:token>/',    ConfirmarVagaListaEsperaView.as_view(), name='confirmar-vaga'),
 
     # -----------------------------------------------------------------------
     # Admin
     # -----------------------------------------------------------------------
-    path('admin/dashboard/', views.AdminDashboardView.as_view(), name='admin-dashboard'),
-
-    # -----------------------------------------------------------------------
-    # SuperAdmin (CTI) — Gestão de usuários via LDAP
-    # -----------------------------------------------------------------------
-    path('admin/ldap/buscar/', views.LdapSearchView.as_view(), name='ldap-buscar'),
-    path('admin/ldap/promover/', views.PromoverAdminView.as_view(), name='ldap-promover'),
-    path('admin/ldap/revogar/<int:usuario_id>/', views.RevogarAdminView.as_view(), name='ldap-revogar'),
-    path('admin/ldap/admins/', views.ListarAdminsView.as_view(), name='ldap-admins'),
+    path('admin/dashboard/',                          AdminDashboardView.as_view(),  name='admin-dashboard'),
+    path('admin/ldap/buscar/',                        LdapSearchView.as_view(),      name='ldap-buscar'),
+    path('admin/ldap/promover/',                      PromoverAdminView.as_view(),   name='ldap-promover'),
+    path('admin/ldap/revogar/<int:usuario_id>/',      RevogarAdminView.as_view(),    name='ldap-revogar'),
+    path('admin/ldap/admins/',                        ListarAdminsView.as_view(),    name='ldap-admins'),
 
     # -----------------------------------------------------------------------
     # Colaborador — Eventos
     # -----------------------------------------------------------------------
-    path('colaborador/eventos/', views.EventoListView.as_view(), name='colaborador-eventos-list'),
-    path('colaborador/eventos/<int:pk>/', views.EventoDetailView.as_view(), name='colaborador-evento-detail'),
-
-    # Reservar horário: o colaborador escolhe um slot e confirma
+    path('colaborador/eventos/',          EventoListView.as_view(),   name='colaborador-eventos-list'),
+    path('colaborador/eventos/<int:pk>/', EventoDetailView.as_view(), name='colaborador-evento-detail'),
     path(
         'colaborador/eventos/<int:evento_id>/horarios/<int:horario_id>/reservar/',
-        views.ReservarHorarioView.as_view(),
+        ReservarHorarioView.as_view(),
         name='reservar-horario',
     ),
 
     # -----------------------------------------------------------------------
     # Colaborador — Agendamentos
     # -----------------------------------------------------------------------
-    path('colaborador/agendamentos/', views.MeusAgendamentosView.as_view(), name='meus-agendamentos'),
+    path('colaborador/agendamentos/', MeusAgendamentosView.as_view(), name='meus-agendamentos'),
     path(
         'colaborador/agendamentos/<int:agendamento_id>/cancelar/',
-        views.CancelarAgendamentoView.as_view(),
+        CancelarAgendamentoView.as_view(),
         name='cancelar-agendamento',
     ),
 
@@ -65,13 +65,10 @@ urlpatterns = [
     # -----------------------------------------------------------------------
     path(
         'colaborador/horarios/<int:horario_id>/lista-espera/',
-        views.EntrarListaEsperaView.as_view(),
+        EntrarListaEsperaView.as_view(),
         name='entrar-lista-espera',
     ),
-    path('colaborador/lista-espera/', views.MinhaListaEsperaView.as_view(), name='minha-lista-espera'),
-
-    # Confirmação pública via link do e-mail
-    path('auth/confirmar-vaga/<uuid:token>/', views.ConfirmarVagaListaEsperaView.as_view(), name='confirmar-vaga'),
+    path('colaborador/lista-espera/', MinhaListaEsperaView.as_view(), name='minha-lista-espera'),
 
     # -----------------------------------------------------------------------
     # Router (ViewSets)

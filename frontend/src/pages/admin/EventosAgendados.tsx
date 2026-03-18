@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Link } from 'react-router-dom';
+import bemEstarImg from '../../images/bem-estar.png';
 import {
   Plus,
   Pencil,
@@ -18,19 +19,11 @@ import {
   Printer,
   Loader2,
   FileDown,
+  UserMinus,
 } from 'lucide-react';
 import { adminEventosApi, type EventoDTO, type HorarioDTO, type ListaPresencaDTO } from '../../services/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const TIPO_EMOJI: Record<string, string> = {
-  massagem:   '💆',
-  yoga:       '🧘',
-  meditacao:  '🕉️',
-  nutricao:   '🥗',
-  pilates:    '🤸',
-  acupuntura: '🪡',
-};
 
 const TIPO_GRADIENT: Record<string, string> = {
   massagem:   'from-rose-400 to-rose-600',
@@ -130,7 +123,7 @@ function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: ConfirmDel
 function ConfirmActionModal({ evento, tipo, loading, onConfirm, onCancel }: ConfirmActionProps) {
   const titulo = tipo === 'emails' ? 'Enviar e-mails' : 'Cancelar evento';
   const descricao = tipo === 'emails'
-    ? 'Deseja enviar e-mails para os colaboradores sobre este evento?'
+    ? 'Deseja enviar e-mails para os colaboradores sobre este evento? Esta ação só pode ser realizada uma vez.'
     : 'Deseja cancelar este evento? Após cancelar, ele não ficará mais disponível para novos agendamentos.';
   const botao = tipo === 'emails' ? 'Enviar e-mails' : 'Cancelar evento';
   const botaoClasse = tipo === 'emails'
@@ -198,13 +191,29 @@ function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProps) {
   const [dados, setDados] = useState<ListaPresencaDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
+  const [removendoId, setRemovendoId] = useState<number | null>(null);
 
-  useEffect(() => {
+  function carregarLista() {
+    setLoading(true);
     adminEventosApi.listaPresenca(eventoId)
       .then(d => setDados(d))
       .catch(() => setErro('Não foi possível carregar a lista.'))
       .finally(() => setLoading(false));
-  }, [eventoId]);
+  }
+
+  useEffect(() => { carregarLista(); }, [eventoId]);
+
+  async function handleRemover(participanteId: number) {
+    setRemovendoId(participanteId);
+    try {
+      await adminEventosApi.removerParticipante(eventoId, participanteId);
+      carregarLista();
+    } catch {
+      setErro('Erro ao remover participante.');
+    } finally {
+      setRemovendoId(null);
+    }
+  }
 
   function exportarXlsx() {
     if (!dados) return;
@@ -225,12 +234,12 @@ function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProps) {
     for (const h of dados.horarios) {
       if (h.participantes.length === 0) continue;
       rows.push([`Horário: ${h.hora_inicio} – ${h.hora_fim} (${h.participantes.length} participante${h.participantes.length !== 1 ? 's' : ''})`]);
-      rows.push(['Nome', 'Matrícula', 'Departamento', 'Tipo']);
+      rows.push(['Nome', 'E-mail', 'Horário', 'Tipo']);
       for (const p of h.participantes) {
         rows.push([
           p.nome,
-          p.matricula,
-          p.departamento,
+          p.email,
+          `${p.hora_inicio} – ${p.hora_fim}`,
           p.tipo === 'email' ? 'E-mail' : 'Manual',
         ]);
       }
@@ -370,9 +379,10 @@ function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProps) {
                               <tr className="bg-slate-50 border-b border-slate-200">
                                 <th className="w-8 px-3 py-2 text-left text-xs font-semibold text-slate-500">✓</th>
                                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Nome</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 hidden sm:table-cell">Matrícula</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 hidden sm:table-cell">Departamento</th>
+                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 hidden sm:table-cell">E-mail</th>
+                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 hidden sm:table-cell">Horário</th>
                                 <th className="px-2 py-2 text-center text-xs font-semibold text-slate-500 no-print">Tipo</th>
+                                <th className="px-2 py-2 no-print" />
                               </tr>
                             </thead>
                             <tbody>
@@ -385,8 +395,10 @@ function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProps) {
                                     <div className="w-4 h-4 border-2 border-slate-300 rounded" />
                                   </td>
                                   <td className="px-3 py-2.5 font-medium text-slate-800">{p.nome}</td>
-                                  <td className="px-3 py-2.5 text-slate-500 hidden sm:table-cell">{p.matricula}</td>
-                                  <td className="px-3 py-2.5 text-slate-500 hidden sm:table-cell">{p.departamento}</td>
+                                  <td className="px-3 py-2.5 text-slate-500 hidden sm:table-cell">{p.email}</td>
+                                  <td className="px-3 py-2.5 text-slate-500 hidden sm:table-cell">
+                                    {p.hora_inicio} – {p.hora_fim}
+                                  </td>
                                   <td className="px-2 py-2.5 text-center no-print">
                                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                                       p.tipo === 'email'
@@ -395,6 +407,20 @@ function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProps) {
                                     }`}>
                                       {p.tipo === 'email' ? 'E-mail' : 'Manual'}
                                     </span>
+                                  </td>
+                                  <td className="px-2 py-2.5 text-center no-print">
+                                    {p.tipo === 'manual' && p.participante_id != null && (
+                                      <button
+                                        onClick={() => handleRemover(p.participante_id!)}
+                                        disabled={removendoId === p.participante_id}
+                                        title="Remover participante"
+                                        className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-40 transition-colors"
+                                      >
+                                        {removendoId === p.participante_id
+                                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                                          : <UserMinus className="w-4 h-4" />}
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                               ))}
@@ -638,11 +664,20 @@ function EventActionsModal({ evento, isActing, isEmailActing, onCancelar, onDele
                 <ClipboardList className="w-4 h-4" />
                 Lista de Presença
               </button>
-              <button onClick={onEnviarEmails} disabled={isEmailActing || isActing}
-                className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
-                {isEmailActing ? <Spinner /> : <Mail className="w-4 h-4" />}
-                {isEmailActing ? 'Enviando...' : 'Enviar E-mails'}
-              </button>
+              {evento.emails_enviados_em ? (
+                <div className="w-full py-2 px-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-center">
+                  <span className="text-slate-500 font-medium flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    E-mails enviados em {new Date(evento.emails_enviados_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ) : (
+                <button onClick={onEnviarEmails} disabled={isEmailActing || isActing}
+                  className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+                  {isEmailActing ? <Spinner /> : <Mail className="w-4 h-4" />}
+                  {isEmailActing ? 'Enviando...' : 'Enviar E-mails'}
+                </button>
+              )}
               <button onClick={onCancelar} disabled={isActing || isEmailActing}
                 className="w-full py-2 px-4 bg-slate-100 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60 text-slate-600 rounded-lg font-medium text-sm border border-slate-200 hover:border-amber-200 transition-colors flex items-center justify-center gap-2">
                 {isActing ? <Spinner /> : <EyeOff className="w-4 h-4" />}
@@ -697,7 +732,6 @@ function EventActionsModal({ evento, isActing, isEmailActing, onCancelar, onDele
 }
 
 function EventCard({ evento, onOpen }: EventCardProps) {
-  const emoji = TIPO_EMOJI[evento.tipo] ?? '✨';
   const gradient = TIPO_GRADIENT[evento.tipo] ?? 'from-blue-400 to-blue-600';
   const status = normalizeStatus(evento.status);
   const statusCfg = STATUS_CONFIG[status];
@@ -709,16 +743,12 @@ function EventCard({ evento, onOpen }: EventCardProps) {
     >
       {/* Imagem / gradiente */}
       <div className={`relative h-44 bg-gradient-to-br ${gradient} flex items-center justify-center overflow-hidden`}>
-        {evento.imagem_url ? (
-          <img
-            src={evento.imagem_url}
-            alt={evento.titulo}
-            className="absolute inset-0 w-full h-full object-cover"
-            onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-          />
-        ) : (
-          <span className="text-6xl select-none">{emoji}</span>
-        )}
+        <img
+          src={evento.imagem_url || bemEstarImg}
+          alt={evento.titulo}
+          className="absolute inset-0 w-full h-full object-cover"
+          onError={e => { (e.currentTarget as HTMLImageElement).src = bemEstarImg; }}
+        />
 
         {/* Badge de status */}
         <span className={`absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${statusCfg.badgeClass}`}>

@@ -64,10 +64,10 @@ export default function EventDetails() {
   // Polling leve: atualiza só os slots a cada 8s sem resetar estado do usuário
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!reservando && !agendado) atualizarDisponibilidade();
+      if (!reservando && !agendamentoExistente) atualizarDisponibilidade();
     }, 8000);
     return () => clearInterval(interval);
-  }, [id, token, reservando, agendado]);
+  }, [id, token, reservando, agendamentoExistente]);
 
   async function atualizarDisponibilidade() {
     try {
