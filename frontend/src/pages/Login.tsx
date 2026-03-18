@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,8 +14,7 @@ export default function Login() {
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
     setErro('');
 
     if (!email || !password) {
@@ -36,7 +35,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* 1 a 9. Cabeçalho Institucional Refatorado */}
       <header className="w-full bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center">
         <div className="flex items-center gap-4">
@@ -46,7 +45,7 @@ export default function Login() {
             className="h-12 sm:h-14 w-auto"
           />
           <div className="flex flex-col justify-center">
-            <span className="font-sans font-bold text-lg sm:text-xl text-slate-800 tracking-tight leading-tight">
+            <span className="font-bold text-lg sm:text-xl text-slate-800 tracking-tight leading-tight">
               Agenda Bem-Estar
             </span>
             <span className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
@@ -85,7 +84,7 @@ export default function Login() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }} className="space-y-5">
               {/* E-mail */}
               <div className="space-y-1.5">
                 <label htmlFor="email" className="block text-sm font-medium text-slate-700">

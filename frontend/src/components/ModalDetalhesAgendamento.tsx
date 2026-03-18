@@ -39,13 +39,14 @@ export default function ModalDetalhesAgendamento({
   ag,
   onClose,
   onCancelado,
+  onAlterarHorario,
   modo = 'detalhes',
   onConfirmarReserva,
   confirmandoReserva = false,
   textoConfirmar = 'Confirmar Agendamento',
   textoSucesso = 'Agendamento confirmado com sucesso',
   descricaoSucesso = 'Seu horário foi reservado.',
-}: ModalDetalhesAgendamentoProps) {
+}: Readonly<ModalDetalhesAgendamentoProps>) {
   const { token } = useAuth();
   const cfg = statusConfig[ag.status] ?? statusConfig.pendente;
   const Icon = cfg.icon;
@@ -80,8 +81,14 @@ export default function ModalDetalhesAgendamento({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+      <button
+        type="button"
+        aria-label="Fechar modal"
+        onClick={onClose}
+        className="absolute inset-0"
+      />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <h2 className="font-bold text-slate-900 text-lg">
             {emModoSucesso ? textoSucesso : 'Detalhes do Agendamento'}
@@ -187,6 +194,14 @@ export default function ModalDetalhesAgendamento({
 
           {modo === 'detalhes' && ag.status === 'confirmado' && !confirmando && (
             <div className="flex gap-2">
+              {onAlterarHorario && (
+                <button
+                  onClick={() => onAlterarHorario(ag)}
+                  className="w-full h-11 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl font-semibold text-sm transition-colors"
+                >
+                  Alterar Horário
+                </button>
+              )}
               <button
                 onClick={() => setConfirmando(true)}
                 className="w-full h-11 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-semibold text-sm transition-colors"
@@ -208,11 +223,14 @@ export default function ModalDetalhesAgendamento({
       </div>
 
       {modo === 'detalhes' && confirmando && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50"
-          onClick={() => setConfirmando(false)}
-        >
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50">
+          <button
+            type="button"
+            aria-label="Fechar confirmação"
+            onClick={() => setConfirmando(false)}
+            className="absolute inset-0"
+          />
+          <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5">
             <h3 className="text-lg font-bold text-slate-900 text-center">Deseja cancelar?</h3>
             <p className="text-sm text-slate-500 text-center mt-2">
               Esta ação vai cancelar seu agendamento.

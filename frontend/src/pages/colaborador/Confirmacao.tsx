@@ -1,6 +1,5 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle2, Calendar, Clock, XCircle, AlertCircle } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 interface ConfirmacaoData {
@@ -131,15 +130,17 @@ export default function Confirmacao() {
 
             {/* Botões de Ação */}
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link to={destinoEvento} className="flex-1">
-                <button className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
-                  Ver Evento
-                </button>
+              <Link
+                to={destinoEvento}
+                className="flex-1 w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors text-center"
+              >
+                Ver Evento
               </Link>
-              <Link to={destinoEvento} className="flex-1">
-                <button className="w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors">
-                  Ir para Evento
-                </button>
+              <Link
+                to={destinoEvento}
+                className="flex-1 w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors text-center"
+              >
+                Ir para Evento
               </Link>
             </div>
 
@@ -170,10 +171,11 @@ export default function Confirmacao() {
               Sua recusa foi registrada. Se mudar de ideia, entre em contato com o administrador do sistema.
             </p>
 
-            <Link to={destinoEvento}>
-              <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
-                Voltar para Evento
-              </button>
+            <Link
+              to={destinoEvento}
+              className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors"
+            >
+              Voltar para Evento
             </Link>
           </div>
         </div>
@@ -202,10 +204,11 @@ export default function Confirmacao() {
             {dados.mensagem || 'Tente novamente mais tarde ou entre em contato com o administrador.'}
           </p>
 
-          <Link to={destinoEvento}>
-            <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
-              Voltar para Evento
-            </button>
+          <Link
+            to={destinoEvento}
+            className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors"
+          >
+            Voltar para Evento
           </Link>
         </div>
       </div>

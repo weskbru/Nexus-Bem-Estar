@@ -90,10 +90,11 @@ export default function AcessarEvento() {
 
         <div className="px-8 pb-8 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="email-corporativo" className="block text-sm font-medium text-slate-700 mb-1">
               E-mail corporativo <span className="text-red-500">*</span>
             </label>
             <input
+              id="email-corporativo"
               type="email"
               value={email}
               onChange={e => { setEmail(e.target.value); setErro(''); }}
@@ -106,10 +107,11 @@ export default function AcessarEvento() {
 
           {evento?.requer_palavra_chave && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="palavra-chave-convite" className="block text-sm font-medium text-slate-700 mb-1">
                 Palavra-chave do convite <span className="text-red-500">*</span>
               </label>
               <input
+                id="palavra-chave-convite"
                 type="text"
                 value={palavraChave}
                 onChange={e => { setPalavraChave(e.target.value); setErro(''); }}

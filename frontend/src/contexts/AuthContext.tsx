@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { authApi, type UsuarioDTO } from '../services/api';
 
 interface AuthState {
@@ -18,6 +18,8 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+type AuthProviderProps = Readonly<{ children: ReactNode }>;
+
 function carregarEstadoInicial(): AuthState {
   const token = localStorage.getItem('access_token');
   const raw = localStorage.getItem('usuario');
@@ -25,7 +27,7 @@ function carregarEstadoInicial(): AuthState {
   return { token, usuario };
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>(carregarEstadoInicial);
 
   const salvarSessao = useCallback((token: string, usuario: UsuarioDTO) => {
@@ -55,17 +57,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ token: null, usuario: null });
   }, []);
 
+  const contextValue = useMemo<AuthContextValue>(() => ({
+    ...state,
+    loginAdmin,
+    loginViaToken,
+    loginViaEmail,
+    logout,
+    isAuthenticated: !!state.token,
+    isAdmin: !!state.usuario?.is_admin,
+    isSuperAdmin: !!state.usuario?.is_superuser,
+  }), [state, loginAdmin, loginViaToken, loginViaEmail, logout]);
+
   return (
-    <AuthContext.Provider value={{
-      ...state,
-      loginAdmin,
-      loginViaToken,
-      loginViaEmail,
-      logout,
-      isAuthenticated: !!state.token,
-      isAdmin: !!state.usuario?.is_admin,
-      isSuperAdmin: !!state.usuario?.is_superuser,
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

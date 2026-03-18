@@ -6,7 +6,7 @@ interface Props {
   adminOnly?: boolean;
 }
 
-export default function ProtectedRoute({ children, adminOnly = false }: Props) {
+export default function ProtectedRoute({ children, adminOnly = false }: Readonly<Props>) {
   const { isAuthenticated, isAdmin } = useAuth();
 
   if (!isAuthenticated) {

@@ -20,9 +20,11 @@ interface AdminLocal extends UsuarioDTO {
   is_superuser: boolean;
 }
 
+type StatusBadgeProps = Readonly<{ usuario: LdapUsuarioDTO }>;
+
 // ─── Badge de status ──────────────────────────────────────────────────────────
 
-function StatusBadge({ usuario }: { usuario: LdapUsuarioDTO }) {
+function StatusBadge({ usuario }: StatusBadgeProps) {
   if (usuario.is_superuser) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
@@ -60,7 +62,9 @@ interface ConfirmRevogarProps {
   loading: boolean;
 }
 
-function ConfirmRevogarModal({ usuario, onConfirm, onCancel, loading }: ConfirmRevogarProps) {
+type ConfirmRevogarModalProps = Readonly<ConfirmRevogarProps>;
+
+function ConfirmRevogarModal({ usuario, onConfirm, onCancel, loading }: ConfirmRevogarModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
@@ -116,6 +120,103 @@ export default function GestaoUsuarios() {
   // ── Feedback de ações ──
   const [promovendo, setPromovendo] = useState<string | null>(null); // email
   const [feedbackSucesso, setFeedbackSucesso] = useState('');
+
+  const renderAcaoResultado = useCallback((u: LdapUsuarioDTO) => {
+    if (u.is_superuser) {
+      return <span className="text-xs text-slate-400 italic">Protegido</span>;
+    }
+    if (u.is_admin) {
+      return <span className="text-xs text-emerald-600 font-medium">Já é admin</span>;
+    }
+
+    const isPromovendo = promovendo === u.email;
+    const conteudoBotao = isPromovendo
+      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Promovendo...</>
+      : <><ShieldCheck className="w-3.5 h-3.5" /> Promover a Admin</>;
+
+    return (
+      <button
+        onClick={() => handlePromover(u)}
+        disabled={isPromovendo}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg text-xs font-semibold transition-colors"
+      >
+        {conteudoBotao}
+      </button>
+    );
+  }, [promovendo]);
+
+  const renderAdminsContent = useCallback(() => {
+    if (carregandoAdmins) {
+      return (
+        <div className="flex items-center justify-center py-10 text-slate-400 gap-2">
+          <Loader2 className="w-5 h-5 animate-spin" /> Carregando...
+        </div>
+      );
+    }
+    if (admins.length === 0) {
+      return (
+        <div className="text-center py-8 text-slate-400 text-sm">
+          Nenhum administrador cadastrado.
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-xl border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Nome</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">E-mail</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Departamento</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Nível</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {admins.map((a, i) => (
+              <tr
+                key={a.id}
+                className={`border-b border-slate-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
+              >
+                <td className="px-4 py-3">
+                  <div className="font-medium text-slate-800">{a.nome}</div>
+                  <div className="text-xs text-slate-400">{a.matricula || '—'}</div>
+                </td>
+                <td className="px-4 py-3 text-slate-500 hidden md:table-cell">{a.email}</td>
+                <td className="px-4 py-3 text-slate-500 hidden lg:table-cell">
+                  {a.departamento || '—'}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {a.is_superuser ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                      <ShieldCheck className="w-3 h-3" /> Super Admin
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                      <BadgeCheck className="w-3 h-3" /> Admin Eventos
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {a.is_superuser ? (
+                    <span className="text-xs text-slate-400 italic">Protegido</span>
+                  ) : (
+                    <button
+                      onClick={() => setRevogarTarget(a)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-500 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <ShieldOff className="w-3.5 h-3.5" /> Revogar
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }, [admins, carregandoAdmins]);
 
   // ── Carregar admins atuais ──
   const carregarAdmins = useCallback(async () => {
@@ -299,24 +400,7 @@ export default function GestaoUsuarios() {
                     <td className="px-4 py-3 text-center">
                       <StatusBadge usuario={u} />
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {u.is_superuser ? (
-                        <span className="text-xs text-slate-400 italic">Protegido</span>
-                      ) : u.is_admin ? (
-                        <span className="text-xs text-emerald-600 font-medium">Já é admin</span>
-                      ) : (
-                        <button
-                          onClick={() => handlePromover(u)}
-                          disabled={promovendo === u.email}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg text-xs font-semibold transition-colors"
-                        >
-                          {promovendo === u.email
-                            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Promovendo...</>
-                            : <><ShieldCheck className="w-3.5 h-3.5" /> Promover a Admin</>
-                          }
-                        </button>
-                      )}
-                    </td>
+                    <td className="px-4 py-3 text-right">{renderAcaoResultado(u)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -351,69 +435,7 @@ export default function GestaoUsuarios() {
           </button>
         </div>
 
-        {carregandoAdmins ? (
-          <div className="flex items-center justify-center py-10 text-slate-400 gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" /> Carregando...
-          </div>
-        ) : admins.length === 0 ? (
-          <div className="text-center py-8 text-slate-400 text-sm">
-            Nenhum administrador cadastrado.
-          </div>
-        ) : (
-          <div className="rounded-xl border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Nome</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">E-mail</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Departamento</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Nível</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Ação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {admins.map((a, i) => (
-                  <tr
-                    key={a.id}
-                    className={`border-b border-slate-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-800">{a.nome}</div>
-                      <div className="text-xs text-slate-400">{a.matricula || '—'}</div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 hidden md:table-cell">{a.email}</td>
-                    <td className="px-4 py-3 text-slate-500 hidden lg:table-cell">
-                      {a.departamento || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {a.is_superuser ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-                          <ShieldCheck className="w-3 h-3" /> Super Admin
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                          <BadgeCheck className="w-3 h-3" /> Admin Eventos
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {a.is_superuser ? (
-                        <span className="text-xs text-slate-400 italic">Protegido</span>
-                      ) : (
-                        <button
-                          onClick={() => setRevogarTarget(a)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-500 rounded-lg text-xs font-medium transition-colors"
-                        >
-                          <ShieldOff className="w-3.5 h-3.5" /> Revogar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {renderAdminsContent()}
       </div>
 
       {revogarTarget && (
