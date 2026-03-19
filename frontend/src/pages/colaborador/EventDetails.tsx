@@ -520,6 +520,7 @@ export default function EventDetails() {
           onAlterarHorario={() => {
             setAlterando(true);
             setErroReserva('');
+            setModalAgendamento(null);
           }}
           onCancelado={() => {
             setAgendamentoExistente(null);
