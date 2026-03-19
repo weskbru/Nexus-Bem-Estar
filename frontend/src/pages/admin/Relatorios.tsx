@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Download, Award, FileText } from 'lucide-react';
+import { Download, Award, FileText, PieChart, BarChart2 } from 'lucide-react';
 import { adminDashboardApi, adminEventosApi, type EventoDTO, type AgendamentoDTO } from '../../services/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -40,20 +40,22 @@ const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov'
 const STATUS_SKELETON_KEYS = ['status-1', 'status-2', 'status-3'];
 const RANKING_SKELETON_KEYS = ['ranking-1', 'ranking-2', 'ranking-3', 'ranking-4', 'ranking-5'];
 const TABELA_SKELETON_KEYS = ['tabela-1', 'tabela-2', 'tabela-3', 'tabela-4'];
+
+// Cores atualizadas para combinar com a nova identidade
 const STATUS_EVENTO_ITENS = [
-  { key: 'PUBLICADO', label: 'Publicados', color: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
-  { key: 'CANCELADO', label: 'Cancelados', color: 'bg-rose-400', text: 'text-rose-700', bg: 'bg-rose-50' },
-  { key: 'ENCERRADO', label: 'Encerrados', color: 'bg-red-400', text: 'text-red-700', bg: 'bg-red-50' },
+  { key: 'PUBLICADO', label: 'Publicados', color: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50/50' },
+  { key: 'ENCERRADO', label: 'Encerrados', color: 'bg-slate-400', text: 'text-slate-700', bg: 'bg-slate-50' },
+  { key: 'CANCELADO', label: 'Cancelados', color: 'bg-rose-400', text: 'text-rose-700', bg: 'bg-rose-50/50' },
 ] as const;
 
 function getAgendamentoStatusClass(status: string): string {
   if (status === 'CONFIRMADO') {
-    return 'bg-emerald-100 text-emerald-700';
+    return 'bg-emerald-100 text-emerald-800 border border-emerald-200/60';
   }
   if (status === 'CANCELADO') {
-    return 'bg-red-100 text-red-700';
+    return 'bg-rose-100 text-rose-800 border border-rose-200/60';
   }
-  return 'bg-slate-100 text-slate-600';
+  return 'bg-slate-100 text-slate-700 border border-slate-200/60';
 }
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
@@ -63,15 +65,17 @@ type MesBarProps = Readonly<{ mes: string; valor: number; max: number }>;
 function MesBar({ mes, valor, max }: MesBarProps) {
   const pct = max > 0 ? Math.round((valor / max) * 100) : 0;
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <span className="text-xs font-medium text-slate-700">{valor > 0 ? valor : ''}</span>
-      <div className="w-8 bg-slate-100 rounded-t flex items-end" style={{ height: 80 }}>
+    <div className="flex flex-col items-center gap-2 group cursor-default">
+      <span className="text-[11px] font-bold text-slate-400 group-hover:text-emerald-600 transition-colors">
+        {valor > 0 ? valor : ''}
+      </span>
+      <div className="w-7 sm:w-9 bg-slate-50 rounded-t-lg flex items-end overflow-hidden" style={{ height: 100 }}>
         <div
-          className="w-full bg-blue-500 rounded-t transition-all duration-700"
+          className="w-full bg-emerald-500 rounded-t-lg transition-all duration-1000 ease-out group-hover:bg-emerald-400"
           style={{ height: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-slate-400">{mes}</span>
+      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{mes}</span>
     </div>
   );
 }
@@ -79,7 +83,7 @@ function MesBar({ mes, valor, max }: MesBarProps) {
 type SkeletonProps = Readonly<{ className: string }>;
 
 function Skeleton({ className }: SkeletonProps) {
-  return <div className={`animate-pulse bg-slate-100 rounded ${className}`} />;
+  return <div className={`animate-pulse bg-slate-100/80 rounded-xl ${className}`} />;
 }
 
 // ── Página principal ──────────────────────────────────────────────────────────
@@ -110,12 +114,10 @@ export default function Relatorios() {
 
   // ── Derivações analíticas ──────────────────────────────────────────────────
 
-  // Ranking de eventos por agendamentos
   const ranking = [...eventos]
     .sort((a, b) => (b.total_agendamentos ?? 0) - (a.total_agendamentos ?? 0))
     .slice(0, 5);
 
-  // Agendamentos por mês (baseado em evento_data dos agendamentos recentes)
   const porMes = new Array<number>(12).fill(0);
   agendamentos.forEach(a => {
     if (a.evento_data) {
@@ -125,7 +127,6 @@ export default function Relatorios() {
   });
   const maxMes = Math.max(1, ...porMes);
 
-  // Distribuição por status dos eventos
   const totalEventos = eventos.length;
   const statusDist = eventos.reduce<Record<string, number>>((acc, e) => {
     const statusNormalizado = e.status.toUpperCase();
@@ -138,31 +139,30 @@ export default function Relatorios() {
   if (loading) {
     statusEventosContent = (
       <div className="space-y-3">
-        {STATUS_SKELETON_KEYS.map(key => <Skeleton key={key} className="h-14 w-full" />)}
+        {STATUS_SKELETON_KEYS.map(key => <Skeleton key={key} className="h-16 w-full" />)}
       </div>
     );
   } else if (totalEventos === 0) {
-    statusEventosContent = <p className="text-sm text-slate-400 text-center py-8">Sem dados.</p>;
+    statusEventosContent = <p className="text-sm font-medium text-slate-400 text-center py-8">Sem dados registrados.</p>;
   } else {
     statusEventosContent = (
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {STATUS_EVENTO_ITENS.map(({ key, label, color, text, bg }) => {
           const qty = statusDist[key] ?? 0;
           const pct = totalEventos > 0 ? Math.round((qty / totalEventos) * 100) : 0;
           return (
-            <div key={key} className={`rounded-xl p-3 ${bg}`}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className={`text-sm font-medium ${text}`}>{label}</span>
-                <span className={`text-sm font-bold ${text}`}>{qty}</span>
+            <div key={key} className={`rounded-2xl p-4 ${bg} border border-white/40`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-sm font-bold uppercase tracking-wider opacity-80 ${text}`}>{label}</span>
+                <span className={`text-xl font-extrabold ${text}`}>{qty}</span>
               </div>
-              <div className="w-full bg-white/60 rounded-full h-1.5">
-                <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} />
+              <div className="w-full bg-white/60 rounded-full h-2 overflow-hidden">
+                <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
               </div>
-              <p className="text-xs mt-1 opacity-60 font-medium">{pct}% do total</p>
+              <p className="text-[13px] mt-2 font-medium opacity-70 {text}">{pct}% do total</p>
             </div>
           );
         })}
-        <p className="text-xs text-slate-400 text-right pt-1">{totalEventos} eventos no total</p>
       </div>
     );
   }
@@ -170,34 +170,39 @@ export default function Relatorios() {
   let rankingContent: ReactNode;
   if (loading) {
     rankingContent = (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {RANKING_SKELETON_KEYS.map(key => (
-          <div key={key} className="flex items-center gap-3 animate-pulse">
-            <Skeleton className="w-6 h-6 rounded-full" />
-            <Skeleton className="h-4 flex-1" />
-            <Skeleton className="h-4 w-8" />
+          <div key={key} className="flex items-center gap-4 animate-pulse">
+            <Skeleton className="w-8 h-8 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/4" />
+            </div>
+            <Skeleton className="h-5 w-12" />
           </div>
         ))}
       </div>
     );
   } else if (ranking.length === 0) {
-    rankingContent = <p className="text-sm text-slate-400 text-center py-8">Nenhum evento cadastrado.</p>;
+    rankingContent = <p className="text-sm font-medium text-slate-400 text-center py-8">Nenhum evento cadastrado.</p>;
   } else {
     rankingContent = (
-      <div className="space-y-2">
+      <div className="space-y-1">
         {ranking.map((evento, idx) => {
           const ag = evento.total_agendamentos ?? 0;
           const medalhas = ['🥇', '🥈', '🥉'];
           return (
-            <div key={evento.id} className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
-              <span className="text-lg w-7 text-center shrink-0">
-                {medalhas[idx] ?? <span className="text-sm font-bold text-slate-400">{idx + 1}</span>}
+            <div key={evento.id} className="flex items-center gap-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 rounded-xl px-2 transition-colors">
+              <span className="text-xl w-8 text-center shrink-0">
+                {medalhas[idx] ?? <span className="text-sm font-extrabold text-slate-300">{idx + 1}º</span>}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">{evento.titulo}</p>
-                <p className="text-xs text-slate-400">{evento.tipo} · {new Date(evento.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</p>
+                <p className="text-sm font-bold text-slate-800 truncate">{evento.titulo}</p>
+                <p className="text-[13px] font-medium text-slate-400">{evento.tipo} · {new Date(evento.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</p>
               </div>
-              <span className="text-sm font-bold text-blue-600 shrink-0">{ag} ag.</span>
+              <span className="text-sm font-extrabold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg shrink-0">
+                {ag} ag.
+              </span>
             </div>
           );
         })}
@@ -210,22 +215,24 @@ export default function Relatorios() {
     historicoAgendamentosContent = (
       <div className="divide-y divide-slate-100">
         {TABELA_SKELETON_KEYS.map(key => (
-          <div key={key} className="px-6 py-4 flex gap-4 animate-pulse">
-            <Skeleton className="w-8 h-8 rounded-full shrink-0" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-3.5 w-40" />
-              <Skeleton className="h-3 w-56" />
+          <div key={key} className="px-6 py-5 flex items-center gap-5 animate-pulse">
+            <Skeleton className="w-10 h-10 rounded-full shrink-0" />
+            <div className="flex-1 space-y-2.5">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-3 w-64" />
             </div>
-            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-6 w-24 rounded-full" />
           </div>
         ))}
       </div>
     );
   } else if (agendamentos.length === 0) {
     historicoAgendamentosContent = (
-      <div className="text-center py-16 text-slate-400">
-        <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="text-sm">Nenhum agendamento registrado ainda.</p>
+      <div className="text-center py-20 text-slate-400">
+        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+          <FileText className="w-8 h-8 text-slate-300" />
+        </div>
+        <p className="text-sm font-medium">Nenhum agendamento registrado ainda.</p>
       </div>
     );
   } else {
@@ -233,12 +240,12 @@ export default function Relatorios() {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">
-              <th className="px-6 py-3">Colaborador</th>
-              <th className="px-6 py-3">Evento</th>
-              <th className="px-6 py-3">Horário</th>
-              <th className="px-6 py-3">Data do Evento</th>
-              <th className="px-6 py-3">Status</th>
+            <tr className="bg-slate-50/80 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider text-left border-b border-slate-100">
+              <th className="px-6 py-4 rounded-tl-xl">Colaborador</th>
+              <th className="px-6 py-4">Evento</th>
+              <th className="px-6 py-4">Horário</th>
+              <th className="px-6 py-4">Data do Evento</th>
+              <th className="px-6 py-4 rounded-tr-xl">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -247,26 +254,30 @@ export default function Relatorios() {
               const iniciais = (ag.usuario?.nome ?? '?')
                 .split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
               return (
-                <tr key={ag.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">
+                <tr key={ag.id} className="hover:bg-slate-50/80 transition-colors group">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-100 text-teal-700 flex items-center justify-center text-xs font-extrabold shrink-0 shadow-sm group-hover:scale-105 transition-transform">
                         {iniciais}
                       </div>
-                      <span className="font-medium text-slate-900">{ag.usuario?.nome ?? '—'}</span>
+                      <span className="font-bold text-slate-800">{ag.usuario?.nome ?? '—'}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-3 text-slate-600">{ag.evento_titulo ?? '—'}</td>
-                  <td className="px-6 py-3 text-slate-500">
-                    {ag.horario ? `${ag.horario.hora_inicio.substring(0, 5)} – ${ag.horario.hora_fim.substring(0, 5)}` : '—'}
+                  <td className="px-6 py-4 font-medium text-slate-600">{ag.evento_titulo ?? '—'}</td>
+                  <td className="px-6 py-4 font-medium text-slate-500">
+                    {ag.horario ? (
+                      <span className="bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">
+                        {ag.horario.hora_inicio.substring(0, 5)} – {ag.horario.hora_fim.substring(0, 5)}
+                      </span>
+                    ) : '—'}
                   </td>
-                  <td className="px-6 py-3 text-slate-500">
+                  <td className="px-6 py-4 font-medium text-slate-500">
                     {ag.evento_data
                       ? new Date(ag.evento_data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
                       : '—'}
                   </td>
-                  <td className="px-6 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusCls}`}>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase ${statusCls}`}>
                       {ag.status}
                     </span>
                   </td>
@@ -280,18 +291,19 @@ export default function Relatorios() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-
-      {/* Header */}
-      <div className="flex items-start justify-between">
+    <div className="w-full space-y-8">
+      {/* Header Interno do Relatório */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Relatórios</h1>
-          <p className="text-sm text-slate-500 mt-1">Análise de desempenho dos eventos e engajamento dos colaboradores.</p>
+          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Relatórios Analíticos</h2>
+          <p className="text-sm font-medium text-slate-500 mt-1">
+            Análise de desempenho dos eventos e engajamento da equipe.
+          </p>
         </div>
         {!loading && (
           <button
             onClick={() => exportarCSV(eventos, agendamentos)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors"
+            className="flex items-center justify-center w-full sm:w-auto gap-2 px-5 py-2.5 bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 text-sm font-bold rounded-xl transition-all shadow-sm outline-none focus:ring-4 focus:ring-emerald-500/20"
           >
             <Download className="w-4 h-4" />
             Exportar CSV
@@ -300,64 +312,74 @@ export default function Relatorios() {
       </div>
 
       {erro && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{erro}</div>
+        <div className="bg-red-50/50 border border-red-200 text-red-800 px-5 py-4 rounded-2xl text-sm font-medium">
+          {erro}
+        </div>
       )}
 
       {/* Linha 1: Distribuição por status */}
-      <div className="grid grid-cols-1 gap-6">
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <FileText className="w-4 h-4 text-violet-600" />
-            <h2 className="font-semibold text-slate-900">Status dos Eventos</h2>
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300 p-6 md:p-8">
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="p-2 bg-slate-50 text-slate-600 rounded-lg">
+            <PieChart className="w-5 h-5" />
           </div>
-          {statusEventosContent}
+          <h3 className="text-lg font-bold text-slate-900">Status dos Eventos</h3>
         </div>
+        {statusEventosContent}
       </div>
 
       {/* Linha 2: Ranking + Agendamentos por mês */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
         {/* Ranking top 5 */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <Award className="w-4 h-4 text-amber-500" />
-            <h2 className="font-semibold text-slate-900">Top 5 — Mais Agendados</h2>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300 p-6 md:p-8">
+          <div className="flex items-center gap-2.5 mb-6">
+            <div className="p-2 bg-amber-50 text-amber-500 rounded-lg">
+              <Award className="w-5 h-5" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">Top 5 — Mais Agendados</h3>
           </div>
           {rankingContent}
         </div>
 
         {/* Agendamentos por mês */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-semibold text-slate-900">Agendamentos por Mês</h2>
-            <span className="text-xs text-slate-400">{new Date().getFullYear()}</span>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300 p-6 md:p-8">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                <BarChart2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Agendamentos por Mês</h3>
+            </div>
+            <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
+              {new Date().getFullYear()}
+            </span>
           </div>
+          
           {loading ? (
-            <div className="flex items-end gap-1 h-24">
+            <div className="flex items-end justify-between gap-1 h-32 mt-4">
               {MESES.map(mes => (
-                <Skeleton key={`skeleton-${mes}`} className="flex-1 h-full" />
+                <Skeleton key={`skeleton-${mes}`} className="w-full h-full rounded-t-lg rounded-b-none" />
               ))}
             </div>
           ) : (
-            <div className="flex items-end justify-between gap-1">
+            <div className="flex items-end justify-between gap-1.5 mt-4">
               {porMes.map((val, i) => (
                 <MesBar key={MESES[i]} mes={MESES[i]} valor={val} max={maxMes} />
               ))}
             </div>
           )}
           {!loading && agendamentos.length === 0 && (
-            <p className="text-xs text-slate-400 text-center mt-4">Dados insuficientes para o gráfico.</p>
+            <p className="text-[13px] font-medium text-slate-400 text-center mt-6">Dados insuficientes para gerar o gráfico.</p>
           )}
         </div>
       </div>
 
       {/* Linha 3: Tabela de agendamentos recentes detalhada */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200">
-          <h2 className="font-semibold text-slate-900">Histórico de Agendamentos</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Todos os agendamentos registrados no sistema.</p>
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
+        <div className="px-6 md:px-8 py-6 border-b border-slate-100">
+          <h3 className="text-lg font-bold text-slate-900">Histórico de Agendamentos</h3>
+          <p className="text-[13px] font-medium text-slate-500 mt-1">Todos os agendamentos registrados no sistema.</p>
         </div>
-
         {historicoAgendamentosContent}
       </div>
 

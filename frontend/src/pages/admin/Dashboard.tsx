@@ -7,6 +7,8 @@ import {
   Users,
   TrendingUp,
   BarChart3,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 interface DashboardData {
@@ -17,13 +19,13 @@ interface DashboardData {
 
 function StatSkeleton() {
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-pulse">
-      <div className="flex items-center justify-between mb-4">
-        <div className="h-3 w-24 bg-slate-200 rounded" />
-        <div className="w-8 h-8 bg-slate-200 rounded-lg" />
+    <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 animate-pulse">
+      <div className="flex items-center justify-between mb-6">
+        <div className="h-4 w-28 bg-slate-200 rounded-md" />
+        <div className="w-10 h-10 bg-slate-100 rounded-xl" />
       </div>
-      <div className="h-8 w-20 bg-slate-200 rounded mb-1" />
-      <div className="h-2 w-28 bg-slate-200 rounded" />
+      <div className="h-10 w-24 bg-slate-200 rounded-lg mb-3" />
+      <div className="h-3 w-32 bg-slate-100 rounded-md" />
     </div>
   );
 }
@@ -57,27 +59,29 @@ export default function Dashboard() {
       setData(json);
     } catch (err) {
       console.error('[Dashboard] Erro ao carregar dados:', err);
-      setErro('Não foi possível carregar os dados. Tente novamente.');
+      setErro('Não foi possível carregar as métricas no momento.');
     } finally {
       setLoading(false);
     }
   }
 
-const taxa = data?.taxa_ocupacao ?? 0;
+  const taxa = data?.taxa_ocupacao ?? 0;
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-10">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Visão Geral de Bem-Estar</h1>
-          <p className="text-slate-500">Monitoramento em tempo real de ocupação e agendas.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Visão Geral</h1>
+          <p className="text-slate-500 font-medium mt-1.5">
+            Monitoramento em tempo real de ocupação e agendas da equipe.
+          </p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Link to="/admin/eventos/novo">
-            <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+        <div className="flex items-center gap-3">
+          <Link to="/admin/eventos/novo" className="w-full sm:w-auto">
+            <button className="w-full sm:w-auto flex items-center justify-center px-5 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-sm hover:shadow-md outline-none">
               <Plus className="w-4 h-4 mr-2" />
-              Criar novo evento
+              Criar Novo Evento
             </button>
           </Link>
         </div>
@@ -85,19 +89,23 @@ const taxa = data?.taxa_ocupacao ?? 0;
 
       {/* Erro */}
       {erro && (
-        <div className="mb-6 px-4 py-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center justify-between">
-          <span>{erro}</span>
+        <div className="mb-8 px-5 py-4 bg-red-50/50 border border-red-200 text-red-800 rounded-2xl text-sm font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+            <span>{erro}</span>
+          </div>
           <button
             onClick={fetchDashboard}
-            className="ml-4 text-red-600 underline font-medium hover:text-red-800"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors shadow-sm"
           >
+            <RefreshCw className="w-4 h-4" />
             Tentar novamente
           </button>
         </div>
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 lg:gap-8 mb-8">
         {loading ? (
           <>
             <StatSkeleton />
@@ -106,76 +114,83 @@ const taxa = data?.taxa_ocupacao ?? 0;
           </>
         ) : (
           <>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-slate-500 font-medium text-sm">Total de Vagas</h3>
-                <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-4 h-4" />
+            {/* Card 1: Total de Vagas */}
+            <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-lg border border-slate-100 hover:border-slate-200 transition-all duration-300 hover:-translate-y-1">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-slate-500 font-semibold text-sm uppercase tracking-wider">Total de Vagas</h3>
+                <div className="w-10 h-10 bg-slate-50 text-slate-600 group-hover:bg-slate-100 rounded-xl flex items-center justify-center transition-colors">
+                  <Calendar className="w-5 h-5" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-900">
+              <div className="flex items-baseline gap-3">
+                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
                   {data?.total_vagas.toLocaleString('pt-BR') ?? '—'}
                 </span>
-                <span className="text-sm font-medium text-emerald-600 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-1" />
+                <span className="text-sm font-bold text-emerald-600 flex items-center bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
                   +5%
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-1">vs. mês anterior</p>
+              <p className="text-[13px] font-medium text-slate-400 mt-2">em relação ao mês anterior</p>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-slate-500 font-medium text-sm">Vagas Ocupadas</h3>
-                <div className="w-8 h-8 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center">
-                  <Users className="w-4 h-4" />
+            {/* Card 2: Vagas Ocupadas */}
+            <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-lg border border-slate-100 hover:border-slate-200 transition-all duration-300 hover:-translate-y-1">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-slate-500 font-semibold text-sm uppercase tracking-wider">Vagas Ocupadas</h3>
+                <div className="w-10 h-10 bg-teal-50 text-teal-600 group-hover:bg-teal-100 rounded-xl flex items-center justify-center transition-colors">
+                  <Users className="w-5 h-5" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-900">
+              <div className="flex items-baseline gap-3">
+                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
                   {data?.vagas_ocupadas.toLocaleString('pt-BR') ?? '—'}
                 </span>
-                <span className="text-sm font-medium text-emerald-600 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-1" />
+                <span className="text-sm font-bold text-emerald-600 flex items-center bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
                   +12%
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-1">vs. mês anterior</p>
+              <p className="text-[13px] font-medium text-slate-400 mt-2">em relação ao mês anterior</p>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 sm:col-span-2 md:col-span-1">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-slate-500 font-medium text-sm">Taxa de Ocupação</h3>
-                <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="w-4 h-4" />
+            {/* Card 3: Taxa de Ocupação */}
+            <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-lg border border-slate-100 hover:border-slate-200 transition-all duration-300 hover:-translate-y-1 sm:col-span-2 md:col-span-1">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-slate-500 font-semibold text-sm uppercase tracking-wider">Taxa de Ocupação</h3>
+                <div className="w-10 h-10 bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 rounded-xl flex items-center justify-center transition-colors">
+                  <BarChart3 className="w-5 h-5" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-2 mb-3">
-                <span className="text-3xl font-bold text-slate-900">{taxa}%</span>
-                <span className="text-sm font-medium text-emerald-600 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-1" />
+              <div className="flex items-baseline gap-3 mb-4">
+                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">{taxa}%</span>
+                <span className="text-sm font-bold text-emerald-600 flex items-center bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
                   +8%
                 </span>
               </div>
-              <div className="w-full bg-slate-100 rounded-full h-2">
+              <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                 <div
-                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-1000 ease-out relative"
                   style={{ width: `${taxa}%` }}
-                />
+                >
+                  {/* Pequeno reflexo na barra para dar um acabamento premium */}
+                  <div className="absolute top-0 right-0 bottom-0 left-0 bg-gradient-to-r from-transparent to-white/20"></div>
+                </div>
               </div>
             </div>
           </>
         )}
       </div>
 
-      {/* Footer info */}
-      <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-slate-500">
-        <div>Última atualização: hoje às 12:45</div>
+      {/* Footer Info */}
+      <div className="flex items-center gap-2 text-[13px] font-medium text-slate-400 px-2">
+        <RefreshCw className="w-3.5 h-3.5" />
+        Última atualização: hoje às 12:45
       </div>
 
       {/* Relatórios integrados ao Dashboard */}
-      <section className="mt-10 pt-8 border-t border-slate-200">
+      <section className="mt-12 pt-10 border-t border-slate-200/60">
         <Relatorios />
       </section>
     </div>

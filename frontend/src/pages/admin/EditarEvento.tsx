@@ -6,12 +6,11 @@ import {
   AlertCircle,
   ArrowLeft,
   Save,
-} from 'lucide-react';
+  Lock} from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { adminEventosApi, type EventoDTO } from '../../services/api';
 import {
-  MAX_MESES_FUTURO,
   dataAposLimite,
   dataNoPassado,
   getDataLimiteFutura,
@@ -49,7 +48,6 @@ function MiniCalendar({ value, onChange, error }: MiniCalendarProps) {
   const canGoNext = viewYear < maxDate.getFullYear() ||
     (viewYear === maxDate.getFullYear() && viewMonth < maxDate.getMonth());
 
-  // sync when value loads asynchronously
   useEffect(() => {
     if (value) {
       const d = new Date(value + 'T00:00:00');
@@ -90,33 +88,30 @@ function MiniCalendar({ value, onChange, error }: MiniCalendarProps) {
   }
 
   return (
-    <div className={`border rounded-xl p-4 bg-white select-none ${error ? 'border-red-400' : 'border-slate-200'}`}>
-      <div className="flex items-center justify-between mb-3">
+    <div className={`border rounded-xl p-5 bg-white select-none shadow-sm transition-colors duration-200 ${error ? 'border-red-400 ring-1 ring-red-400/50' : 'border-slate-200 hover:border-slate-300'}`}>
+      <div className="flex items-center justify-between mb-4">
         <button type="button" onClick={prevMonth} disabled={!canGoPrev}
-          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="text-sm font-semibold text-slate-900">{MESES[viewMonth]} {viewYear}</span>
+        <span className="text-sm font-bold text-slate-800 tracking-wide">{MESES[viewMonth]} {viewYear}</span>
         <button type="button" onClick={nextMonth} disabled={!canGoNext}
-          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
-      <div className="grid grid-cols-7 mb-1">
+      <div className="grid grid-cols-7 mb-2">
         {DIAS_SEMANA.map(dia => (
-          <div key={dia.key} className="text-center text-xs font-medium text-slate-400 py-1">{dia.label}</div>
+          <div key={dia.key} className="text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider py-1">{dia.label}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-0.5">
+      <div className="grid grid-cols-7 gap-1">
         {cells.map(cell => {
           const isCurrent = cell.offset === 0;
           const mo = (viewMonth + cell.offset + 12) % 12;
           let yearOffset = 0;
-          if (cell.offset === -1 && viewMonth === 0) {
-            yearOffset = -1;
-          } else if (cell.offset === 1 && viewMonth === 11) {
-            yearOffset = 1;
-          }
+          if (cell.offset === -1 && viewMonth === 0) { yearOffset = -1; } 
+          else if (cell.offset === 1 && viewMonth === 11) { yearOffset = 1; }
           const yo = viewYear + yearOffset;
           const cellKey = `${yo}-${String(mo + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
           const dateCell = new Date(yo, mo, cell.day);
@@ -129,10 +124,10 @@ function MiniCalendar({ value, onChange, error }: MiniCalendarProps) {
           return (
             <button key={cellKey} type="button" onClick={() => clickDay(cell)}
               disabled={isPast || isAfterMax || !isCurrent}
-              className={`text-center text-xs py-1.5 rounded-full transition-colors
-                ${isSelected ? 'bg-blue-600 text-white font-bold' : ''}
-                ${isToday && !isSelected ? 'ring-1 ring-blue-400 text-blue-700 font-semibold' : ''}
-                ${isCurrent && !isPast && !isSelected ? 'hover:bg-blue-50 cursor-pointer text-slate-700' : ''}
+              className={`flex items-center justify-center w-8 h-8 mx-auto text-xs rounded-full transition-all duration-200
+                ${isSelected ? 'bg-emerald-600 text-white font-bold shadow-md scale-105' : ''}
+                ${isToday && !isSelected ? 'bg-slate-100 text-emerald-700 font-bold ring-1 ring-inset ring-emerald-200' : ''}
+                ${isCurrent && !isPast && !isSelected ? 'hover:bg-emerald-50 cursor-pointer text-slate-700 hover:text-emerald-700' : ''}
                 ${isCurrent ? '' : 'text-slate-200 cursor-default'}
                 ${(isPast || isAfterMax) && isCurrent ? 'text-slate-300 cursor-not-allowed' : ''}
               `}>
@@ -142,11 +137,13 @@ function MiniCalendar({ value, onChange, error }: MiniCalendarProps) {
         })}
       </div>
       {value && (
-        <p className="mt-3 text-center text-xs font-medium text-blue-600">
-          {new Date(value + 'T00:00:00').toLocaleDateString('pt-BR', {
-            weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
-          })}
-        </p>
+        <div className="mt-4 pt-3 border-t border-slate-100">
+          <p className="text-center text-xs font-semibold text-emerald-700">
+            {new Date(value + 'T00:00:00').toLocaleDateString('pt-BR', {
+              weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+            })}
+          </p>
+        </div>
       )}
     </div>
   );
@@ -183,8 +180,8 @@ type FieldErrorProps = Readonly<{ msg?: string }>;
 function FieldError({ msg }: FieldErrorProps) {
   if (!msg) return null;
   return (
-    <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
-      <AlertCircle className="w-3 h-3 shrink-0" />{msg}
+    <p className="mt-1.5 flex items-center gap-1.5 text-[13px] font-medium text-red-500 animate-in fade-in slide-in-from-top-1">
+      <AlertCircle className="w-3.5 h-3.5 shrink-0" />{msg}
     </p>
   );
 }
@@ -236,13 +233,11 @@ function validarDuracao(form: FormState, e: FormErrors): void {
     e.duracao_sessao = 'Informe a duração (min).';
     return;
   }
-  if (!(form.hora_inicio && form.hora_fim)) {
-    return;
-  }
+  if (!(form.hora_inicio && form.hora_fim)) return;
 
   const periodoTotal = periodoEmMinutos(form.hora_inicio, form.hora_fim);
   if (periodoTotal > 0 && duracao > periodoTotal) {
-    e.duracao_sessao = `A duração não pode ser maior que o período total (${periodoTotal} min).`;
+    e.duracao_sessao = `A duração não pode exceder o período total (${periodoTotal} min).`;
   }
 }
 
@@ -254,13 +249,11 @@ function validarCapacidade(form: FormState, e: FormErrors): void {
 
 function validarFormEvento(form: FormState): FormErrors {
   const e: FormErrors = {};
-
   validarCamposBasicos(form, e);
   validarDataEvento(form, e);
   validarHorario(form, e);
   validarDuracao(form, e);
   validarCapacidade(form, e);
-
   return e;
 }
 
@@ -297,29 +290,21 @@ function abrirSeletorImagem(quillRef: RefObject<ReactQuill | null>): void {
 type StatusBadgeInfo = Readonly<{ label: string; className: string }>;
 
 function getStatusBadgeInfo(status: string): StatusBadgeInfo {
-  if (status === 'ATIVO') {
-    return { label: 'Publicado', className: 'bg-emerald-100 text-emerald-700' };
+  if (status === 'ATIVO' || status === 'PUBLICADO') {
+    return { label: 'Publicado', className: 'bg-emerald-100 text-emerald-800 border border-emerald-200/60' };
   }
   if (status === 'CANCELADO') {
-    return { label: 'Cancelado', className: 'bg-rose-100 text-rose-700' };
+    return { label: 'Cancelado', className: 'bg-rose-100 text-rose-800 border border-rose-200/60' };
   }
-  return { label: 'Encerrado', className: 'bg-amber-100 text-amber-700' };
+  return { label: 'Encerrado', className: 'bg-slate-100 text-slate-700 border border-slate-200/60' };
 }
 
 const EMAIL_FORMATS = [
-  'header',
-  'bold',
-  'italic',
-  'underline',
-  'strike',
-  'list',
-  'bullet',
-  'align',
-  'link',
-  'image',
+  'header', 'bold', 'italic', 'underline', 'strike',
+  'list', 'bullet', 'align', 'link', 'image',
 ];
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+// ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function EditarEvento() {
   const { id } = useParams<{ id: string }>();
@@ -406,25 +391,28 @@ export default function EditarEvento() {
     }
   }
 
-  // ── Estados especiais ────────────────────────────────────────────────────────
+  // ── Estados Especiais ────────────────────────────────────────────────────────
 
   if (carregando) {
     return (
-      <div className="max-w-3xl mx-auto mt-20 text-center">
-        <svg className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+      <div className="max-w-6xl mx-auto py-20 text-center animate-in fade-in duration-500">
+        <svg className="animate-spin h-10 w-10 text-emerald-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
         </svg>
-        <p className="text-slate-500 text-sm">Carregando evento...</p>
+        <p className="text-slate-500 font-medium">Carregando informações do evento...</p>
       </div>
     );
   }
 
   if (erroCarregar) {
     return (
-      <div className="max-w-3xl mx-auto mt-20 text-center">
-        <p className="text-red-600 mb-4">{erroCarregar}</p>
-        <Link to="/admin/agendamentos" className="text-blue-600 hover:underline text-sm">
+      <div className="max-w-6xl mx-auto py-20 text-center">
+        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <p className="text-slate-800 font-bold text-lg mb-2">{erroCarregar}</p>
+        <Link to="/admin/agendamentos" className="text-emerald-600 font-semibold hover:text-emerald-700 transition-colors">
           Voltar para Agendamentos
         </Link>
       </div>
@@ -438,216 +426,214 @@ export default function EditarEvento() {
 
   if (isEncerrado || isCancelado) {
     return (
-      <div className="max-w-3xl mx-auto mt-10">
-        <div className="flex items-center gap-3 mb-6">
-          <Link to="/admin/agendamentos">
-            <button className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+      <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6">
+        <div className="flex items-center gap-4 mb-8">
+          <Link to="/admin/agendamentos" className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 text-slate-500 transition-all shadow-sm">
+            <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Editar Evento</h1>
-            <p className="text-slate-500 text-sm">Eventos cancelados ou encerrados não podem ser editados.</p>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Editar Evento</h1>
+            <p className="text-slate-500 text-sm mt-1 font-medium">Eventos cancelados ou encerrados não podem ser alterados.</p>
           </div>
         </div>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-amber-800 text-sm">
-          Este evento está {isEncerrado ? 'encerrado' : 'cancelado'}. Para alterar informações, crie um novo evento.
-          <div className="mt-3">
-            <Link to="/admin/agendamentos" className="text-amber-900 font-semibold hover:underline">
-              Voltar para Agendamentos
-            </Link>
+        <div className="bg-slate-50/80 border border-slate-200 rounded-3xl p-8 md:p-12 text-center shadow-sm">
+          <div className="w-16 h-16 bg-white border border-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-sm">
+            <Lock className="w-8 h-8 text-slate-400" />
           </div>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Evento {isEncerrado ? 'Encerrado' : 'Cancelado'}</h2>
+          <p className="text-slate-500 font-medium max-w-md mx-auto mb-6">
+            Por questões de histórico e auditoria, as informações deste evento estão bloqueadas para edição. Para realizar uma nova atividade, crie um novo evento.
+          </p>
+          <Link to="/admin/agendamentos" className="inline-flex items-center justify-center px-6 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm focus:ring-4 focus:ring-slate-100 outline-none">
+            Voltar para Agendamentos
+          </Link>
         </div>
       </div>
     );
   }
 
-  // ── Formulário ───────────────────────────────────────────────────────────────
+  // ── Formulário Ativo ─────────────────────────────────────────────────────────
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/admin/agendamentos">
-          <button className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
+        <div className="flex items-center gap-4">
+          <Link to="/admin/agendamentos" className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 text-slate-500 transition-all shadow-sm">
             <ArrowLeft className="w-5 h-5" />
-          </button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Editar Evento</h1>
-          <p className="text-slate-500 text-sm">Atualize os detalhes do evento.</p>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Editar Evento</h1>
+            <p className="text-slate-500 text-sm mt-1 font-medium">Atualize os detalhes da atividade.</p>
+          </div>
         </div>
         {statusEvento && (
-          <span className={`ml-auto px-3 py-1 rounded-full text-xs font-semibold ${statusBadgeInfo.className}`}>
+          <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-sm ${statusBadgeInfo.className}`}>
             {statusBadgeInfo.label}
-          </span>
+          </div>
         )}
       </div>
 
-      {/* Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
+      {/* Card Principal */}
+      <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100 p-6 md:p-10">
+        
         {erroGeral && (
-          <div className="mb-5 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-            <AlertCircle className="w-4 h-4 shrink-0" />{erroGeral}
+          <div className="mb-8 flex items-start gap-3 bg-red-50/50 border border-red-200 text-red-800 rounded-xl p-4 text-sm font-medium animate-in slide-in-from-top-2">
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
+            <p>{erroGeral}</p>
           </div>
         )}
 
-        {/* Nome */}
-        <div className="mb-6">
-          <label htmlFor="evento-titulo" className="block text-sm font-medium text-slate-700 mb-1.5">
-            Nome do Evento <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="evento-titulo"
-            type="text"
-            value={form.titulo}
-            onChange={e => update('titulo', e.target.value)}
-            className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${erros.titulo ? 'border-red-400' : 'border-slate-300'}`}
-          />
-          <FieldError msg={erros.titulo} />
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          
+          {/* Coluna Esquerda: Info Básica & Comunicação */}
+          <div className="lg:col-span-7 space-y-8">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Informações Básicas</h2>
+              <div className="space-y-6">
+                <div>
+                  <label htmlFor="evento-titulo" className="block text-sm font-semibold text-slate-700 mb-2">
+                    Nome do Evento <span className="text-red-500">*</span>
+                  </label>
+                  <input id="evento-titulo" type="text" value={form.titulo} onChange={e => update('titulo', e.target.value)}
+                    className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.titulo ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                  />
+                  <FieldError msg={erros.titulo} />
+                </div>
 
-        {/* Data + Config */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <p className="block text-sm font-medium text-slate-700 mb-1.5">
-              Data do Evento <span className="text-red-500">*</span>
-            </p>
-            <MiniCalendar value={form.data} onChange={v => update('data', v)} error={erros.data} />
-            <p className="mt-1 text-xs text-slate-500">
-              Permitido entre hoje e {getDataLimiteFutura().toLocaleDateString('pt-BR')} ({MAX_MESES_FUTURO} meses).
-            </p>
-            <FieldError msg={erros.data} />
-          </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div>
+                    <label htmlFor="tipo-atividade" className="block text-sm font-semibold text-slate-700 mb-2">
+                      Tipo de Atividade <span className="text-red-500">*</span>
+                    </label>
+                    <select id="tipo-atividade" value={form.tipo} onChange={e => update('tipo', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm appearance-none cursor-pointer ${erros.tipo ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}>
+                      <option value="" disabled>Selecione...</option>
+                      {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <FieldError msg={erros.tipo} />
+                  </div>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="hora-inicio" className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Início <span className="text-red-500">*</span>
-                </label>
-                <input id="hora-inicio" type="time" value={form.hora_inicio}
-                  onChange={e => update('hora_inicio', e.target.value)}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.hora_inicio ? 'border-red-400' : 'border-slate-300'}`}
-                />
-                <FieldError msg={erros.hora_inicio} />
-              </div>
-              <div>
-                <label htmlFor="hora-fim" className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Término <span className="text-red-500">*</span>
-                </label>
-                <input id="hora-fim" type="time" value={form.hora_fim}
-                  onChange={e => update('hora_fim', e.target.value)}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.hora_fim ? 'border-red-400' : 'border-slate-300'}`}
-                />
-                <FieldError msg={erros.hora_fim} />
+                  <div>
+                    <label htmlFor="palavra-chave-acesso" className="block text-sm font-semibold text-slate-700 mb-2">
+                      Palavra-chave <span className="text-slate-400 font-normal ml-1">(Opcional)</span>
+                    </label>
+                    <input id="palavra-chave-acesso" type="text" value={form.palavra_chave} onChange={e => update('palavra_chave', e.target.value)}
+                      placeholder="Ex: YOGA2026"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 hover:border-slate-300 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
             <div>
-              <label htmlFor="duracao-sessao" className="block text-sm font-medium text-slate-700 mb-1.5">
-                Duração por Sessão (min) <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input id="duracao-sessao" type="number" min={5} max={480} value={form.duracao_sessao}
-                  onChange={e => update('duracao_sessao', e.target.value)}
-                  className={`w-full px-4 py-2.5 pr-12 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.duracao_sessao ? 'border-red-400' : 'border-slate-300'}`}
-                />
-                <span className="absolute right-3 top-2.5 text-sm text-slate-400 pointer-events-none">min</span>
+              <h2 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Comunicação</h2>
+              <div>
+                <p id="mensagem-email-label" className="block text-sm font-semibold text-slate-700 mb-2">
+                  Mensagem do E-mail Convite
+                </p>
+                <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm focus-within:ring-4 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all duration-200">
+                  <ReactQuill
+                    ref={quillRef}
+                    className="email-editor border-none"
+                    aria-labelledby="mensagem-email-label"
+                    value={form.corpo_email}
+                    onChange={(value: string) => update('corpo_email', value)}
+                    theme="snow"
+                    modules={emailModules}
+                    formats={EMAIL_FORMATS}
+                  />
+                </div>
               </div>
-              <FieldError msg={erros.duracao_sessao} />
             </div>
+          </div>
 
+          {/* Coluna Direita: Calendário & Horários */}
+          <div className="lg:col-span-5 space-y-8">
             <div>
-              <label htmlFor="capacidade-horario" className="block text-sm font-medium text-slate-700 mb-1.5">
-                Capacidade por Horário <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input id="capacidade-horario" type="number" min={1} max={500} value={form.capacidade_por_horario}
-                  onChange={e => update('capacidade_por_horario', e.target.value)}
-                  className={`w-full px-4 py-2.5 pr-16 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition ${erros.capacidade_por_horario ? 'border-red-400' : 'border-slate-300'}`}
-                />
-                <span className="absolute right-3 top-2.5 text-sm text-slate-400 pointer-events-none">pessoas</span>
+              <h2 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Agenda</h2>
+              <div className="space-y-6">
+                <div>
+                  <p className="block text-sm font-semibold text-slate-700 mb-2">
+                    Data do Evento <span className="text-red-500">*</span>
+                  </p>
+                  <MiniCalendar value={form.data} onChange={v => update('data', v)} error={erros.data} />
+                  <FieldError msg={erros.data} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="hora-inicio" className="block text-sm font-semibold text-slate-700 mb-2">
+                      Início <span className="text-red-500">*</span>
+                    </label>
+                    <input id="hora-inicio" type="time" value={form.hora_inicio} onChange={e => update('hora_inicio', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.hora_inicio ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                    />
+                    <FieldError msg={erros.hora_inicio} />
+                  </div>
+                  <div>
+                    <label htmlFor="hora-fim" className="block text-sm font-semibold text-slate-700 mb-2">
+                      Término <span className="text-red-500">*</span>
+                    </label>
+                    <input id="hora-fim" type="time" value={form.hora_fim} onChange={e => update('hora_fim', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.hora_fim ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                    />
+                    <FieldError msg={erros.hora_fim} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="duracao-sessao" className="block text-sm font-semibold text-slate-700 mb-2">
+                      Duração (min) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input id="duracao-sessao" type="number" min={5} max={480} value={form.duracao_sessao} onChange={e => update('duracao_sessao', e.target.value)}
+                        className={`w-full px-4 py-3 pr-12 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.duracao_sessao ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                      />
+                      <span className="absolute right-4 top-3 text-sm font-medium text-slate-400 pointer-events-none">min</span>
+                    </div>
+                    <FieldError msg={erros.duracao_sessao} />
+                  </div>
+                  <div>
+                    <label htmlFor="capacidade-horario" className="block text-sm font-semibold text-slate-700 mb-2">
+                      Capacidade <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input id="capacidade-horario" type="number" min={1} max={500} value={form.capacidade_por_horario} onChange={e => update('capacidade_por_horario', e.target.value)}
+                        className={`w-full px-4 py-3 pr-16 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.capacidade_por_horario ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                      />
+                      <span className="absolute right-4 top-3 text-sm font-medium text-slate-400 pointer-events-none">vagas</span>
+                    </div>
+                    <FieldError msg={erros.capacidade_por_horario} />
+                  </div>
+                </div>
               </div>
-              <FieldError msg={erros.capacidade_por_horario} />
             </div>
           </div>
         </div>
 
-        {/* Tipo */}
-        <div className="mb-6">
-          <div>
-            <label htmlFor="tipo-atividade" className="block text-sm font-medium text-slate-700 mb-1.5">
-              Tipo de Atividade <span className="text-red-500">*</span>
-            </label>
-            <select id="tipo-atividade" value={form.tipo} onChange={e => update('tipo', e.target.value)}
-              className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition bg-white ${erros.tipo ? 'border-red-400' : 'border-slate-300'}`}>
-              <option value="">Selecione...</option>
-              {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <FieldError msg={erros.tipo} />
+        {/* Footer Actions */}
+        <div className="mt-10 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-4">
+          {Object.keys(erros).length > 0 && (
+            <div className="w-full sm:w-auto flex-1 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              Verifique os campos obrigatórios.
+            </div>
+          )}
+
+          <div className="w-full sm:w-auto flex flex-col-reverse sm:flex-row gap-3 ml-auto">
+            <Link to="/admin/agendamentos" className="w-full sm:w-auto px-6 py-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-sm text-center transition-colors shadow-sm focus:ring-4 focus:ring-slate-100 outline-none">
+              Cancelar
+            </Link>
+            <button type="button" onClick={handleSalvar} disabled={salvando}
+              className="w-full sm:w-auto px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white rounded-xl font-bold text-sm tracking-wide transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus:ring-4 focus:ring-emerald-500/30 outline-none">
+              {salvando
+                ? <><svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg> Salvando...</>
+                : <><Save className="w-5 h-5" /> Salvar Alterações</>}
+            </button>
           </div>
-        </div>
-
-        {/* Palavra-chave de acesso */}
-        <div className="mb-6">
-          <label htmlFor="palavra-chave-acesso" className="block text-sm font-medium text-slate-700 mb-1.5">
-            Palavra-chave de Acesso
-          </label>
-          <input
-            id="palavra-chave-acesso"
-            type="text"
-            value={form.palavra_chave}
-            onChange={e => update('palavra_chave', e.target.value)}
-            placeholder="Ex: YOGA2026 (deixe em branco para acesso livre)"
-            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            Se preenchida, o colaborador precisará informar esta palavra-chave ao clicar no link do convite.
-          </p>
-        </div>
-
-        {/* Corpo do e-mail */}
-        <div className="mb-6">
-          <p id="mensagem-email-label" className="block text-sm font-medium text-slate-700 mb-1.5">
-            Mensagem do E-mail
-          </p>
-          <div className="rounded-lg border border-slate-300 overflow-hidden bg-white">
-            <ReactQuill
-              ref={quillRef}
-              className="email-editor"
-              aria-labelledby="mensagem-email-label"
-              value={form.corpo_email}
-              onChange={(value: string) => update('corpo_email', value)}
-              placeholder="Olá! Temos uma nova atividade de bem-estar disponível para você..."
-              theme="snow"
-              modules={emailModules}
-              formats={EMAIL_FORMATS}
-            />
-          </div>
-          <p className="mt-1 text-xs text-slate-500">
-            Este conteúdo suporta formatação e anexos de foto (PNG, JPG, WEBP até 5MB).
-          </p>
-        </div>
-
-        {/* Aviso validação */}
-        {Object.keys(erros).length > 0 && (
-          <div className="mb-5 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            Preencha todos os campos obrigatórios destacados acima.
-          </div>
-        )}
-
-        {/* Botões */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button type="button" onClick={handleSalvar}
-            disabled={salvando}
-            className="flex-1 py-3 px-6 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-            {salvando
-              ? <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
-              : <Save className="w-4 h-4" />}
-            {salvando ? 'Salvando...' : 'Salvar Alterações'}
-          </button>
         </div>
       </div>
     </div>
