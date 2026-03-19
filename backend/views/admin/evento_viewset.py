@@ -153,7 +153,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 subject=evento.titulo,
                 message='',
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[destinatario],
+                recipient_list=destinatario,
                 html_message=corpo_html,
                 fail_silently=False,
             )
