@@ -34,10 +34,10 @@ MOCK_USUARIOS: list[dict] = [
         'departamento': 'CTI - Centro de Tecnologia da Informação',
     },
     {
-        'nome':         'Eliaquin.ramos',
-        'email':        'eliaquin.ramos@aeb.gov.br',
+        'nome':         'Eliaquim Ramos',
+        'email':        'eliaquim.ramos@aeb.gov.br',
         'matricula':    '100891',
-        'departamento': 'Comunicação Social',
+        'departamento': 'CTI - Centro de Tecnologia da Informação',
     },
     {
         'nome':         'Bianca.wolfgram',
@@ -92,6 +92,42 @@ MOCK_USUARIOS: list[dict] = [
         'email':        'rafael.gomes@aeb.gov.br',
         'matricula':    '102001',
         'departamento': 'Comunicação Social',
+    },
+    {
+        'nome':         'Andre Silva',
+        'email':        'andre.silva@aeb.gov.br',
+        'matricula':    '102100',
+        'departamento': 'CTI - Centro de Tecnologia da Informação',
+    },
+    {
+        'nome':         'Gabriel Silva',
+        'email':        'gabriel.silva@aeb.gov.br',
+        'matricula':    '102101',
+        'departamento': 'CTI - Centro de Tecnologia da Informação',
+    },
+    {
+        'nome':         'Anna Correa',
+        'email':        'anna.correa@aeb.gov.br',
+        'matricula':    '102102',
+        'departamento': 'CTI - Centro de Tecnologia da Informação',
+    },
+    {
+        'nome':         'Riany Ximenes',
+        'email':        'riany.ximenes@aeb.gov.br',
+        'matricula':    '102103',
+        'departamento': 'CTI - Centro de Tecnologia da Informação',
+    },
+    {
+        'nome':         'Ricardo Santos',
+        'email':        'ricardo.santos@aeb.gov.br',
+        'matricula':    '102104',
+        'departamento': 'CTI - Centro de Tecnologia da Informação',
+    },
+    {
+        'nome':         'Rafael Rabello',
+        'email':        'rafael.rabello@aeb.gov.br',
+        'matricula':    '102105',
+        'departamento': 'CTI - Centro de Tecnologia da Informação',
     },
 ]
 
