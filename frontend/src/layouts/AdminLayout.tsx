@@ -42,6 +42,15 @@ type DashboardResumo = {
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 const NOTIFICACOES_REFRESH_MS = 30000;
 
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/agendamentos', icon: Calendar, label: 'Agendamentos', end: false },
@@ -169,15 +178,6 @@ export default function AdminLayout() {
     } catch {
       setNotificacoes([]);
     }
-  }
-
-  function formatDateTime(iso: string): string {
-    return new Date(iso).toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   }
 
   return (

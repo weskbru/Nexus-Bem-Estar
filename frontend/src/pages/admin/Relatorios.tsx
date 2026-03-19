@@ -1,39 +1,89 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Download, Award, FileText, PieChart, BarChart2, AlertCircle, Clock } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { adminDashboardApi, adminEventosApi, type EventoDTO, type AgendamentoDTO } from '../../services/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function exportarCSV(eventos: EventoDTO[], agendamentos: AgendamentoDTO[]) {
-  const linhas = [
-    ['=== EVENTOS ==='],
-    ['Título', 'Tipo', 'Data', 'Status', 'Profissional', 'Agendamentos'],
+function exportarXLSX(eventos: EventoDTO[], agendamentos: AgendamentoDTO[]) {
+  const wb = XLSX.utils.book_new();
+
+  // ── Planilha 1: Eventos ──────────────────────────────────────────────────
+  const wsEventos = XLSX.utils.aoa_to_sheet([
+    ['Título', 'Tipo', 'Data', 'Status', 'Profissional', 'Total de Agendamentos'],
     ...eventos.map(e => [
-      `"${e.titulo}"`,
+      e.titulo,
       e.tipo,
       new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR'),
       e.status,
       e.nome_profissional || '—',
-      String(e.total_agendamentos ?? 0),
+      e.total_agendamentos ?? 0,
     ]),
-    [],
-    ['=== AGENDAMENTOS RECENTES ==='],
-    ['Colaborador', 'Evento', 'Data', 'Status'],
+  ]);
+  wsEventos['!cols'] = [{ wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 28 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(wb, wsEventos, 'Eventos');
+
+  // ── Planilha 2: Agendamentos ─────────────────────────────────────────────
+  const wsAgendamentos = XLSX.utils.aoa_to_sheet([
+    ['Colaborador', 'E-mail', 'Evento', 'Data do Evento', 'Horário', 'Status'],
     ...agendamentos.map(a => [
-      `"${a.usuario?.nome ?? '—'}"`,
-      `"${a.evento_titulo ?? '—'}"`,
+      a.usuario?.nome ?? '—',
+      a.usuario?.email ?? '—',
+      a.evento_titulo ?? '—',
       a.evento_data ? new Date(a.evento_data + 'T00:00:00').toLocaleDateString('pt-BR') : '—',
+      a.horario ? `${a.horario.hora_inicio.substring(0, 5)} - ${a.horario.hora_fim.substring(0, 5)}` : '—',
       a.status,
     ]),
-  ];
+  ]);
+  wsAgendamentos['!cols'] = [{ wch: 32 }, { wch: 36 }, { wch: 40 }, { wch: 16 }, { wch: 16 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsAgendamentos, 'Agendamentos');
 
-  const csv = linhas.map(l => l.join(';')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `relatorio-aeb-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  // ── Planilha 3: Resumo Analítico ─────────────────────────────────────────
+  const totalEventos = eventos.length;
+  const statusDist = eventos.reduce<Record<string, number>>((acc, e) => {
+    const s = e.status.toUpperCase() === 'ATIVO' ? 'PUBLICADO' : e.status.toUpperCase();
+    acc[s] = (acc[s] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const porMes = new Array<number>(12).fill(0);
+  const MESES_LABEL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  agendamentos.forEach(a => {
+    if (a.evento_data) porMes[new Date(a.evento_data + 'T00:00:00').getMonth()]++;
+  });
+
+  const ranking = [...eventos]
+    .sort((a, b) => (b.total_agendamentos ?? 0) - (a.total_agendamentos ?? 0))
+    .slice(0, 5);
+
+  const wsResumo = XLSX.utils.aoa_to_sheet([
+    ['RESUMO ANALÍTICO'],
+    [],
+    ['Distribuição por Status'],
+    ['Status', 'Quantidade', '% do Total'],
+    ...['PUBLICADO', 'ENCERRADO', 'CANCELADO'].map(s => [
+      s,
+      statusDist[s] ?? 0,
+      totalEventos > 0 ? `${Math.round(((statusDist[s] ?? 0) / totalEventos) * 100)}%` : '0%',
+    ]),
+    [],
+    ['Agendamentos por Mês', new Date().getFullYear()],
+    ['Mês', 'Agendamentos'],
+    ...MESES_LABEL.map((mes, i) => [mes, porMes[i]]),
+    [],
+    ['Top 5 — Eventos com Maior Engajamento'],
+    ['Posição', 'Título', 'Tipo', 'Data', 'Total de Agendamentos'],
+    ...ranking.map((e, i) => [
+      i + 1,
+      e.titulo,
+      e.tipo,
+      new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR'),
+      e.total_agendamentos ?? 0,
+    ]),
+  ]);
+  wsResumo['!cols'] = [{ wch: 28 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 26 }];
+  XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo Analítico');
+
+  XLSX.writeFile(wb, `relatorio-aeb-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -326,11 +376,11 @@ export default function Relatorios() {
         </div>
         {!loading && (
           <button
-            onClick={() => exportarCSV(eventos, agendamentos)}
+            onClick={() => exportarXLSX(eventos, agendamentos)}
             className="flex items-center justify-center w-full sm:w-auto gap-2 px-5 py-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl transition-all shadow-sm outline-none active:scale-[0.98]"
           >
             <Download className="w-4 h-4 text-slate-500" />
-            Exportar CSV
+            Exportar XLSX
           </button>
         )}
       </div>

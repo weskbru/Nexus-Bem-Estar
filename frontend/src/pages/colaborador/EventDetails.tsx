@@ -244,73 +244,85 @@ export default function EventDetails() {
     setErroReserva('');
   }
 
-  function renderCardHorario(h: HorarioData): ReactNode {
-    const selecionado = horarioSelecionado === h.id;
-    const filaInfo = listaEsperaMap[h.id];
-    const naFila = Boolean(filaInfo);
-    const carregandoFila = entrandoFila === h.id;
-    const existeAgendamento = Boolean(agendamentoExistente);
-    
-    // Bloqueia a seleção se estiver lotado OU se o usuário já tem reserva e NÃO está no modo alterar
-    const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando);
-
-    // ── ESTADO: LOTADO ──
-    if (!h.disponivel) {
-      const isMeuHorarioAtual = selecionado && existeAgendamento && !alterando;
-      
+  function renderAcaoHorarioLotado(
+    h: HorarioData,
+    filaInfo: ListaEsperaInfo | undefined,
+    carregandoFila: boolean,
+    existeAgendamento: boolean
+  ): ReactNode {
+    if (filaInfo) {
       return (
-        <div key={h.id} className={`relative flex flex-col justify-center rounded-2xl border-2 p-4 text-center transition-all h-full
-          ${isMeuHorarioAtual ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-100 bg-slate-50/80 opacity-80'}`}>
-          
-          {isMeuHorarioAtual && (
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap shadow-sm">
-              Seu Horário
-            </div>
-          )}
-          
-          <p className={`text-base font-extrabold tracking-tight ${isMeuHorarioAtual ? 'text-emerald-800' : 'text-slate-400'}`}>
-            {h.hora_inicio.substring(0, 5)}
-          </p>
-          <p className={`text-xs font-medium mb-3 ${isMeuHorarioAtual ? 'text-emerald-600' : 'text-slate-400'}`}>
-            até {h.hora_fim.substring(0, 5)}
-          </p>
-          
-          {!isMeuHorarioAtual && (
-             <div className="mt-auto pt-2 border-t border-slate-200">
-               {naFila && filaInfo ? (
-                 <div className="bg-amber-100/80 text-amber-800 rounded-lg py-1.5 px-2 flex flex-col items-center">
-                   <span className="text-[10px] font-bold uppercase tracking-wider">Na fila</span>
-                   <span className="text-xs font-semibold">{filaInfo.posicao}º lugar</span>
-                 </div>
-               ) : !existeAgendamento ? (
-                 <button
-                   onClick={(e) => handleEntrarFila(e, h.id)}
-                   disabled={carregandoFila}
-                   className="w-full bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 text-slate-500 text-xs font-bold py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                 >
-                   {carregandoFila ? 'Entrando...' : 'Entrar na fila'}
-                 </button>
-               ) : (
-                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Esgotado</span>
-               )}
-             </div>
-          )}
+        <div className="bg-amber-100/80 text-amber-800 rounded-lg py-1.5 px-2 flex flex-col items-center">
+          <span className="text-[10px] font-bold uppercase tracking-wider">Na fila</span>
+          <span className="text-xs font-semibold">{filaInfo.posicao}º lugar</span>
         </div>
       );
     }
 
-    // ── ESTADO: DISPONÍVEL ──
+    if (!existeAgendamento) {
+      return (
+        <button
+          onClick={(e) => handleEntrarFila(e, h.id)}
+          disabled={carregandoFila}
+          className="w-full bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 text-slate-500 text-xs font-bold py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {carregandoFila ? 'Entrando...' : 'Entrar na fila'}
+        </button>
+      );
+    }
+
+    return <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Esgotado</span>;
+  }
+
+  function renderCardHorarioLotado(
+    h: HorarioData,
+    selecionado: boolean,
+    existeAgendamento: boolean,
+    filaInfo: ListaEsperaInfo | undefined,
+    carregandoFila: boolean
+  ): ReactNode {
+    const isMeuHorarioAtual = selecionado && existeAgendamento && !alterando;
+
+    return (
+      <div key={h.id} className={`relative flex flex-col justify-center rounded-2xl border-2 p-4 text-center transition-all h-full
+        ${isMeuHorarioAtual ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-100 bg-slate-50/80 opacity-80'}`}>
+
+        {isMeuHorarioAtual && (
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap shadow-sm">
+            Seu Horário
+          </div>
+        )}
+
+        <p className={`text-base font-extrabold tracking-tight ${isMeuHorarioAtual ? 'text-emerald-800' : 'text-slate-400'}`}>
+          {h.hora_inicio.substring(0, 5)}
+        </p>
+        <p className={`text-xs font-medium mb-3 ${isMeuHorarioAtual ? 'text-emerald-600' : 'text-slate-400'}`}>
+          até {h.hora_fim.substring(0, 5)}
+        </p>
+
+        {!isMeuHorarioAtual && (
+          <div className="mt-auto pt-2 border-t border-slate-200">
+            {renderAcaoHorarioLotado(h, filaInfo, carregandoFila, existeAgendamento)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderCardHorarioDisponivel(h: HorarioData, selecionado: boolean, selecaoBloqueada: boolean): ReactNode {
+    const cardStateClass = (() => {
+      if (selecionado) return 'border-blue-600 bg-blue-50 ring-2 ring-blue-600/20';
+      if (selecaoBloqueada) return 'border-slate-100 bg-white opacity-60 cursor-not-allowed';
+      return 'border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50 hover:shadow-md cursor-pointer';
+    })();
+
     return (
       <button
         key={h.id}
         disabled={selecaoBloqueada}
         onClick={() => handleSelecionarHorario(h)}
         className={`group relative flex flex-col justify-center rounded-2xl border-2 p-4 text-center transition-all h-full
-          ${selecionado 
-            ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-600/20' 
-            : selecaoBloqueada 
-              ? 'border-slate-100 bg-white opacity-60 cursor-not-allowed' 
-              : 'border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50 hover:shadow-md cursor-pointer'}`}
+          ${cardStateClass}`}
       >
         {selecionado && (
           <div className="absolute top-2 right-2 text-blue-600">
@@ -329,6 +341,20 @@ export default function EventDetails() {
         </div>
       </button>
     );
+  }
+
+  function renderCardHorario(h: HorarioData): ReactNode {
+    const selecionado = horarioSelecionado === h.id;
+    const filaInfo = listaEsperaMap[h.id];
+    const carregandoFila = entrandoFila === h.id;
+    const existeAgendamento = Boolean(agendamentoExistente);
+    const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando);
+
+    if (!h.disponivel) {
+      return renderCardHorarioLotado(h, selecionado, existeAgendamento, filaInfo, carregandoFila);
+    }
+
+    return renderCardHorarioDisponivel(h, selecionado, selecaoBloqueada);
   }
 
   return (
@@ -444,7 +470,7 @@ export default function EventDetails() {
               </div>
             </div>
             <button
-              onClick={() => { setAlterando(false); setHorarioSelecionado(horarioSelecionado); }}
+              onClick={() => { setAlterando(false); }}
               className="h-10 px-5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold transition-all shrink-0 shadow-sm"
             >
               Cancelar remarcação

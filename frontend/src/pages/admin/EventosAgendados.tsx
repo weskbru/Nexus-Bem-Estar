@@ -84,7 +84,7 @@ export default function AdminEventos() {
         `${import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api'}/admin/eventos/${deleteTarget.id}/`,
         { method: 'DELETE', headers: { Authorization: `Bearer ${token ?? ''}` } }
       );
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error('Falha ao deletar o evento');
       setEventos(prev => prev.filter(e => e.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) {
@@ -104,6 +104,41 @@ export default function AdminEventos() {
     { key: 'CANCELADO', label: 'Cancelados' },
     { key: 'ENCERRADO', label: 'Encerrados' },
   ] as const;
+
+  const emptyStateContent = eventosFiltrados.length === 0 ? (
+    <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl mt-4">
+      {/* Empty State Aprimorado */}
+      <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-5">
+        <Calendar className="w-8 h-8 text-slate-300" />
+      </div>
+      <h3 className="text-lg font-bold text-slate-800 mb-1">
+        {filtro === 'todos' ? 'Nenhum evento criado ainda' : `Nenhum evento ${FILTROS.find(f => f.key === filtro)?.label.toLowerCase()}`}
+      </h3>
+      <p className="text-slate-500 text-sm mb-6 max-w-sm">
+        {filtro === 'todos' 
+          ? 'Comece criando o primeiro evento de bem-estar para os colaboradores da instituição.' 
+          : 'Tente mudar os filtros para encontrar o que está procurando.'}
+      </p>
+      {filtro === 'todos' && (
+        <Link to="/admin/eventos/novo">
+          <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
+            <Plus className="w-4 h-4" />
+            Criar primeiro evento
+          </button>
+        </Link>
+      )}
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {eventosFiltrados.map(evento => (
+        <EventCard
+          key={evento.id}
+          evento={evento}
+          onOpen={() => setActionTarget(evento)}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -186,39 +221,8 @@ export default function AdminEventos() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} />)}
         </div>
-      ) : eventosFiltrados.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl mt-4">
-          {/* Empty State Aprimorado */}
-          <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-5">
-            <Calendar className="w-8 h-8 text-slate-300" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-800 mb-1">
-            {filtro === 'todos' ? 'Nenhum evento criado ainda' : `Nenhum evento ${FILTROS.find(f => f.key === filtro)?.label.toLowerCase()}`}
-          </h3>
-          <p className="text-slate-500 text-sm mb-6 max-w-sm">
-            {filtro === 'todos' 
-              ? 'Comece criando o primeiro evento de bem-estar para os colaboradores da instituição.' 
-              : 'Tente mudar os filtros para encontrar o que está procurando.'}
-          </p>
-          {filtro === 'todos' && (
-            <Link to="/admin/eventos/novo">
-              <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
-                <Plus className="w-4 h-4" />
-                Criar primeiro evento
-              </button>
-            </Link>
-          )}
-        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {eventosFiltrados.map(evento => (
-            <EventCard
-              key={evento.id}
-              evento={evento}
-              onOpen={() => setActionTarget(evento)}
-            />
-          ))}
-        </div>
+        emptyStateContent
       )}
 
       {/* Modais */}
