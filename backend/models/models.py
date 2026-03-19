@@ -83,8 +83,8 @@ class Evento(models.Model):
         ('outro', 'Outro'),
     ]
     STATUS_CHOICES = [
-        ('rascunho', 'Rascunho'),
         ('publicado', 'Publicado'),
+        ('cancelado', 'Cancelado'),
         ('encerrado', 'Encerrado'),
     ]
 
@@ -107,7 +107,7 @@ class Evento(models.Model):
     )
     imagem_url = models.URLField(blank=True, verbose_name='URL da imagem')
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='rascunho', verbose_name='Status'
+        max_length=20, choices=STATUS_CHOICES, default='publicado', verbose_name='Status'
     )
     # Template do corpo do e-mail editável pelo admin.
     # Variáveis disponíveis: {nome}, {titulo}, {data}, {hora_inicio}, {hora_fim}, {link}, {chave}
@@ -119,13 +119,23 @@ class Evento(models.Model):
             '{hora_inicio}, {hora_fim}, {link}, {chave}'
         ),
     )
+    # Palavra-chave opcional: se preenchida, o colaborador deve informá-la ao acessar o link do evento.
+    palavra_chave = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Palavra-chave de acesso',
+        help_text='Se preenchida, o colaborador precisará informar esta palavra-chave ao clicar no link do convite.',
+    )
+    emails_enviados_em = models.DateTimeField(
+        null=True, blank=True, verbose_name='E-mails enviados em'
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'Evento'
         verbose_name_plural = 'Eventos'
-        ordering = ['-data', '-hora_inicio']
+        ordering = ['data', 'hora_inicio']
 
     def __str__(self):
         return f'{self.titulo} – {self.data}'
@@ -191,7 +201,9 @@ class Horario(models.Model):
 
     @property
     def vagas_ocupadas(self):
-        return self.agendamentos.filter(status='confirmado').count()
+        confirmados = self.agendamentos.filter(status='confirmado').count()
+        manuais = self.participantes_manuais.count()
+        return confirmados + manuais
 
     @property
     def vagas_livres(self):
@@ -249,10 +261,9 @@ class ConviteEmail(models.Model):
 # ---------------------------------------------------------------------------
 
 class Agendamento(models.Model):
-    STATUS_CHOICES = [
-        ('confirmado', 'Confirmado'),
-        ('cancelado', 'Cancelado'),
-    ]
+    class Status(models.TextChoices):
+        CONFIRMADO = 'confirmado', 'Confirmado'
+        CANCELADO = 'cancelado', 'Cancelado'
 
     usuario = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name='agendamentos'
@@ -267,7 +278,7 @@ class Agendamento(models.Model):
         related_name='agendamento',
     )
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='confirmado',
+        max_length=20, choices=Status.choices, default=Status.CONFIRMADO,
         verbose_name='Status'
     )
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -282,6 +293,75 @@ class Agendamento(models.Model):
 
     def __str__(self):
         return f'{self.usuario.nome} – {self.horario} [{self.status}]'
+
+
+# ---------------------------------------------------------------------------
+# Participante Manual (colaboradores sem e-mail corporativo)
+# ---------------------------------------------------------------------------
+
+class AgendamentoManual(models.Model):
+    """
+    Registro manual feito pelo admin para colaboradores que não possuem
+    e-mail corporativo e não podem acessar o sistema normalmente.
+    """
+    evento = models.ForeignKey(
+        Evento, on_delete=models.CASCADE, related_name='participantes_manuais'
+    )
+    horario = models.ForeignKey(
+        Horario, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='participantes_manuais',
+    )
+    nome = models.CharField(max_length=200, verbose_name='Nome completo')
+    matricula = models.CharField(max_length=50, blank=True, verbose_name='Matrícula')
+    departamento = models.CharField(max_length=100, blank=True, verbose_name='Departamento')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Participante Manual'
+        verbose_name_plural = 'Participantes Manuais'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f'{self.nome} – {self.horario} [manual]'
+
+
+# ---------------------------------------------------------------------------
+# Lista de Espera
+# ---------------------------------------------------------------------------
+
+class ListaEspera(models.Model):
+    class Status(models.TextChoices):
+        AGUARDANDO = 'aguardando', 'Aguardando'
+        NOTIFICADO = 'notificado', 'Notificado'
+        CONFIRMADO = 'confirmado', 'Confirmado'
+        EXPIRADO = 'expirado', 'Expirado'
+
+    horario = models.ForeignKey(
+        Horario, on_delete=models.CASCADE, related_name='lista_espera'
+    )
+    usuario = models.ForeignKey(
+        Usuario, on_delete=models.CASCADE, related_name='lista_espera'
+    )
+    posicao = models.PositiveIntegerField(verbose_name='Posição na fila')
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.AGUARDANDO, verbose_name='Status'
+    )
+    token_confirmacao = models.UUIDField(
+        default=uuid.uuid4, unique=True, editable=False, verbose_name='Token de confirmação'
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    notificado_em = models.DateTimeField(null=True, blank=True, verbose_name='Notificado em')
+    expira_em = models.DateTimeField(null=True, blank=True, verbose_name='Expira em')
+
+    class Meta:
+        verbose_name = 'Lista de Espera'
+        verbose_name_plural = 'Listas de Espera'
+        ordering = ['posicao']
+        unique_together = [('horario', 'usuario')]
+
+    def __str__(self):
+        return f'{self.usuario.email} – {self.horario} [pos {self.posicao}]'
 
 
 # ---------------------------------------------------------------------------

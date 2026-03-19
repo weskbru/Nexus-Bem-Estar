@@ -1,7 +1,8 @@
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, ShieldCheck, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import logoAeb from '../images/logoaeb.png';
 
 export default function Login() {
   const { loginAdmin } = useAuth();
@@ -13,8 +14,7 @@ export default function Login() {
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
     setErro('');
 
     if (!email || !password) {
@@ -35,57 +35,53 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-      {/* Logo */}
-      <div className="absolute top-6 left-6 flex items-center gap-2">
-        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-          <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-white">
-            <path d="M12 2L15 8L22 9L17 14L18.5 21L12 17.5L5.5 21L7 14L2 9L9 8L12 2Z" fill="currentColor" />
-          </svg>
-        </div>
-        <span className="font-semibold text-lg text-slate-900">Agenda Bem-Estar</span>
-      </div>
-
-      {/* Card */}
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* Imagem topo */}
-        <div className="h-48 relative bg-slate-200">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-8">
+      
+      {/* Container Centralizado com Largura Aumentada (max-w-lg) */}
+      <div className="w-full max-w-lg flex flex-col items-center">
+        
+        {/* Identidade Visual */}
+        <div className="mb-8 text-center flex flex-col items-center">
           <img
-            src="https://picsum.photos/seed/spa/800/400"
-            alt="Bem-Estar"
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
+            src={logoAeb}
+            alt="Logo Agência Espacial Brasileira"
+            className="h-16 sm:h-20 w-auto mb-4 drop-shadow-sm"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent" />
-          <div className="absolute bottom-4 left-6 text-white">
-            <p className="text-xs font-medium uppercase tracking-widest opacity-80">Área Restrita</p>
-            <p className="text-lg font-bold">Painel Administrativo</p>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Agenda Bem-Estar
+          </h1>
+          <p className="text-sm sm:text-base text-slate-500 font-medium mt-1">
+            Gestão de Eventos Corporativos
+          </p>
         </div>
 
-        {/* Formulário */}
-        <div className="p-8">
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Entrar</h1>
-          <p className="text-slate-500 mb-6 text-sm">
-            Acesso exclusivo para administradores do sistema.
-          </p>
+        {/* Card do Formulário com Altura Orgânica Aumentada (py-16) */}
+        <main className="w-full bg-white rounded-2xl shadow-xl border border-slate-100 p-8 sm:px-12 sm:py-16 transition-all">
+          <div className="mb-10">
+            <h2 className="text-xl font-bold text-slate-800">Acesso Restrito</h2>
+            <p className="text-slate-500 text-sm mt-1">
+              Faça login para administrar o sistema.
+            </p>
+          </div>
 
           {erro && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-5 text-sm">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              {erro}
+            <div className="flex items-center gap-3 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3 mb-8 text-sm font-medium animate-pulse">
+              <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+              <span>{erro}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Maior espaçamento vertical entre os campos (space-y-8) */}
+          <form onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }} className="space-y-8">
+            
             {/* E-mail */}
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+            <div className="space-y-2">
+              <label htmlFor="email" className="block text-sm font-semibold text-slate-700">
                 E-mail corporativo
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none transition-colors group-focus-within:text-blue-500 text-slate-400">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
@@ -95,8 +91,8 @@ export default function Login() {
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  placeholder="nome.sobrenome@empresa.com.br"
+                  className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all duration-200 outline-none"
+                  placeholder="usuario@aeb.gov.br"
                   autoComplete="email"
                   required
                 />
@@ -104,13 +100,13 @@ export default function Login() {
             </div>
 
             {/* Senha */}
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+            <div className="space-y-2">
+              <label htmlFor="password" className="block text-sm font-semibold text-slate-700">
                 Senha
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none transition-colors group-focus-within:text-blue-500 text-slate-400">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
@@ -120,7 +116,7 @@ export default function Login() {
                   type={mostrarSenha ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  className="block w-full pl-11 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all duration-200 outline-none"
                   placeholder="••••••••"
                   autoComplete="current-password"
                   required
@@ -128,45 +124,39 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setMostrarSenha(v => !v)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+                  aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
                 >
-                  {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {mostrarSenha ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={carregando}
-              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-            >
-              {carregando ? (
-                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-              ) : (
-                <LogIn className="w-4 h-4" />
-              )}
-              {carregando ? 'Entrando...' : 'Entrar'}
-            </button>
+            {/* Botão de Submit com mais espaçamento superior (pt-4) */}
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={carregando}
+                className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm hover:shadow-md hover:shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 active:scale-[0.98]"
+              >
+                {carregando ? (
+                  <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                ) : (
+                  <LogIn className="w-5 h-5" />
+                )}
+                {carregando ? 'Autenticando...' : 'Entrar no Sistema'}
+              </button>
+            </div>
           </form>
+        </main>
 
-          <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-2 text-sm text-slate-400">
-            <ShieldCheck className="w-4 h-4" />
-            <span>SISTEMA INTERNO SEGURO</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-8 flex gap-6 text-sm text-slate-500">
-        <a href="#" className="hover:text-slate-900">Ajuda</a>
-        <a href="#" className="hover:text-slate-900">Privacidade</a>
-        <a href="#" className="hover:text-slate-900">Termos de Uso</a>
-      </div>
-
-      <div className="absolute bottom-6 text-xs text-slate-400">
-        © 2026 Agenda Bem-Estar • Gestão de Qualidade de Vida
+        {/* Rodapé Dinâmico e Responsivo */}
+        <footer className="mt-8 text-center text-xs font-medium text-slate-400">
+          © {new Date().getFullYear()} Agência Espacial Brasileira - CTI
+        </footer>
       </div>
     </div>
   );

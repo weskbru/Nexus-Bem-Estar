@@ -6,15 +6,15 @@ interface Props {
   adminOnly?: boolean;
 }
 
-export default function ProtectedRoute({ children, adminOnly = false }: Props) {
+export default function ProtectedRoute({ children, adminOnly = false }: Readonly<Props>) {
   const { isAuthenticated, isAdmin } = useAuth();
 
   if (!isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={adminOnly ? '/admin/login' : '/'} replace />;
   }
 
   if (adminOnly && !isAdmin) {
-    return <Navigate to="/colaborador/eventos" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;

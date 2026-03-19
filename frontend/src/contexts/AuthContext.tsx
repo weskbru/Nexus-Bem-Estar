@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { authApi, type UsuarioDTO } from '../services/api';
 
 interface AuthState {
@@ -9,12 +9,16 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   loginAdmin: (email: string, password: string) => Promise<void>;
   loginViaToken: (token: string) => Promise<{ evento_id: number }>;
+  loginViaEmail: (access: string, usuario: UsuarioDTO) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+type AuthProviderProps = Readonly<{ children: ReactNode }>;
 
 function carregarEstadoInicial(): AuthState {
   const token = localStorage.getItem('access_token');
@@ -23,7 +27,7 @@ function carregarEstadoInicial(): AuthState {
   return { token, usuario };
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>(carregarEstadoInicial);
 
   const salvarSessao = useCallback((token: string, usuario: UsuarioDTO) => {
@@ -43,21 +47,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { evento_id: data.evento_id };
   }, [salvarSessao]);
 
+  const loginViaEmail = useCallback((access: string, usuario: UsuarioDTO) => {
+    salvarSessao(access, usuario);
+  }, [salvarSessao]);
+
   const logout = useCallback(() => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('usuario');
     setState({ token: null, usuario: null });
   }, []);
 
+  const contextValue = useMemo<AuthContextValue>(() => ({
+    ...state,
+    loginAdmin,
+    loginViaToken,
+    loginViaEmail,
+    logout,
+    isAuthenticated: !!state.token,
+    isAdmin: !!state.usuario?.is_admin,
+    isSuperAdmin: !!state.usuario?.is_superuser,
+  }), [state, loginAdmin, loginViaToken, loginViaEmail, logout]);
+
   return (
-    <AuthContext.Provider value={{
-      ...state,
-      loginAdmin,
-      loginViaToken,
-      logout,
-      isAuthenticated: !!state.token,
-      isAdmin: !!state.usuario?.is_admin,
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

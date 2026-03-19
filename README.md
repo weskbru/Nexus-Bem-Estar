@@ -1,8 +1,121 @@
-# 🌟 Sis Bem-Estar - Sistema de Agendamento de Eventos Bem-Estar
+# Sis Bem-Estar - Sistema de Agendamento de Eventos Bem-Estar
 
-Uma plataforma moderna e intuitiva para gerenciar e agendar eventos de bem-estar como massagem, yoga, meditação, nutrição, pilates e acupuntura. O sistema permite que administradores criem eventos e enviem convites aos colaboradores, que por sua vez podem confirmar sua participação através de um link de acesso seguro.
+Uma plataforma para gerenciar e agendar eventos de bem-estar como massagem, yoga, meditação, nutrição, pilates e acupuntura. Administradores criam eventos e enviam convites aos colaboradores, que confirmam a participação via link seguro.
 
 ---
+
+## Primeiros Passos (novo desenvolvedor)
+
+Cada desenvolvedor roda o projeto localmente com seu próprio banco de dados. Siga os passos abaixo **uma única vez** após clonar o repositório.
+
+### 1. Pré-requisitos
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e rodando
+
+### 2. Clone o repositório
+
+```bash
+git clone <url-do-repositorio>
+cd sis-bem-estar
+```
+
+### 3. Crie o arquivo `.env` na raiz do projeto
+
+Crie o arquivo `.env` copiando o exemplo abaixo:
+
+```env
+SECRET_KEY=django-insecure-chave-local-dev
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+
+DB_NAME=sis_bem_estar
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_HOST=db
+DB_PORT=5432
+
+FRONTEND_URL=http://localhost:3000
+
+USE_EMAIL=False
+DEFAULT_FROM_EMAIL=noreply@aeb.gov.br
+```
+
+### 4. Suba os containers
+
+```bash
+docker compose up -d
+```
+
+> O comando `docker compose up` executa automaticamente:
+> - `python manage.py migrate` — aplica as migrações no banco
+> - `python manage.py criar_admin` — cria os usuários padrão abaixo
+
+### 5. Usuários criados automaticamente
+
+| Perfil | E-mail | Senha | Acesso |
+|---|---|---|---|
+| Admin de Eventos | `admin@aeb.gov.br` | `adminaeb` | Cria e gerencia eventos |
+| SuperAdmin (CTI) | `superadmin@aeb.gov.br` | `aeb@123` | Gerencia admins + tudo acima |
+
+### 6. Acesse o sistema
+
+| Serviço | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8001/api/ |
+
+---
+
+### Comandos úteis do dia a dia
+
+```bash
+# Subir os containers
+docker compose up -d
+
+# Parar os containers
+docker compose down
+
+# Ver logs do backend
+docker compose logs -f backend
+
+# Ver logs do frontend
+docker compose logs -f frontend
+
+# Acessar o shell Django
+docker compose exec backend python manage.py shell
+
+# Criar novas migrações após alterar models
+docker compose exec backend python manage.py makemigrations
+docker compose exec backend python manage.py migrate
+```
+
+### Redefinir senha de um usuário (se necessário)
+
+```bash
+docker compose exec backend python manage.py shell -c "from backend.models.models import Usuario; u = Usuario.objects.get(email='email@aeb.gov.br'); u.set_password('nova-senha'); u.save(); print('OK')"
+```
+
+### Adicionar um novo Admin de Eventos
+
+1. Faça login como **SuperAdmin** (`superadmin@aeb.gov.br`)
+2. Acesse **Gestão de Usuários** no menu lateral
+3. Busque o colaborador pelo nome ou e-mail
+4. Clique em **Promover a Admin**
+5. O usuário é criado com senha padrão `aeb@2026` e já pode logar
+
+---
+
+Fluxo de rotas:
+
+Rota	Página
+/	Login do colaborador (e-mail simples)
+/admin/login	Login do admin (e-mail + senha)
+/acesso/:token	Acesso via link de convite
+Redirecionamentos:
+
+Colaborador não autenticado tentando /colaborador/* → vai para /
+Admin não autenticado tentando /admin/* → vai para /admin/login
+Logout do admin → vai para /admin/login
 
 ## 📋 Índice
 
@@ -85,16 +198,16 @@ Uma plataforma moderna e intuitiva para gerenciar e agendar eventos de bem-estar
                          │ API REST + JWT
 ┌────────────────────────▼────────────────────────────────┐
 │              Backend (Django REST API)                  │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │ Views │ Serializers │ Models │ Authentication   │  │
-│  └──────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │ Views │ Serializers │ Models │ Authentication    │   │
+│  └──────────────────────────────────────────────────┘   │
 └────────────────────────┬────────────────────────────────┘
                          │ SQL
 ┌────────────────────────▼────────────────────────────────┐
 │           PostgreSQL Database (Docker)                  │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │ Usuários │ Eventos │ Confirmações │ Tokens      │  │
-│  └──────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │ Usuários │ Eventos │ Confirmações │ Tokens       │   │
+│  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -386,10 +499,33 @@ Response:
 }
 ```
 
-#### Acesso via Token
+#### Acesso via Token (Email Link)
 ```
-GET /api/eventos/acesso-token/?token=ABC123XYZ
+GET /api/auth/acesso/{token}/
 ```
+
+**Response:**
+```json
+{
+  "access": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh": "eyJhbGciOiJIUzI1NiIs...",
+  "usuario": {
+    "id": 1,
+    "email": "usuario@empresa.com.br",
+    "nome": "João Silva",
+    "is_admin": false,
+    "matricula": "12345",
+    "departamento": "TI"
+  },
+  "evento_id": 5
+}
+```
+
+**Uso:**
+- Link de email: `https://seu-dominio.com/acesso/ABC123XYZ789`
+- Recupera dados do evento associado ao token
+- Faz login automático do usuário
+- Válido por 24 horas (configurável)
 
 ### Eventos
 
@@ -442,6 +578,30 @@ Content-Type: application/json
 {
   "evento_id": 1,
   "confirmado": true
+}
+
+Response (sucesso):
+{
+  "id": 10,
+  "usuario_id": 2,
+  "evento_id": 1,
+  "confirmado": true,
+  "data_confirmacao": "2024-03-20T10:30:00Z"
+}
+```
+
+**Parâmetros:**
+- `evento_id` (integer): ID do evento
+- `confirmado` (boolean): true para confirmar, false para recusar
+
+#### Cancelar Participação
+```
+POST /api/confirmacoes/{id}/cancelar/
+Authorization: Bearer {access_token}
+
+Response:
+{
+  "mensagem": "Participação cancelada com sucesso"
 }
 ```
 
@@ -502,18 +662,23 @@ sis-bem-estar/
 │
 ├── frontend/                         # ⚛️ React + Vite
 │   ├── src/
-│   │   ├── components/               # Componentes React
-│   │   │   └── ProtectedRoute.tsx    # Rota protegida
+│   │   ├── components/
+│   │   │   ├── ProtectedRoute.tsx    # Rota protegida com autenticação
+│   │   │   └── ...componentes
 │   │   ├── pages/
-│   │   │   ├── Login.tsx             # Página de login
-│   │   │   ├── AcessoViaToken.tsx    # Acesso por token
+│   │   │   ├── Login.tsx             # 🔐 Página de login (admin)
+│   │   │   ├── AcessoViaToken.tsx    # ⭐ PÁGINA DE CONFIRMAÇÃO VIA EMAIL
+│   │   │   │                         #   - Validação de token
+│   │   │   │                         #   - Exibição de evento
+│   │   │   │                         #   - Confirmação de participação
+│   │   │   │                         #   - Design similar ao mock fornecido
 │   │   │   ├── admin/
 │   │   │   │   ├── Dashboard.tsx     # Dashboard admin
-│   │   │   │   └── NovoEvento.tsx    # Criar evento
+│   │   │   │   └── NovoEvento.tsx    # Criar evento e disparar emails
 │   │   │   └── colaborador/
-│   │   │       ├── Eventos.tsx       # Lista de eventos
-│   │   │       ├── EventDetails.tsx  # Detalhes do evento
-│   │   │       └── Confirmacao.tsx   # Confirmar participação
+│   │   │       ├── Eventos.tsx       # Lista de eventos disponíveis
+│   │   │       ├── EventDetails.tsx  # 📋 Detalhes do evento + botão confirmar
+│   │   │       └── Confirmacao.tsx   # ✓ Página de sucesso após confirmação
 │   │   ├── layouts/
 │   │   │   ├── AdminLayout.tsx       # Layout admin
 │   │   │   └── ColaboradorLayout.tsx # Layout colaborador
@@ -521,21 +686,127 @@ sis-bem-estar/
 │   │   │   └── AuthContext.tsx       # Contexto de autenticação
 │   │   ├── services/
 │   │   │   └── api.ts                # Cliente HTTP
-│   │   ├── App.tsx                   # Componente raiz
-│   │   └── main.tsx                  # Entrada da aplicação
-│   ├── package.json                  # Dependências npm
-│   ├── vite.config.ts                # Configuração Vite
-│   ├── tsconfig.json                 # Configuração TypeScript
-│   └── index.html
+│   │   │       ├── authApi.acessoViaToken()   # Validar token de email
+│   │   │       ├── colaboradorApi.reservar() # Confirmar participação
+│   │   │       └── ...endpoints
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── tsconfig.json
 │
 ├── database/
 │   └── manage.py
 │
-├── docker-compose.yml                # Orquestração de containers
-├── Dockerfile.backend               # Build do backend
-├── Dockerfile.frontend              # Build do frontend
-├── manage.py                         # CLI Django
-└── README.md                         # Este arquivo
+├── docker-compose.yml
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── manage.py
+└── README.md
+```
+
+## 🎯 Páginas Frontend Principais
+
+### Páginas do Colaborador
+
+#### 1. **AcessoViaToken.tsx** (NOVA - Página de Confirmação por Email)
+**Rota:** `/acesso/{token}`
+
+**Fluxo:**
+1. Usuário clica no link do email: `https://seu-dominio.com/acesso/ABC123...`
+2. Página valida o token automaticamente via API
+3. **Se válido:** Exibe:
+   ```
+   ┌─────────────────────────────────────┐
+   │  Logo: ⭐ Agenda Bem-Estar          │
+   ├──────────[Imagem/Ícone]─────────────┤
+   │  Título do Evento (ex: Massagem)    │
+   │  Descrição do evento                │
+   ├──────────────────────────────────────┤
+   │  📅 Data: 25 de Março, 2026         │
+   │  🕐 Horário: 14:00 - 15:00          │
+   │  👤 Profissional: João Silva        │
+   │  📍 Local: Sala de Massagem         │
+   ├──────────────────────────────────────┤
+   │  E-mail corporativo: usuario@... ✓  │
+   ├──────────────────────────────────────┤
+   │  [Confirmar Participação] (botão)    │
+   ├──────────────────────────────────────┤
+   │  🔒 SISTEMA INTERNO SEGURO           │
+   └─────────────────────────────────────┘
+   ```
+
+4. **Ao clicar "Confirmar":**
+   - Faz login automático (sem pedir senha)
+   - Registra confirmação no banco
+   - Redireciona para página de sucesso
+
+5. **Se inválido/expirado:**
+   - Mostra erro: "Link inválido ou expirado"
+   - Oferece opção de voltar ao login
+
+**Componentes:**
+- Carregamento: Loading spinner
+- Validação: Tratamento de erros
+- Animações: Botão com feedback
+- Design: Responsivo, mobile-first
+
+#### 2. **EventDetails.tsx** (Detalhes do Evento)
+**Rota:** `/colaborador/eventos/{id}`
+
+Exibe detalhes completos do evento com opção de confirmar participação pela plataforma.
+
+#### 3. **Confirmacao.tsx** (Página de Sucesso)
+**Rota:** `/colaborador/confirmacao`
+
+**Estados possíveis:**
+- ✅ **Sucesso:** Confirmação recebida com detalhes
+- ❌ **Cancelado:** Participação recusada
+- ⚠️ **Erro:** Problema ao confirmar
+
+**Exibe:**
+```
+┌──────────────────────────────────────┐
+│  ✓ Confirmação Recebida!            │
+├──────────────────────────────────────┤
+│  📅 Data: 25 de Março, 2026         │
+│  🕐 Horário: 14:00 - 15:00          │
+│  👤 Profissional: João Silva        │
+│  📍 Local: Sala de Massagem         │
+├──────────────────────────────────────┤
+│  ✓ Email de confirmação enviado     │
+├──────────────────────────────────────┤
+│  [Ver Meus Agendamentos]            │
+│  [Explorar Outros Eventos]          │
+└──────────────────────────────────────┘
+```
+
+---
+
+## 🌐 Fluxo de URL e Roteamento
+
+```
+Email com convite
+    ↓
+https://seu-dominio.com/acesso/{token}
+    ↓
+Router → /acesso/:token
+    ↓
+Component: AcessoViaToken.tsx
+    ├─ useParams() → extrai token
+    ├─ API: authApi.acessoViaToken(token)
+    └─ Carrega evento e exibe interface
+    ↓
+Usuário clica "Confirmar"
+    ↓
+API: confirmacoes (POST)
+    ↓
+Sucesso!
+    ↓
+navigate('/colaborador/confirmacao', { state: {...} })
+    ↓
+Component: Confirmacao.tsx
+    └─ Exibe página de sucesso
 ```
 
 ---
@@ -564,16 +835,67 @@ sis-bem-estar/
 
 ```
 1. Colaborador recebe email com link de convite
+   └─ Exemplo: https://seu-dominio.com/acesso/{token-unico}
    ↓
-2. Clica no link e acesso via token único
+2. Clica no link e é redirecionado para página de confirmação
    ↓
-3. Visualiza evento e detalhes da atividade
+3. Página AcessoViaToken.tsx exibe:
+   ├─ Ícone do tipo de evento (💆 Massagem, 🧘 Yoga, etc)
+   ├─ Título e descrição do evento
+   ├─ Data, horário, profissional e local
+   ├─ Email corporativo (pré-preenchido)
+   └─ Botão "Confirmar Participação"
    ↓
-4. Confirma ou recusa participação
+4. Usuário clica em "Confirmar Participação"
+   ├─ Validação do token
+   ├─ Login automático via JWT
+   └─ Confirmação registrada no banco de dados
    ↓
-5. (Se confirmado) Aparece em lista de participantes
+5. Redirecionado para Confirmacao.tsx (página de sucesso)
+   ├─ Exibe ✓ Confirmação Recebida!
+   ├─ Mostra detalhes completos do evento
+   ├─ Informa que email foi enviado
+   └─ Oferece opções:
+       ├─ Ver Meus Agendamentos
+       └─ Explorar Outros Eventos
    ↓
-6. Pode visualizar seu agendamento
+6. (Opcional) Pode acessar EventDetails.tsx para ver mais detalhes
+```
+
+### Fluxo Completo do Email
+
+```
+ADMIN CRIA EVENTO
+    ↓
+ADMIN PUBLICA E ENVIA EMAILS
+    ├─ Email enviado com:
+    │  ├─ Assunto: "Convite: [Título do Evento]"
+    │  ├─ Link: /acesso/{token-unico}
+    │  ├─ Detalhes do evento
+    │  └─ Instruções
+    ↓
+COLABORADOR RECEBE EMAIL
+    ↓
+COLABORADOR CLICA NO LINK
+    ├─ URL: /acesso/{token}
+    ├─ Router redireciona para AcessoViaToken.tsx
+    └─ Token é extraído da URL
+    ↓
+COMPONENTE AcessoViaToken.tsx
+    ├─ Valida o token via API
+    ├─ Carrega dados do evento
+    ├─ Exibe página de confirmação visual
+    └─ Aguarda clique no botão
+    ↓
+USUÁRIO CLICA "CONFIRMAR"
+    ├─ Faz login automaticamente via token
+    ├─ Confirma participação no API
+    └─ Registra no banco de dados
+    ↓
+SUCESSO!
+    ├─ Redireciona para Confirmacao.tsx
+    ├─ Exibe mensagem de sucesso
+    └─ Oferece próximos passos
 ```
 
 ### Autenticação

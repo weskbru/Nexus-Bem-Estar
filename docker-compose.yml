@@ -12,12 +12,20 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-sis_bem_estar}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # ─── Cache (Redis) ────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sis_bem_estar_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
 
   # ─── Backend (Django) ─────────────────────────────────────────────────────
   backend:
@@ -30,6 +38,7 @@ services:
       - .env
     environment:
       DB_HOST: db
+      REDIS_URL: redis://redis:6379/1
     volumes:
       - .:/app
     ports:
@@ -37,10 +46,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     command: >
       sh -c "python manage.py migrate &&
              python manage.py criar_admin &&
-             python manage.py runserver 0.0.0.0:8000"
+             gunicorn backend.core.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 2 --timeout 60 --reload"
 
   # ─── Frontend (Vite + React) ──────────────────────────────────────────────
   frontend:
@@ -49,11 +60,18 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: sis_bem_estar_frontend
     restart: unless-stopped
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "150"
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      # Monta apenas o código-fonte para hot reload.
+      # O node_modules fica dentro da imagem (instalado no build),
+      # evitando conflito e tornando o startup imediato.
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
     depends_on:
       - backend
 
