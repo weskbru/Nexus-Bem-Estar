@@ -20,31 +20,31 @@ import {
   type ListaPresencaDTO,
 } from '../../services/api';
 
-interface ConfirmDeleteProps {
+type ConfirmDeleteProps = Readonly<{
   evento: EventoDTO;
   onConfirm: () => void;
   onCancel: () => void;
   loading: boolean;
-}
+}>
 
-interface ConfirmActionProps {
+type ConfirmActionProps = Readonly<{
   evento: EventoDTO;
   tipo: 'emails' | 'cancelar';
   loading: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-}
+}>
 
-interface ListaPresencaModalProps {
+type ListaPresencaModalProps = Readonly<{
   eventoId: number;
   onClose: () => void;
-}
+}>
 
-interface RegistrarParticipanteModalProps {
+type RegistrarParticipanteModalProps = Readonly<{
   evento: EventoDTO;
   onClose: () => void;
   onSuccess: () => void;
-}
+}>
 
 export function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: ConfirmDeleteProps) {
   return (
@@ -188,30 +188,30 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
     // A lógica de exportação continua idêntica
     if (!dados) return;
 
-    const rows: (string | number)[][] = [];
-
-    rows.push([`Lista de Presença - ${dados.evento.titulo}`]);
-    rows.push([
-      `Data: ${dados.evento.data}`,
-      `Horário: ${dados.evento.hora_inicio} - ${dados.evento.hora_fim}`,
-      dados.evento.nome_profissional ? `Profissional: ${dados.evento.nome_profissional}` : '',
-    ]);
-    rows.push([`Total de participantes: ${dados.total}`]);
-    rows.push([]);
+    const rows: (string | number)[][] = [
+      [`Lista de Presença - ${dados.evento.titulo}`],
+      [
+        `Data: ${dados.evento.data}`,
+        `Horário: ${dados.evento.hora_inicio} - ${dados.evento.hora_fim}`,
+        dados.evento.nome_profissional ? `Profissional: ${dados.evento.nome_profissional}` : '',
+      ],
+      [`Total de participantes: ${dados.total}`],
+      [],
+    ];
 
     for (const h of dados.horarios) {
       if (h.participantes.length === 0) continue;
-      rows.push([`Horário: ${h.hora_inicio} - ${h.hora_fim} (${h.participantes.length} participante${h.participantes.length !== 1 ? 's' : ''})`]);
-      rows.push(['Nome', 'E-mail', 'Horário', 'Tipo']);
-      for (const p of h.participantes) {
-        rows.push([
+      rows.push(
+        [`Horário: ${h.hora_inicio} - ${h.hora_fim} (${h.participantes.length} participante${h.participantes.length === 1 ? '' : 's'})`],
+        ['Nome', 'E-mail', 'Horário', 'Tipo'],
+        ...h.participantes.map((p) => ([
           p.nome,
           p.email,
           `${p.hora_inicio} - ${p.hora_fim}`,
           p.tipo === 'email' ? 'E-mail' : 'Manual',
-        ]);
-      }
-      rows.push([]);
+        ])),
+        [],
+      );
     }
 
     rows.push([`Gerado em ${new Date().toLocaleString('pt-BR')}`]);
@@ -222,10 +222,17 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Lista de Presença');
 
-    const nomeArquivo = `lista-presenca-${dados.evento.titulo
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, '-')
+    const tituloSemAcento = Array.from(dados.evento.titulo.normalize('NFD'))
+      .filter((char) => {
+        const code = char.codePointAt(0) ?? 0;
+        return code < 0x0300 || code > 0x036f;
+      })
+      .join('');
+
+    const nomeArquivo = `lista-presenca-${tituloSemAcento
+      .trim()
+      .split(/\s+/)
+      .join('-')
       .toLowerCase()}.xlsx`;
 
     XLSX.writeFile(wb, nomeArquivo);
@@ -259,7 +266,7 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
               ${h.hora_inicio.substring(0, 5)} – ${h.hora_fim.substring(0, 5)}
             </span>
             <span style="font-size:11px;color:#64748b;font-weight:600;">
-              ${h.participantes.length} inscrito${h.participantes.length !== 1 ? 's' : ''} neste horário
+              ${h.participantes.length} inscrito${h.participantes.length === 1 ? '' : 's'} neste horário
             </span>
           </div>
           <table style="width:100%;border-collapse:collapse;font-size:11px;border:1px solid #cbd5e1;">
@@ -319,7 +326,7 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
     <span><strong style="color:#475569;">Horário:</strong> ${dados.evento.hora_inicio} – ${dados.evento.hora_fim}</span>
     ${profissional}
     <span style="margin-left:auto;background:#eff6ff;color:#1d4ed8;padding:2px 10px;border-radius:6px;border:1px solid #bfdbfe;font-weight:700;">
-      ${dados.total} participante${dados.total !== 1 ? 's' : ''}
+      ${dados.total} participante${dados.total === 1 ? '' : 's'}
     </span>
   </div>
 
@@ -332,14 +339,17 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
 </body>
 </html>`;
 
-    const janela = window.open('', '_blank', 'width=900,height=700');
+    const htmlBlob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const htmlUrl = URL.createObjectURL(htmlBlob);
+    const janela = window.open(htmlUrl, '_blank', 'width=900,height=700');
     if (!janela) return;
-    janela.document.write(html);
-    janela.document.close();
     janela.focus();
     janela.onload = () => {
       janela.print();
-      janela.onafterprint = () => janela.close();
+      janela.onafterprint = () => {
+        URL.revokeObjectURL(htmlUrl);
+        janela.close();
+      };
     };
   }
 
@@ -348,11 +358,15 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
       {/* ── Modal na tela ── */}
       <div
         className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto transition-all"
-        onClick={onClose}
       >
+        <button
+          type="button"
+          aria-label="Fechar modal"
+          onClick={onClose}
+          className="absolute inset-0"
+        />
         <div
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
-          onClick={e => e.stopPropagation()}
+          className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
         >
           {/* Header da Tabela */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-5 border-b border-slate-100 no-print bg-slate-50/50 rounded-t-2xl gap-4">
@@ -416,7 +430,7 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
                       <span className="flex items-center gap-1.5"><strong className="text-slate-800">Profissional:</strong> {dados.evento.nome_profissional}</span>
                     )}
                     <span className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-lg border border-blue-100">
-                      <strong>Total:</strong> {dados.total} participante{dados.total !== 1 ? 's' : ''}
+                      <strong>Total:</strong> {dados.total} participante{dados.total === 1 ? '' : 's'}
                     </span>
                   </div>
                 </div>
@@ -437,7 +451,7 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
                             {h.hora_inicio.substring(0, 5)} - {h.hora_fim.substring(0, 5)}
                           </span>
                           <span className="text-sm font-medium text-slate-500">
-                            {h.participantes.length} inscrito{h.participantes.length !== 1 ? 's' : ''} neste horário
+                            {h.participantes.length} inscrito{h.participantes.length === 1 ? '' : 's'} neste horário
                           </span>
                         </div>
 
@@ -453,8 +467,8 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {h.participantes.map((p, i) => (
-                                <tr key={i} className="bg-white hover:bg-slate-50/60 transition-colors group">
+                              {h.participantes.map((p) => (
+                                <tr key={`${p.participante_id ?? p.email ?? p.nome}-${p.hora_inicio}-${p.hora_fim}`} className="bg-white hover:bg-slate-50/60 transition-colors group">
                                   <td className="px-4 py-3.5 align-middle">
                                     <div className="w-5 h-5 border-2 border-slate-300 rounded bg-white group-hover:border-blue-400 transition-colors" />
                                   </td>
@@ -583,10 +597,11 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
 
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <label htmlFor="participante_nome" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Nome do Participante <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="participante_nome"
                   type="text"
                   value={nome}
                   onChange={e => setNome(e.target.value)}
@@ -596,10 +611,11 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <label htmlFor="participante_departamento" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Setor / Departamento
                 </label>
                 <input
+                  id="participante_departamento"
                   type="text"
                   value={departamento}
                   onChange={e => setDepartamento(e.target.value)}
@@ -609,7 +625,7 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                <label htmlFor="participante_horario" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Horário Desejado <span className="text-red-500">*</span>
                 </label>
                 {horarios.length === 0 ? (
@@ -620,6 +636,7 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
                 ) : (
                   <div className="relative">
                     <select
+                      id="participante_horario"
                       value={horarioId}
                       onChange={e => setHorarioId(Number(e.target.value))}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all outline-none appearance-none cursor-pointer"

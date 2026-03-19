@@ -50,12 +50,13 @@ export function formatDate(iso: string) {
   }
 }
 
-interface EventCardProps {
+
+type EventCardProps = Readonly<{
   evento: EventoDTO;
   onOpen: () => void;
-}
+}>
 
-interface EventActionsModalProps {
+type EventActionsModalProps = Readonly<{
   evento: EventoDTO;
   isActing: boolean;
   isEmailActing: boolean;
@@ -65,8 +66,7 @@ interface EventActionsModalProps {
   onRegistrar: () => void;
   onListaPresenca: () => void;
   onClose: () => void;
-}
-
+}>
 export function SkeletonCard() {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden animate-pulse shadow-sm">
@@ -83,6 +83,15 @@ export function SkeletonCard() {
   );
 }
 
+function SpinnerIcon() {
+  return (
+    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  );
+}
+
 export function EventActionsModal({
   evento,
   isActing,
@@ -96,16 +105,15 @@ export function EventActionsModal({
 }: EventActionsModalProps) {
   const status = normalizeStatus(evento.status);
 
-  const Spinner = () => (
-    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  );
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
+      <button
+        type="button"
+        aria-label="Fechar modal"
+        onClick={onClose}
+        className="absolute inset-0"
+      />
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header do Modal */}
         <div className="flex items-start justify-between mb-6">
@@ -151,7 +159,7 @@ export function EventActionsModal({
                   disabled={isEmailActing || isActing}
                   className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-bold text-sm transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                 >
-                  {isEmailActing ? <Spinner /> : <Mail className="w-5 h-5" />}
+                  {isEmailActing ? <SpinnerIcon /> : <Mail className="w-5 h-5" />}
                   {isEmailActing ? 'Enviando...' : 'Enviar E-mails de Convite'}
                 </button>
               )}
@@ -208,7 +216,7 @@ export function EventActionsModal({
                  disabled={isActing || isEmailActing}
                  className="flex-1 py-2.5 px-3 border-2 border-amber-200 hover:bg-amber-50 hover:border-amber-300 text-amber-700 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                >
-                 {isActing ? <Spinner /> : <EyeOff className="w-4 h-4" />}
+                 {isActing ? <SpinnerIcon /> : <EyeOff className="w-4 h-4" />}
                  Cancelar
                </button>
             )}

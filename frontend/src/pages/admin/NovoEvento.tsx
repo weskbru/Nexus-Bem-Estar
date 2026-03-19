@@ -460,10 +460,10 @@ export default function NovoEvento() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label htmlFor="titulo" className="block text-sm font-semibold text-slate-700 mb-2">
                   Nome do Evento <span className="text-red-500">*</span>
                 </label>
-                <input type="text" value={form.titulo}
+                <input id="titulo" type="text" value={form.titulo}
                   onChange={e => update('titulo', e.target.value)}
                   placeholder="Ex: Ginástica Laboral Matinal"
                   className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.titulo ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
@@ -472,10 +472,10 @@ export default function NovoEvento() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label htmlFor="tipo" className="block text-sm font-semibold text-slate-700 mb-2">
                   Tipo de Atividade <span className="text-red-500">*</span>
                 </label>
-                <select value={form.tipo} onChange={e => update('tipo', e.target.value)}
+                <select id="tipo" value={form.tipo} onChange={e => update('tipo', e.target.value)}
                   className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm appearance-none cursor-pointer ${erros.tipo ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}>
                   <option value="" disabled>Selecione uma categoria...</option>
                   {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -484,10 +484,11 @@ export default function NovoEvento() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label htmlFor="palavra_chave" className="block text-sm font-semibold text-slate-700 mb-2">
                   Palavra-chave de Acesso <span className="text-slate-400 font-normal ml-1">(Opcional)</span>
                 </label>
                 <input
+                  id="palavra_chave"
                   type="text"
                   value={form.palavra_chave}
                   onChange={e => update('palavra_chave', e.target.value)}
@@ -508,9 +509,9 @@ export default function NovoEvento() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               {/* Coluna Calendário */}
               <div className="lg:col-span-5">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <span className="block text-sm font-semibold text-slate-700 mb-2">
                   Data do Evento <span className="text-red-500">*</span>
-                </label>
+                </span>
                 <input type="hidden" value={form.data} />
                 <MiniCalendar value={form.data} onChange={v => update('data', v)} error={erros.data} />
                 <p className="mt-2 text-[13px] text-slate-500 text-center">
@@ -523,16 +524,16 @@ export default function NovoEvento() {
               <div className="lg:col-span-7 space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    <span className="block text-sm font-semibold text-slate-700 mb-2">
                       Início <span className="text-red-500">*</span>
-                    </label>
+                    </span>
                     <TimePickerSelect value={form.hora_inicio} onChange={(v) => update('hora_inicio', v)} error={erros.hora_inicio} />
                     <FieldError msg={erros.hora_inicio} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    <span className="block text-sm font-semibold text-slate-700 mb-2">
                       Término <span className="text-red-500">*</span>
-                    </label>
+                    </span>
                     <TimePickerSelect value={form.hora_fim} onChange={(v) => update('hora_fim', v)} error={erros.hora_fim} />
                     <FieldError msg={erros.hora_fim} />
                   </div>
@@ -540,11 +541,11 @@ export default function NovoEvento() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    <label htmlFor="duracao_sessao" className="block text-sm font-semibold text-slate-700 mb-2">
                       Duração (min) <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      <input type="number" min={5} max={480} value={form.duracao_sessao}
+                      <input id="duracao_sessao" type="number" min={5} max={480} value={form.duracao_sessao}
                         onChange={e => update('duracao_sessao', e.target.value)}
                         className={`w-full px-4 py-3 pr-12 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.duracao_sessao ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
                       />
@@ -554,11 +555,11 @@ export default function NovoEvento() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    <label htmlFor="capacidade_por_horario" className="block text-sm font-semibold text-slate-700 mb-2">
                       Capacidade <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      <input type="number" min={1} max={500} value={form.capacidade_por_horario}
+                      <input id="capacidade_por_horario" type="number" min={1} max={500} value={form.capacidade_por_horario}
                         onChange={e => update('capacidade_por_horario', e.target.value)}
                         className={`w-full px-4 py-3 pr-16 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.capacidade_por_horario ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
                       />
@@ -586,10 +587,10 @@ export default function NovoEvento() {
             <h2 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Comunicação</h2>
             
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label htmlFor="corpo_email" className="block text-sm font-semibold text-slate-700 mb-2">
                 Mensagem do E-mail Convite
               </label>
-              <input type="hidden" value={form.corpo_email} />
+              <input id="corpo_email" type="hidden" value={form.corpo_email} />
               <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm focus-within:ring-4 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all duration-200">
                 <ReactQuill
                   ref={quillRef}
