@@ -10,6 +10,7 @@ import {
   Users,
   UserMinus,
   CheckCircle2,
+  Info
 } from 'lucide-react';
 import {
   adminEventosApi,
@@ -46,47 +47,46 @@ interface RegistrarParticipanteModalProps {
 
 export function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: ConfirmDeleteProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-red-50 border border-red-100 rounded-full flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900">Excluir evento</h3>
-              <p className="text-sm text-slate-500">Esta ação não pode ser desfeita.</p>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">Excluir Evento</h3>
+              <p className="text-sm text-red-600 font-medium">Ação irreversível</p>
             </div>
           </div>
-          <button onClick={onCancel} className="text-slate-400 hover:text-slate-600">
+          <button onClick={onCancel} className="p-2 -mr-2 -mt-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <p className="text-sm text-slate-700 mb-6">
-          Tem certeza que deseja excluir{' '}
-          <span className="font-semibold">"{evento.titulo}"</span>?{' '}
-          Todos os agendamentos vinculados serao cancelados.
-        </p>
+        
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
+          <p className="text-sm text-slate-700 leading-relaxed">
+            Tem certeza que deseja excluir permanentemente o evento{' '}
+            <span className="font-bold text-slate-900">"{evento.titulo}"</span>?{' '}
+            Todos os agendamentos vinculados serão perdidos.
+          </p>
+        </div>
+
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
             disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-700 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition-all disabled:opacity-50"
           >
-            Cancelar
+            Manter Evento
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+            className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-sm hover:shadow-md hover:shadow-red-500/20 rounded-xl transition-all disabled:opacity-70 flex items-center justify-center gap-2"
           >
-            {loading && (
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-            )}
-            Excluir
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+            {loading ? 'Excluindo...' : 'Sim, Excluir'}
           </button>
         </div>
       </div>
@@ -95,57 +95,58 @@ export function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: Con
 }
 
 export function ConfirmActionModal({ evento, tipo, loading, onConfirm, onCancel }: ConfirmActionProps) {
-  const titulo = tipo === 'emails' ? 'Enviar e-mails' : 'Cancelar evento';
-  const descricao = tipo === 'emails'
-    ? 'Deseja enviar e-mails para os colaboradores sobre este evento? Esta acao so pode ser realizada uma vez.'
-    : 'Deseja cancelar este evento? Apos cancelar, ele nao ficara mais disponivel para novos agendamentos.';
-  const botao = tipo === 'emails' ? 'Enviar e-mails' : 'Cancelar evento';
-  const botaoClasse = tipo === 'emails'
-    ? 'bg-blue-600 hover:bg-blue-700'
-    : 'bg-amber-600 hover:bg-amber-700';
+  const isEmail = tipo === 'emails';
+  const titulo = isEmail ? 'Enviar E-mails de Convite' : 'Cancelar Evento';
+  const descricao = isEmail
+    ? 'Deseja disparar os e-mails informativos para os colaboradores sobre este evento? Esta ação só pode ser realizada uma vez por evento.'
+    : 'Deseja realmente cancelar este evento? Após confirmar, ele não aceitará mais agendamentos e aparecerá como cancelado no sistema.';
+  
+  const botao = isEmail ? 'Confirmar Envio' : 'Sim, Cancelar Evento';
+  const iconeClasse = isEmail ? 'text-blue-600 bg-blue-50 border-blue-100' : 'text-amber-600 bg-amber-50 border-amber-100';
+  const textoDestaque = isEmail ? 'text-blue-600' : 'text-amber-600';
+  const botaoClasse = isEmail
+    ? 'bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/20'
+    : 'bg-amber-600 hover:bg-amber-700 hover:shadow-amber-500/20';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 border rounded-full flex items-center justify-center shrink-0 ${iconeClasse}`}>
+              {isEmail ? <Info className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
             </div>
             <div>
-              <h3 className="font-bold text-slate-900">{titulo}</h3>
-              <p className="text-sm text-slate-500">Confirme a acao antes de continuar.</p>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">{titulo}</h3>
+              <p className={`text-sm font-medium ${textoDestaque}`}>Confirmação necessária</p>
             </div>
           </div>
-          <button onClick={onCancel} className="text-slate-400 hover:text-slate-600">
+          <button onClick={onCancel} className="p-2 -mr-2 -mt-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <p className="text-sm text-slate-700 mb-2">{descricao}</p>
-        <p className="text-sm text-slate-500 mb-6">
-          Evento: <span className="font-semibold text-slate-700">"{evento.titulo}"</span>
-        </p>
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
+          <p className="text-sm text-slate-700 mb-2 leading-relaxed">{descricao}</p>
+          <div className="text-sm text-slate-500 mt-2 p-2 bg-white rounded-lg border border-slate-200">
+            Alvo: <span className="font-bold text-slate-800">{evento.titulo}</span>
+          </div>
+        </div>
 
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
             disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-700 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition-all disabled:opacity-50"
           >
-            Cancelar
+            Voltar
           </button>
           <button
             onClick={onConfirm}
             disabled={loading}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${botaoClasse}`}
+            className={`flex-1 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:shadow-md rounded-xl transition-all disabled:opacity-70 flex items-center justify-center gap-2 ${botaoClasse}`}
           >
-            {loading && (
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-            )}
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             {botao}
           </button>
         </div>
@@ -164,7 +165,7 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
     setLoading(true);
     adminEventosApi.listaPresenca(eventoId)
       .then(d => setDados(d))
-      .catch(() => setErro('Nao foi possivel carregar a lista.'))
+      .catch(() => setErro('Não foi possível carregar a lista de presença.'))
       .finally(() => setLoading(false));
   }
 
@@ -183,14 +184,15 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
   }
 
   function exportarXlsx() {
+    // A lógica de exportação continua idêntica
     if (!dados) return;
 
     const rows: (string | number)[][] = [];
 
-    rows.push([`Lista de Presenca - ${dados.evento.titulo}`]);
+    rows.push([`Lista de Presença - ${dados.evento.titulo}`]);
     rows.push([
       `Data: ${dados.evento.data}`,
-      `Horario: ${dados.evento.hora_inicio} - ${dados.evento.hora_fim}`,
+      `Horário: ${dados.evento.hora_inicio} - ${dados.evento.hora_fim}`,
       dados.evento.nome_profissional ? `Profissional: ${dados.evento.nome_profissional}` : '',
     ]);
     rows.push([`Total de participantes: ${dados.total}`]);
@@ -198,8 +200,8 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
 
     for (const h of dados.horarios) {
       if (h.participantes.length === 0) continue;
-      rows.push([`Horario: ${h.hora_inicio} - ${h.hora_fim} (${h.participantes.length} participante${h.participantes.length !== 1 ? 's' : ''})`]);
-      rows.push(['Nome', 'E-mail', 'Horario', 'Tipo']);
+      rows.push([`Horário: ${h.hora_inicio} - ${h.hora_fim} (${h.participantes.length} participante${h.participantes.length !== 1 ? 's' : ''})`]);
+      rows.push(['Nome', 'E-mail', 'Horário', 'Tipo']);
       for (const p of h.participantes) {
         rows.push([
           p.nome,
@@ -217,7 +219,7 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
     ws['!cols'] = [{ wch: 40 }, { wch: 20 }, { wch: 30 }, { wch: 14 }];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Lista de Presenca');
+    XLSX.utils.book_append_sheet(wb, ws, 'Lista de Presença');
 
     const nomeArquivo = `lista-presenca-${dados.evento.titulo
       .normalize('NFD')
@@ -253,128 +255,135 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
 
       <div
         id="lista-presenca-print"
-        className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-slate-900/60 overflow-y-auto"
+        className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto transition-all"
         onClick={onClose}
       >
         <div
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-6"
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
           onClick={e => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 no-print">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-blue-600" />
-              <h2 className="font-bold text-slate-900">Lista de Presenca</h2>
+          {/* Header da Tabela */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-5 border-b border-slate-100 no-print bg-slate-50/50 rounded-t-2xl gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                <ClipboardList className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Lista de Presença</h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">Controle de inscritos no evento</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            
+            <div className="flex items-center gap-2 self-end sm:self-auto">
               {dados && (
-                <button
-                  onClick={imprimir}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Printer className="w-4 h-4" /> Imprimir
-                </button>
+                <>
+                  <button
+                    onClick={imprimir}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 rounded-xl text-sm font-bold shadow-sm transition-all"
+                  >
+                    <Printer className="w-4 h-4 text-slate-500" /> <span className="hidden sm:inline">Imprimir</span>
+                  </button>
+                  <button
+                    onClick={exportarXlsx}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm hover:shadow-emerald-500/20 transition-all"
+                  >
+                    <FileDown className="w-4 h-4" /> <span className="hidden sm:inline">Exportar Excel</span>
+                  </button>
+                </>
               )}
-              {dados && (
-                <button
-                  onClick={exportarXlsx}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  <FileDown className="w-4 h-4" /> Exportar XLSX
-                </button>
-              )}
-              <button onClick={onClose} className="text-slate-400 hover:text-slate-600 ml-1">
+              <button onClick={onClose} className="p-2 ml-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          <div className="px-6 py-5">
+          <div className="px-6 py-6">
             {loading && (
-              <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" /> Carregando...
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                <span className="font-medium">Carregando dados dos inscritos...</span>
               </div>
             )}
 
             {erro && (
-              <div className="py-10 text-center text-red-600 text-sm">{erro}</div>
+              <div className="py-12 flex flex-col items-center gap-3">
+                <AlertTriangle className="w-10 h-10 text-red-500 opacity-80" />
+                <div className="text-center text-red-600 font-medium">{erro}</div>
+                <button onClick={carregarLista} className="text-sm font-bold underline hover:text-red-800">Tentar novamente</button>
+              </div>
             )}
 
             {dados && (
               <>
-                <div className="mb-5 pb-4 border-b border-slate-200">
-                  <h1 className="text-xl font-bold text-slate-900">{dados.evento.titulo}</h1>
-                  <div className="flex flex-wrap gap-4 mt-1 text-sm text-slate-500">
-                    <span>Data: {dados.evento.data}</span>
-                    <span>Horario: {dados.evento.hora_inicio} - {dados.evento.hora_fim}</span>
+                <div className="mb-8 pb-6 border-b border-slate-100">
+                  <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">{dados.evento.titulo}</h1>
+                  <div className="flex flex-wrap gap-x-6 gap-y-2 mt-3 text-sm text-slate-600 font-medium">
+                    <span className="flex items-center gap-1.5"><strong className="text-slate-800">Data:</strong> {dados.evento.data}</span>
+                    <span className="flex items-center gap-1.5"><strong className="text-slate-800">Horário:</strong> {dados.evento.hora_inicio} - {dados.evento.hora_fim}</span>
                     {dados.evento.nome_profissional && (
-                      <span>Profissional: {dados.evento.nome_profissional}</span>
+                      <span className="flex items-center gap-1.5"><strong className="text-slate-800">Profissional:</strong> {dados.evento.nome_profissional}</span>
                     )}
-                    <span className="font-semibold text-slate-700">
-                      Total: {dados.total} participante{dados.total !== 1 ? 's' : ''}
+                    <span className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                      <strong>Total:</strong> {dados.total} participante{dados.total !== 1 ? 's' : ''}
                     </span>
                   </div>
                 </div>
 
                 {dados.total === 0 ? (
-                  <div className="py-10 text-center text-slate-400 text-sm">
-                    <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    Nenhum participante registrado ainda.
+                  <div className="py-16 flex flex-col items-center justify-center text-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl">
+                    <Users className="w-12 h-12 text-slate-300 mb-3" />
+                    <h3 className="text-lg font-bold text-slate-800 mb-1">Lista Vazia</h3>
+                    <p className="text-sm text-slate-500">Nenhum participante foi registrado para este evento ainda.</p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-8">
                     {dados.horarios.filter(h => h.participantes.length > 0).map(h => (
-                      <div key={h.horario_id}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-semibold border border-blue-100">
-                            {h.hora_inicio} - {h.hora_fim}
+                      <div key={h.horario_id} className="animate-in fade-in duration-500">
+                        
+                        <div className="flex items-center gap-3 mb-3 pl-1">
+                          <span className="px-3 py-1 bg-slate-800 text-white rounded-lg text-sm font-bold shadow-sm">
+                            {h.hora_inicio.substring(0, 5)} - {h.hora_fim.substring(0, 5)}
                           </span>
-                          <span className="text-xs text-slate-400">
-                            {h.participantes.length} participante{h.participantes.length !== 1 ? 's' : ''}
+                          <span className="text-sm font-medium text-slate-500">
+                            {h.participantes.length} inscrito{h.participantes.length !== 1 ? 's' : ''} neste horário
                           </span>
                         </div>
 
-                        <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="w-8 px-3 py-2 text-left text-xs font-semibold text-slate-500">✓</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Nome</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 hidden sm:table-cell">E-mail</th>
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 hidden sm:table-cell">Horario</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-slate-500 no-print">Tipo</th>
-                                <th className="px-2 py-2 no-print" />
+                              <tr className="bg-slate-50/80 border-b border-slate-200">
+                                <th className="w-12 px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nome do Participante</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider hidden sm:table-cell">E-mail corporativo</th>
+                                <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider no-print">Origem</th>
+                                <th className="w-12 px-2 py-3 no-print" />
                               </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-slate-100">
                               {h.participantes.map((p, i) => (
-                                <tr
-                                  key={i}
-                                  className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
-                                >
-                                  <td className="px-3 py-2.5">
-                                    <div className="w-4 h-4 border-2 border-slate-300 rounded" />
+                                <tr key={i} className="bg-white hover:bg-slate-50/60 transition-colors group">
+                                  <td className="px-4 py-3.5 align-middle">
+                                    <div className="w-5 h-5 border-2 border-slate-300 rounded bg-white group-hover:border-blue-400 transition-colors" />
                                   </td>
-                                  <td className="px-3 py-2.5 font-medium text-slate-800">{p.nome}</td>
-                                  <td className="px-3 py-2.5 text-slate-500 hidden sm:table-cell">{p.email}</td>
-                                  <td className="px-3 py-2.5 text-slate-500 hidden sm:table-cell">
-                                    {p.hora_inicio} - {p.hora_fim}
-                                  </td>
-                                  <td className="px-2 py-2.5 text-center no-print">
-                                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  <td className="px-4 py-3.5 font-semibold text-slate-800">{p.nome}</td>
+                                  <td className="px-4 py-3.5 text-slate-500 hidden sm:table-cell">{p.email || <span className="text-slate-300 italic">Não informado</span>}</td>
+                                  <td className="px-4 py-3.5 text-center no-print">
+                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${
                                       p.tipo === 'email'
-                                        ? 'bg-blue-100 text-blue-700'
-                                        : 'bg-amber-100 text-amber-700'
+                                        ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                        : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                                     }`}>
-                                      {p.tipo === 'email' ? 'E-mail' : 'Manual'}
+                                      {p.tipo === 'email' ? 'Sistema' : 'Manual'}
                                     </span>
                                   </td>
-                                  <td className="px-2 py-2.5 text-center no-print">
+                                  <td className="px-2 py-3.5 text-center no-print align-middle">
                                     {p.tipo === 'manual' && p.participante_id != null && (
                                       <button
                                         onClick={() => handleRemover(p.participante_id!)}
                                         disabled={removendoId === p.participante_id}
-                                        title="Remover participante"
-                                        className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-40 transition-colors"
+                                        title="Remover inscrição manual"
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg disabled:opacity-40 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                                       >
                                         {removendoId === p.participante_id
                                           ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -392,8 +401,8 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
                   </div>
                 )}
 
-                <div className="mt-6 pt-4 border-t border-slate-200 text-xs text-slate-400 text-right">
-                  Gerado em {new Date().toLocaleString('pt-BR')}
+                <div className="mt-8 pt-4 border-t border-slate-100 text-xs font-medium text-slate-400 text-right">
+                  Relatório gerado em {new Date().toLocaleString('pt-BR')}
                 </div>
               </>
             )}
@@ -415,8 +424,8 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
   const horarios: HorarioDTO[] = evento.horarios ?? [];
 
   async function handleSalvar() {
-    if (!nome.trim()) { setErro('Informe o nome do participante.'); return; }
-    if (!horarioId) { setErro('Selecione um horario.'); return; }
+    if (!nome.trim()) { setErro('Informe o nome completo do participante.'); return; }
+    if (!horarioId) { setErro('Selecione um horário disponível.'); return; }
     setSalvando(true);
     setErro('');
     try {
@@ -428,124 +437,137 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
       setSucesso(true);
       onSuccess();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Erro ao registrar participante.');
+      setErro(err instanceof Error ? err.message : 'Erro ao registrar participante no sistema.');
     } finally {
       setSalvando(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200">
         {sucesso ? (
-          <div className="text-center py-4">
-            <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+          <div className="text-center py-6 animate-in zoom-in-90 duration-300">
+            <div className="w-20 h-20 bg-emerald-50 border-4 border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5 relative">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 animate-bounce" />
             </div>
-            <h3 className="font-bold text-slate-900 text-lg mb-1">Participante registrado!</h3>
-            <p className="text-sm text-slate-500 mb-6">
-              <span className="font-medium">{nome}</span> foi adicionado ao evento com sucesso.
+            <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight mb-2">Inscrição Confirmada!</h3>
+            <p className="text-slate-500 mb-8 max-w-xs mx-auto">
+              <span className="font-bold text-slate-800">{nome}</span> foi adicionado(a) manualmente ao evento com sucesso.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3">
               <button
                 onClick={() => { setNome(''); setDepartamento(''); setHorarioId(''); setSucesso(false); }}
-                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors"
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm hover:shadow-emerald-500/20 transition-all"
               >
-                Registrar outro
+                Registrar Novo Participante
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors"
+                className="w-full py-3 px-4 bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold transition-colors"
               >
-                Fechar
+                Concluir e Fechar
               </button>
             </div>
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-start justify-between mb-6">
               <div>
-                <h3 className="font-bold text-slate-900">Registrar Participante</h3>
-                <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">{evento.titulo}</p>
+                <h3 className="text-xl font-bold text-slate-900 tracking-tight">Inscrição Manual</h3>
+                <p className="text-sm font-medium text-slate-500 mt-1 line-clamp-1 pr-4">{evento.titulo}</p>
               </div>
-              <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+              <button onClick={onClose} className="p-2 -mr-2 -mt-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            {erro && (
+              <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3 text-sm font-medium animate-in slide-in-from-top-2">
+                <AlertTriangle className="w-5 h-5 shrink-0 text-red-500" />
+                <span>{erro}</span>
+              </div>
+            )}
+
+            <div className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Nome completo <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Nome do Participante <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={nome}
                   onChange={e => setNome(e.target.value)}
-                  placeholder="Ex: Joao da Silva"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ex: Maria Carolina"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Setor</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Setor / Departamento
+                </label>
                 <input
                   type="text"
                   value={departamento}
                   onChange={e => setDepartamento(e.target.value)}
-                  placeholder="Opcional"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Opcional (Ex: RH, TI)"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Horario <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Horário Desejado <span className="text-red-500">*</span>
+                </label>
                 {horarios.length === 0 ? (
-                  <p className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-xl border border-amber-100">
-                    Nenhum horario gerado para este evento.
-                  </p>
+                  <div className="p-3 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-xl flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Evento sem horários cadastrados.
+                  </div>
                 ) : (
-                  <select
-                    value={horarioId}
-                    onChange={e => setHorarioId(Number(e.target.value))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="">Selecione um horario...</option>
-                    {horarios.map(h => {
-                      const lotado = h.vagas_livres === 0;
-                      return (
-                        <option key={h.id} value={h.id} disabled={lotado}>
-                          {h.hora_inicio.substring(0, 5)} - {h.hora_fim.substring(0, 5)}
-                          {' '}{lotado ? '(Lotado)' : `(${h.vagas_livres}/${h.vagas_disponiveis} vagas)`}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={horarioId}
+                      onChange={e => setHorarioId(Number(e.target.value))}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all outline-none appearance-none cursor-pointer"
+                    >
+                      <option value="" disabled className="text-slate-400">Selecione uma faixa de horário...</option>
+                      {horarios.map(h => {
+                        const lotado = h.vagas_livres === 0;
+                        return (
+                          <option key={h.id} value={h.id} disabled={lotado}>
+                            {h.hora_inicio.substring(0, 5)} até {h.hora_fim.substring(0, 5)} 
+                            {lotado ? ' (Esgotado)' : ` - ${h.vagas_livres} vagas restantes`}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {/* Custom Dropdown Arrow */}
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                      <svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                      </svg>
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {erro && (
-                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{erro}</p>
-              )}
-
-              <div className="flex gap-3 pt-1">
+              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
                 <button
                   onClick={onClose}
                   disabled={salvando}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-3 text-sm font-bold text-slate-700 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSalvar}
                   disabled={salvando || horarios.length === 0}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-3 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm hover:shadow-md hover:shadow-blue-500/20 rounded-xl transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                 >
-                  {salvando && (
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                  )}
-                  {salvando ? 'Registrando...' : 'Registrar'}
+                  {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {salvando ? 'Salvando...' : 'Confirmar Inscrição'}
                 </button>
               </div>
             </div>

@@ -35,136 +35,129 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* 1 a 9. Cabeçalho Institucional Refatorado */}
-      <header className="w-full bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center">
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-8">
+      
+      {/* Container Centralizado com Largura Aumentada (max-w-lg) */}
+      <div className="w-full max-w-lg flex flex-col items-center">
+        
+        {/* Identidade Visual */}
+        <div className="mb-8 text-center flex flex-col items-center">
           <img
             src={logoAeb}
             alt="Logo Agência Espacial Brasileira"
-            className="h-12 sm:h-14 w-auto"
+            className="h-16 sm:h-20 w-auto mb-4 drop-shadow-sm"
           />
-          <div className="flex flex-col justify-center">
-            <span className="font-bold text-lg sm:text-xl text-slate-800 tracking-tight leading-tight">
-              Agenda Bem-Estar
-            </span>
-            <span className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
-              Sistema Corporativo de Gestão de Eventos de Bem-Estar
-            </span>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Agenda Bem-Estar
+          </h1>
+          <p className="text-sm sm:text-base text-slate-500 font-medium mt-1">
+            Gestão de Eventos Corporativos
+          </p>
         </div>
-      </header>
 
-      {/* Área Principal (Card centralizado) */}
-      <main className="flex-1 flex flex-col items-center justify-center p-4 relative">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden relative z-10 mb-8">
-          {/* Imagem topo do card */}
-          <div className="h-48 relative bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300">
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/10 to-transparent" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <img
-                src={logoAeb}
-                alt="Logo AEB"
-                className="h-24 sm:h-28 md:h-32 w-auto drop-shadow-md"
-              />
-            </div>
+        {/* Card do Formulário com Altura Orgânica Aumentada (py-16) */}
+        <main className="w-full bg-white rounded-2xl shadow-xl border border-slate-100 p-8 sm:px-12 sm:py-16 transition-all">
+          <div className="mb-10">
+            <h2 className="text-xl font-bold text-slate-800">Acesso Restrito</h2>
+            <p className="text-slate-500 text-sm mt-1">
+              Faça login para administrar o sistema.
+            </p>
           </div>
 
-          {/* Formulário */}
-          <div className="p-8">
-            <h1 className="text-2xl font-bold text-slate-900 mb-1">Entrar</h1>
-            <p className="text-slate-500 mb-6 text-sm">
-              Acesso exclusivo para administradores do sistema.
-            </p>
+          {erro && (
+            <div className="flex items-center gap-3 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3 mb-8 text-sm font-medium animate-pulse">
+              <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+              <span>{erro}</span>
+            </div>
+          )}
 
-            {erro && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-5 text-sm">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                {erro}
-              </div>
-            )}
-
-            <form onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }} className="space-y-5">
-              {/* E-mail */}
-              <div className="space-y-1.5">
-                <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-                  E-mail corporativo
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    autoComplete="email"
-                    required
-                  />
+          {/* Maior espaçamento vertical entre os campos (space-y-8) */}
+          <form onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }} className="space-y-8">
+            
+            {/* E-mail */}
+            <div className="space-y-2">
+              <label htmlFor="email" className="block text-sm font-semibold text-slate-700">
+                E-mail corporativo
+              </label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none transition-colors group-focus-within:text-blue-500 text-slate-400">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
                 </div>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all duration-200 outline-none"
+                  placeholder="usuario@aeb.gov.br"
+                  autoComplete="email"
+                  required
+                />
               </div>
+            </div>
 
-              {/* Senha */}
-              <div className="space-y-1.5">
-                <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                  Senha
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  </div>
-                  <input
-                    id="password"
-                    type={mostrarSenha ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setMostrarSenha(v => !v)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
-                  >
-                    {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+            {/* Senha */}
+            <div className="space-y-2">
+              <label htmlFor="password" className="block text-sm font-semibold text-slate-700">
+                Senha
+              </label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none transition-colors group-focus-within:text-blue-500 text-slate-400">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
                 </div>
+                <input
+                  id="password"
+                  type={mostrarSenha ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="block w-full pl-11 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all duration-200 outline-none"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenha(v => !v)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+                  aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+                >
+                  {mostrarSenha ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
+            </div>
 
+            {/* Botão de Submit com mais espaçamento superior (pt-4) */}
+            <div className="pt-4">
               <button
                 type="submit"
                 disabled={carregando}
-                className="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm hover:shadow-md hover:shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 active:scale-[0.98]"
               >
                 {carregando ? (
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
                 ) : (
-                  <LogIn className="w-4 h-4" />
+                  <LogIn className="w-5 h-5" />
                 )}
-                {carregando ? 'Entrando...' : 'Entrar'}
+                {carregando ? 'Autenticando...' : 'Entrar no Sistema'}
               </button>
-            </form>
-          </div>
-        </div>
+            </div>
+          </form>
+        </main>
 
-        {/* Rodapé movido para dentro da tag main para melhor fluidez em telas muito baixas */}
-        <div className="absolute bottom-6 text-xs text-slate-400">
-          © 2026 Agência Espacial Brasileira
-        </div>
-      </main>
+        {/* Rodapé Dinâmico e Responsivo */}
+        <footer className="mt-8 text-center text-xs font-medium text-slate-400">
+          © {new Date().getFullYear()} Agência Espacial Brasileira - CTI
+        </footer>
+      </div>
     </div>
   );
 }
