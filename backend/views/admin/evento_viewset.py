@@ -117,16 +117,13 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        # MODO TESTE — trocar pelo bloco MODO PRODUÇÃO quando a LD estiver configurada.
-        destinatario = 'jonas.silva@aeb.gov.br'
-
-        # MODO PRODUÇÃO:
-        # destinatario = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
-        # if not destinatario:
-        #     return Response(
-        #         {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
-        #         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        #     )
+        destinatarios_raw = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
+        if not destinatarios_raw:
+            return Response(
+                {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        destinatario = [d.strip() for d in destinatarios_raw.split(',') if d.strip()]
 
         corpo_html = evento.corpo_email or ''
         link_acesso = f"{settings.FRONTEND_URL}/evento/{evento.id}/entrar"
