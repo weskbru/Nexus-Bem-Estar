@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
+import logoAeb from '../../images/logoaeb.png';
 import {
   AlertTriangle,
   X,
@@ -230,31 +231,122 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
     XLSX.writeFile(wb, nomeArquivo);
   }
 
-  function imprimir() {
-    window.print();
+  async function imprimir() {
+    if (!dados) return;
+
+    // Converte a logo para base64 para embuti-la diretamente no HTML impresso,
+    // evitando que o browser dispare dois diálogos enquanto aguarda o carregamento da imagem.
+    let logoSrc = '';
+    try {
+      const resp = await fetch(logoAeb);
+      const blob = await resp.blob();
+      logoSrc = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      logoSrc = window.location.origin + logoAeb;
+    }
+
+    const horariosHtml = dados.horarios
+      .filter(h => h.participantes.length > 0)
+      .map(h => `
+        <div style="margin-bottom:22px;page-break-inside:avoid;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="background:#1e293b;color:#fff;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:0.05em;">
+              ${h.hora_inicio.substring(0, 5)} – ${h.hora_fim.substring(0, 5)}
+            </span>
+            <span style="font-size:11px;color:#64748b;font-weight:600;">
+              ${h.participantes.length} inscrito${h.participantes.length !== 1 ? 's' : ''} neste horário
+            </span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:11px;border:1px solid #cbd5e1;">
+            <thead>
+              <tr style="background:#f1f5f9;">
+                <th style="width:28px;padding:7px 10px;text-align:center;border-bottom:1px solid #cbd5e1;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">#</th>
+                <th style="padding:7px 10px;text-align:left;border-bottom:1px solid #cbd5e1;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Nome do Participante</th>
+                <th style="padding:7px 10px;text-align:left;border-bottom:1px solid #cbd5e1;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">E-mail corporativo</th>
+                <th style="width:72px;padding:7px 10px;text-align:center;border-bottom:1px solid #cbd5e1;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Presença</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${h.participantes.map((p, i) => `
+                <tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};">
+                  <td style="padding:7px 10px;text-align:center;border-bottom:1px solid #e2e8f0;color:#94a3b8;font-weight:600;">${i + 1}</td>
+                  <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f172a;">${p.nome}</td>
+                  <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;color:#64748b;">${p.email || '—'}</td>
+                  <td style="padding:7px 10px;text-align:center;border-bottom:1px solid #e2e8f0;">
+                    <div style="width:18px;height:18px;border:1.5px solid #94a3b8;border-radius:4px;display:inline-block;"></div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `).join('');
+
+    const profissional = dados.evento.nome_profissional
+      ? `<span><strong style="color:#475569;">Profissional:</strong> ${dados.evento.nome_profissional}</span>`
+      : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lista de Presença — ${dados.evento.titulo}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', Arial, sans-serif; color: #0f172a; padding: 20mm 22mm; font-size: 12px; }
+    @page { size: A4 portrait; margin: 18mm 20mm; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div style="border-bottom:2px solid #2563eb;padding-bottom:16px;margin-bottom:18px;text-align:center;">
+    <img src="${logoSrc}" alt="Logo AEB" style="height:56px;object-fit:contain;margin:0 auto 12px;display:block;" />
+    <div style="font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">
+      Lista de Presença
+    </div>
+    <h1 style="font-size:20px;font-weight:800;color:#0f172a;line-height:1.25;">
+      ${dados.evento.titulo}
+    </h1>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:8px 24px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+    <span><strong style="color:#475569;">Data:</strong> ${dados.evento.data}</span>
+    <span><strong style="color:#475569;">Horário:</strong> ${dados.evento.hora_inicio} – ${dados.evento.hora_fim}</span>
+    ${profissional}
+    <span style="margin-left:auto;background:#eff6ff;color:#1d4ed8;padding:2px 10px;border-radius:6px;border:1px solid #bfdbfe;font-weight:700;">
+      ${dados.total} participante${dados.total !== 1 ? 's' : ''}
+    </span>
+  </div>
+
+  ${horariosHtml}
+
+  <div style="margin-top:24px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;font-weight:500;">
+    <span>Relatório gerado em ${new Date().toLocaleString('pt-BR')}</span>
+    <span>Sistema de Bem-Estar — AEB</span>
+  </div>
+</body>
+</html>`;
+
+    const janela = window.open('', '_blank', 'width=900,height=700');
+    if (!janela) return;
+    janela.document.write(html);
+    janela.document.close();
+    janela.focus();
+    janela.onload = () => {
+      janela.print();
+      janela.onafterprint = () => janela.close();
+    };
   }
 
   return (
     <>
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #lista-presenca-print,
-          #lista-presenca-print * { visibility: visible; }
-          #lista-presenca-print {
-            position: fixed !important;
-            left: 0; top: 0;
-            width: 100%;
-            background: white !important;
-            overflow: visible !important;
-            box-shadow: none !important;
-          }
-          #lista-presenca-print .no-print { display: none !important; visibility: hidden; }
-        }
-      `}</style>
-
+      {/* ── Modal na tela ── */}
       <div
-        id="lista-presenca-print"
         className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto transition-all"
         onClick={onClose}
       >
