@@ -118,7 +118,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             )
 
         # MODO TESTE — trocar pelo bloco MODO PRODUÇÃO quando a LD estiver configurada.
-        destinatario = 'wesley.pereira@aeb.gov.br'
+        destinatario = 'jonas.silva@aeb.gov.br'
 
         # MODO PRODUÇÃO:
         # destinatario = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
