@@ -142,3 +142,13 @@ else:
 
 # Janela maxima para agendamento de eventos no futuro (em meses)
 EVENTO_MAX_MESES_FUTURO = config('EVENTO_MAX_MESES_FUTURO', default=6, cast=int)
+
+# LDAP / Active Directory
+# 'mock' → lista local (dev sem acesso ao AD)
+# 'ldap' → busca real no AD da AEB
+USUARIO_BUSCA_BACKEND = config('USUARIO_BUSCA_BACKEND', default='mock')
+LDAP_HOST             = config('LDAP_HOST',             default='ldap.aeb.gov.br')
+LDAP_PORT             = config('LDAP_PORT',             default=389, cast=int)
+LDAP_BIND_DN          = config('LDAP_BIND_DN',          default='')
+LDAP_BIND_PASSWORD    = config('LDAP_BIND_PASSWORD',    default='')
+LDAP_BASE_DN          = config('LDAP_BASE_DN',          default='OU=USUARIOS,OU=AEB,DC=aeb,DC=gov,DC=br')
