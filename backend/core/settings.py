@@ -77,6 +77,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Modelo de usuário customizado
@@ -113,16 +114,16 @@ EMAIL_HOST = config('EMAIL_HOST', default='')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-DEFAULT_FROM_EMAIL = config(
-    'DEFAULT_FROM_EMAIL',
-    default='Agenda Bem-Estar <noreply@empresa.com.br>'
-)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@aeb.gov.br')
 
 # URL base do frontend usada nos links de e-mail
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
-<<<<<<< HEAD
+# Destinatário único do disparo de e-mails de evento.
+# Em teste: e-mail pessoal. Em produção: Lista de Distribuição (ex: ld-usuarios@aeb.gov.br)
+EMAIL_DESTINO_EVENTO = config('EMAIL_DESTINO_EVENTO', default='')
 # Cache — Redis em produção, memória local em dev
 _REDIS_URL = os.getenv('REDIS_URL', '')
 if _REDIS_URL:
@@ -138,7 +139,16 @@ else:
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         }
     }
-=======
+
 # Janela maxima para agendamento de eventos no futuro (em meses)
 EVENTO_MAX_MESES_FUTURO = config('EVENTO_MAX_MESES_FUTURO', default=6, cast=int)
->>>>>>> 0b4d7518ac68855d5901066595fca12a5f435169
+
+# LDAP / Active Directory
+# 'mock' → lista local (dev sem acesso ao AD)
+# 'ldap' → busca real no AD da AEB
+USUARIO_BUSCA_BACKEND = config('USUARIO_BUSCA_BACKEND', default='mock')
+LDAP_HOST             = config('LDAP_HOST',             default='ldap.aeb.gov.br')
+LDAP_PORT             = config('LDAP_PORT',             default=389, cast=int)
+LDAP_BIND_DN          = config('LDAP_BIND_DN',          default='')
+LDAP_BIND_PASSWORD    = config('LDAP_BIND_PASSWORD',    default='')
+LDAP_BASE_DN          = config('LDAP_BASE_DN',          default='OU=USUARIOS,OU=AEB,DC=aeb,DC=gov,DC=br')

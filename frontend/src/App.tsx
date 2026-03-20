@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginColaborador from './pages/LoginColaborador';
 import LoginAdmin from './pages/Login';
 import AcessoViaToken from './pages/AcessoViaToken';
+import AcessarEvento from './pages/AcessarEvento';
 import AdminLayout from './layouts/AdminLayout';
 import Dashboard from './pages/admin/Dashboard';
 import AdminEventos from './pages/admin/EventosAgendados';
@@ -14,6 +15,7 @@ import GestaoUsuarios from './pages/admin/GestaoUsuarios';
 import ColaboradorLayout from './layouts/ColaboradorLayout';
 import EventDetails from './pages/colaborador/EventDetails';
 import Confirmacao from './pages/colaborador/Confirmacao';
+import ConfirmarVagaListaEspera from './pages/ConfirmarVagaListaEspera';
 
 function App() {
   return (
@@ -31,6 +33,12 @@ function App() {
 
           {/* Acesso via link de token (e-mail) */}
           <Route path="/acesso/:token" element={<AcessoViaToken />} />
+
+          {/* Acesso via e-mail + palavra-chave (fluxo lista de distribuição) */}
+          <Route path="/evento/:eventoId/entrar" element={<AcessarEvento />} />
+
+          {/* Confirmação de vaga da lista de espera via link do e-mail */}
+          <Route path="/confirmar-vaga/:token" element={<ConfirmarVagaListaEspera />} />
 
           <Route
             path="/admin/*"
@@ -56,8 +64,11 @@ function App() {
               </ProtectedRoute>
             }
           >
+            <Route index element={<Navigate to="/login" replace />} />
+            <Route path="eventos" element={<Navigate to="/login" replace />} />
             <Route path="eventos/:id" element={<EventDetails />} />
             <Route path="confirmacao" element={<Confirmacao />} />
+            <Route path="agendamentos" element={<Navigate to="/login" replace />} />
           </Route>
         </Routes>
       </AuthProvider>

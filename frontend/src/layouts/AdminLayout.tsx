@@ -3,7 +3,6 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Calendar,
-  Settings,
   Bell,
   HelpCircle,
   LogOut,
@@ -20,22 +19,47 @@ type AgendamentoNotificacao = {
   status: 'DISPONIVEL' | 'OCUPADO' | 'CANCELADO';
 };
 
+type EventoResumo = {
+  id: number;
+  titulo: string;
+  data: string;
+  hora_inicio: string;
+  status: string;
+};
+
+type NotificacaoItem = {
+  id: string;
+  titulo: string;
+  subtitulo: string;
+  data_hora: string;
+  categoria: 'agendamento' | 'evento_publicado';
+};
+
 type DashboardResumo = {
   agendamentos: AgendamentoNotificacao[];
 };
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
+const NOTIFICACOES_REFRESH_MS = 30000;
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/agendamentos', icon: Calendar, label: 'Agendamentos', end: false },
-  { to: '/admin/configuracoes', icon: Settings, label: 'Configurações', end: false },
 ];
 
 export default function AdminLayout() {
   const { usuario, logout, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
-  const [notificacoes, setNotificacoes] = useState<AgendamentoNotificacao[]>([]);
+  const [notificacoes, setNotificacoes] = useState<NotificacaoItem[]>([]);
   const [abrirNotificacoes, setAbrirNotificacoes] = useState(false);
   const notificacoesRef = useRef<HTMLDivElement | null>(null);
 
@@ -47,6 +71,37 @@ export default function AdminLayout() {
   useEffect(() => {
     fetchNotificacoes();
   }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      fetchNotificacoes();
+    }, NOTIFICACOES_REFRESH_MS);
+
+    function handleFocus() {
+      fetchNotificacoes();
+    }
+
+    function handleVisibilityChange() {
+      if (!document.hidden) {
+        fetchNotificacoes();
+      }
+    }
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (abrirNotificacoes) {
+      fetchNotificacoes();
+    }
+  }, [abrirNotificacoes]);
 
   useEffect(() => {
     if (!abrirNotificacoes) return;
@@ -75,33 +130,54 @@ export default function AdminLayout() {
 
   async function fetchNotificacoes() {
     try {
-      const res = await fetch(`${API_BASE}/admin/dashboard/`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
+      const token = localStorage.getItem('access_token');
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
 
-      if (!res.ok) return;
+      const [dashboardRes, eventosRes] = await Promise.all([
+        fetch(`${API_BASE}/admin/dashboard/`, { headers }),
+        fetch(`${API_BASE}/admin/eventos/`, { headers }),
+      ]);
 
-      const json: DashboardResumo = await res.json();
-      const itens = (json.agendamentos ?? [])
+      const agendamentos: AgendamentoNotificacao[] = dashboardRes.ok
+        ? ((await dashboardRes.json()) as DashboardResumo).agendamentos ?? []
+        : [];
+      const eventos: EventoResumo[] = eventosRes.ok
+        ? await eventosRes.json()
+        : [];
+
+      const agendamentosItens: NotificacaoItem[] = agendamentos
         .filter((a) => a.status === 'OCUPADO')
+        .map((a) => ({
+          id: `agendamento-${a.id}`,
+          titulo: a.colaborador_nome,
+          subtitulo: a.servico,
+          data_hora: a.data_hora,
+          categoria: 'agendamento',
+        }));
+
+      const eventosItens: NotificacaoItem[] = eventos
+        .filter((e) => {
+          const status = e.status.toUpperCase();
+          return status === 'ATIVO' || status === 'PUBLICADO';
+        })
+        .map((e) => ({
+          id: `evento-${e.id}`,
+          titulo: e.titulo,
+          subtitulo: 'Evento publicado para agendamento',
+          data_hora: `${e.data}T${e.hora_inicio}`,
+          categoria: 'evento_publicado',
+        }));
+
+      const itens = [...agendamentosItens, ...eventosItens]
         .sort((a, b) => new Date(b.data_hora).getTime() - new Date(a.data_hora).getTime())
-        .slice(0, 5);
+        .slice(0, 8);
 
       setNotificacoes(itens);
     } catch {
       setNotificacoes([]);
     }
-  }
-
-  function formatDateTime(iso: string): string {
-    return new Date(iso).toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   }
 
   return (
@@ -213,13 +289,16 @@ export default function AdminLayout() {
                 </div>
 
                 {notificacoes.length === 0 ? (
-                  <p className="text-sm text-slate-500 py-3">Sem novos agendamentos confirmados.</p>
+                  <p className="text-sm text-slate-500 py-3">Sem notificações no momento.</p>
                 ) : (
                   <ul className="space-y-2">
                     {notificacoes.map((n) => (
                       <li key={n.id} className="rounded-lg bg-slate-50 px-3 py-2">
-                        <p className="text-sm text-slate-800 font-medium truncate">{n.colaborador_nome}</p>
-                        <p className="text-xs text-slate-600 truncate">{n.servico}</p>
+                        <p className="text-sm text-slate-800 font-medium truncate">{n.titulo}</p>
+                        <p className="text-xs text-slate-600 truncate">{n.subtitulo}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {n.categoria === 'evento_publicado' ? 'Evento publicado' : 'Agendamento confirmado'}
+                        </p>
                         <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(n.data_hora)}</p>
                       </li>
                     ))}

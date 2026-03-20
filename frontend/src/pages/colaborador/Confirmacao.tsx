@@ -1,6 +1,5 @@
-import { Link } from 'react-router-dom';
-import { CheckCircle2, Calendar, Clock, User, MapPin, XCircle, AlertCircle } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { CheckCircle2, Calendar, Clock, XCircle, AlertCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface ConfirmacaoData {
@@ -22,12 +21,13 @@ export default function Confirmacao() {
   const location = useLocation();
   const navigate = useNavigate();
   const [dados, setDados] = useState<ConfirmacaoData | null>(null);
+  const destinoEvento = dados?.evento?.id ? `/colaborador/eventos/${dados.evento.id}` : '/login';
 
   useEffect(() => {
     const state = location.state as ConfirmacaoData | null;
     if (!state) {
       // Redirecionar se veio sem dados
-      navigate('/colaborador/eventos');
+      navigate('/login');
       return;
     }
     setDados(state);
@@ -119,29 +119,6 @@ export default function Confirmacao() {
                 </span>
               </div>
 
-              <div className="h-px bg-slate-200"></div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center text-slate-600 gap-3">
-                  <User className="w-5 h-5 text-blue-600" />
-                  <span className="font-medium">Profissional</span>
-                </div>
-                <span className="font-semibold text-slate-900">
-                  {dados.evento?.nome_profissional}
-                </span>
-              </div>
-
-              <div className="h-px bg-slate-200"></div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center text-slate-600 gap-3">
-                  <MapPin className="w-5 h-5 text-blue-600" />
-                  <span className="font-medium">Local</span>
-                </div>
-                <span className="font-semibold text-slate-900">
-                  {dados.evento?.local}
-                </span>
-              </div>
             </div>
 
             {/* Mensagem de Confirmação */}
@@ -153,24 +130,20 @@ export default function Confirmacao() {
 
             {/* Botões de Ação */}
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link to="/colaborador/eventos" className="flex-1">
-                <button className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
-                  Ver Meus Agendamentos
-                </button>
+              <Link
+                to={destinoEvento}
+                className="flex-1 w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors text-center"
+              >
+                Ver Evento
               </Link>
-              <Link to="/colaborador/eventos" className="flex-1">
-                <button className="w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors">
-                  Explorar Outros Eventos
-                </button>
+              <Link
+                to={destinoEvento}
+                className="flex-1 w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors text-center"
+              >
+                Ir para Evento
               </Link>
             </div>
 
-            {/* Informação Adicional */}
-            <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-200">
-              <p className="text-sm text-blue-900">
-                <span className="font-semibold">📌 Lembrete:</span> Chegue com 10 minutos de antecedência. Se precisar cancelar, avise com antecedência através do seu gestor.
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -198,10 +171,11 @@ export default function Confirmacao() {
               Sua recusa foi registrada. Se mudar de ideia, entre em contato com o administrador do sistema.
             </p>
 
-            <Link to="/colaborador/eventos">
-              <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
-                Voltar para Eventos
-              </button>
+            <Link
+              to={destinoEvento}
+              className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors"
+            >
+              Voltar para Evento
             </Link>
           </div>
         </div>
@@ -230,10 +204,11 @@ export default function Confirmacao() {
             {dados.mensagem || 'Tente novamente mais tarde ou entre em contato com o administrador.'}
           </p>
 
-          <Link to="/colaborador/eventos">
-            <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors">
-              Voltar para Eventos
-            </button>
+          <Link
+            to={destinoEvento}
+            className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors"
+          >
+            Voltar para Evento
           </Link>
         </div>
       </div>

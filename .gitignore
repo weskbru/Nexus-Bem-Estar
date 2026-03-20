@@ -3,17 +3,32 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 
-# Env
+# Env — NUNCA versionar arquivos com segredos reais
 .env
+# .env.example e .env.vm são templates (sem segredos) — vão para o repo normalmente
+
+# Django
+backend/staticfiles/
+db.sqlite3
 
 # Node
 node_modules/
+frontend/node_modules/
 
 # Build
 dist/
 build/
+frontend/dist/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs (inclui gunicorn)
+*.log
+gunicorn.log
+
+# Docker volumes locais
+postgres_data/

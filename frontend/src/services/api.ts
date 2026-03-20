@@ -1,5 +1,28 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 
+/** Lê o corpo da resposta como JSON com segurança.
+ *  Se o servidor devolver HTML (ex: erro 500 do nginx), retorna null em vez de explodir. */
+async function safeJson(res: Response): Promise<Record<string, unknown> | null> {
+  const ct = res.headers.get('content-type') ?? '';
+  if (!ct.includes('application/json')) return null;
+  return res.json().catch(() => null);
+}
+
+/** Converte qualquer erro capturado em mensagem amigável para o usuário. */
+export function parseFetchError(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  const raw = err.message;
+  if (
+    raw.includes('DOCTYPE') || raw.includes('<!') ||
+    raw.includes('JSON') || raw.includes('token') ||
+    raw.includes('fetch') || raw.includes('Failed to fetch') ||
+    raw.includes('NetworkError')
+  ) {
+    return 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.';
+  }
+  return raw || fallback;
+}
+
 function getToken(): string | null {
   return localStorage.getItem('access_token');
 }
@@ -25,11 +48,15 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const erro = await res.json().catch(() => ({ erro: 'Erro desconhecido' }));
-    throw new Error(erro.erro ?? erro.detail ?? 'Erro na requisição');
+    const erro = await safeJson(res);
+    throw new Error(
+      (erro?.erro as string) ?? (erro?.detail as string) ??
+      'Não foi possível completar a operação. Tente novamente.'
+    );
   }
 
-  return res.json() as Promise<T>;
+  const body = await safeJson(res);
+  return body as T;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────
@@ -50,6 +77,31 @@ export interface LoginResponse {
   usuario: UsuarioDTO;
 }
 
+export interface AcessoPreviewDTO {
+  requer_palavra_chave: true;
+  evento_titulo: string;
+  evento_tipo: string;
+  evento_data: string;
+  evento_hora_inicio: string;
+  evento_hora_fim: string;
+  nome_profissional: string;
+}
+
+export type AcessoTokenResponse =
+  | (LoginResponse & { evento_id: number; chave_mensagem: string })
+  | AcessoPreviewDTO;
+
+export interface EventoPublicoDTO {
+  id: number;
+  titulo: string;
+  tipo: string;
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
+  nome_profissional: string;
+  requer_palavra_chave: boolean;
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     request<LoginResponse>('/auth/login/', {
@@ -57,9 +109,30 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     }),
 
+  verificarToken: (token: string) =>
+    request<AcessoTokenResponse>(`/auth/acesso/${token}/`),
+
   acessoViaToken: (token: string) =>
     request<LoginResponse & { evento_id: number; chave_mensagem: string }>(
       `/auth/acesso/${token}/`
+    ),
+
+  acessoViaTokenComChave: (token: string, palavra_chave: string) =>
+    request<LoginResponse & { evento_id: number; chave_mensagem: string }>(
+      `/auth/acesso/${token}/`,
+      { method: 'POST', body: JSON.stringify({ palavra_chave }) }
+    ),
+
+  eventoPublico: (eventoId: number) =>
+    request<EventoPublicoDTO>(`/auth/evento-publico/${eventoId}/`),
+
+  acessarEvento: (eventoId: number, email: string, palavraChave?: string) =>
+    request<LoginResponse & { evento_id: number }>(
+      '/auth/acessar-evento/',
+      {
+        method: 'POST',
+        body: JSON.stringify({ evento_id: eventoId, email, palavra_chave: palavraChave ?? '' }),
+      }
     ),
 };
 
@@ -78,8 +151,10 @@ export interface EventoDTO {
   imagem_url: string;
   corpo_email: string;
   nome_profissional: string;
+  palavra_chave: string;
   horarios: HorarioDTO[];
   total_agendamentos?: number;
+  emails_enviados_em?: string | null;
 }
 
 export interface HorarioDTO {
@@ -101,8 +176,8 @@ export const adminEventosApi = {
     request<EventoDTO>(`/admin/eventos/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   publicar: (id: number) =>
     request<{ mensagem: string; horarios_gerados: number }>(`/admin/eventos/${id}/publicar/`, { method: 'POST' }),
-  encerrar: (id: number) =>
-    request<{ mensagem: string }>(`/admin/eventos/${id}/encerrar/`, { method: 'POST' }),
+  cancelar: (id: number) =>
+    request<{ mensagem: string }>(`/admin/eventos/${id}/cancelar/`, { method: 'POST' }),
   enviarEmails: (id: number) =>
     request<{ mensagem: string; enviados: number; erros: unknown[] }>(`/admin/eventos/${id}/enviar-emails/`, { method: 'POST' }),
   registrarParticipanteManual: (id: number, dados: { horario_id: number; nome: string; matricula?: string; departamento?: string }) =>
@@ -111,14 +186,18 @@ export const adminEventosApi = {
     request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
   listaPresenca: (id: number) =>
     request<ListaPresencaDTO>(`/admin/eventos/${id}/lista-presenca/`),
+  removerParticipante: (eventoId: number, participanteId: number) =>
+    request<void>(`/admin/eventos/${eventoId}/remover-participante/${participanteId}/`, { method: 'DELETE' }),
 };
 
 // ── Lista de presença ─────────────────────────────────────────────────────────
 
 export interface ParticipantePresencaDTO {
+  participante_id?: number;
   nome: string;
-  matricula: string;
-  departamento: string;
+  email: string;
+  hora_inicio: string;
+  hora_fim: string;
   tipo: 'email' | 'manual';
 }
 

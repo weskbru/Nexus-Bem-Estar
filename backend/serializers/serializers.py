@@ -177,6 +177,8 @@ class EventoAdminSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        # Novos eventos devem ser criados diretamente como publicados.
+        validated_data['status'] = 'publicado'
         evento = super().create(validated_data)
         if evento.status == 'publicado':
             evento.gerar_horarios()
