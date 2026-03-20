@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Calendar, Clock, XCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Calendar, Clock, XCircle, AlertCircle, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ConfirmacaoData {
   status: 'sucesso' | 'cancelado' | 'erro';
@@ -20,8 +21,14 @@ interface ConfirmacaoData {
 export default function Confirmacao() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [dados, setDados] = useState<ConfirmacaoData | null>(null);
   const destinoEvento = dados?.evento?.id ? `/colaborador/eventos/${dados.evento.id}` : '/login';
+
+  function handleSair() {
+    logout();
+    navigate('/login');
+  }
 
   useEffect(() => {
     const state = location.state as ConfirmacaoData | null;
@@ -136,12 +143,13 @@ export default function Confirmacao() {
               >
                 Ver Evento
               </Link>
-              <Link
-                to={destinoEvento}
-                className="flex-1 w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors text-center"
+              <button
+                onClick={handleSair}
+                className="flex-1 w-full px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
               >
-                Ir para Evento
-              </Link>
+                <LogOut className="w-4 h-4" />
+                Sair
+              </button>
             </div>
 
           </div>
