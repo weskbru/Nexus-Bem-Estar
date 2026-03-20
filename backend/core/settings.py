@@ -143,6 +143,11 @@ else:
 # Janela maxima para agendamento de eventos no futuro (em meses)
 EVENTO_MAX_MESES_FUTURO = config('EVENTO_MAX_MESES_FUTURO', default=6, cast=int)
 
+# Autenticação — LDAP real ou senha local (mock)
+AUTHENTICATION_BACKENDS = [
+    'backend.auth_backends.LDAPOrLocalBackend',
+]
+
 # LDAP / Active Directory
 # 'mock' → lista local (dev sem acesso ao AD)
 # 'ldap' → busca real no AD da AEB
