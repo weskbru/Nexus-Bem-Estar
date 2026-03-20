@@ -9,5 +9,8 @@ django-redis>=5.4
 
 redis>=5.0  # usado pelo cache (django-redis)
 
+# LDAP / Active Directory
+ldap3>=2.9
+
 # Testes de carga (dev/QA only)
 locust>=2.20
