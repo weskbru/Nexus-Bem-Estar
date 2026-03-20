@@ -150,6 +150,17 @@ export default function Login() {
                 {carregando ? 'Autenticando...' : 'Entrar no Sistema'}
               </button>
             </div>
+
+            <div className="text-center">
+              <a
+                href="https://citsmart.aeb.gov.br/citsmart/login/login.load"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-slate-500 hover:text-blue-600 transition-colors"
+              >
+                Esqueceu a senha? Redefinir via CITSmart
+              </a>
+            </div>
           </form>
         </main>
 
