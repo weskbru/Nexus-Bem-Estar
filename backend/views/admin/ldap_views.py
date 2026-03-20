@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 
 from ...models.models import Usuario
 from ...serializers.serializers import UsuarioSerializer
-from ...services.ldap_service import buscar_usuarios as ldap_buscar, MOCK_SENHA_PADRAO
+from ...services.ldap_service import buscar_usuarios as ldap_buscar
 from ..permissions import IsSuperAdmin
 
 
@@ -85,11 +85,6 @@ class PromoverAdminView(APIView):
             if departamento:
                 usuario.departamento = departamento
             usuario.save(update_fields=['is_admin', 'is_staff', 'nome', 'matricula', 'departamento'])
-
-        if criado:
-            # TODO (LDAP): Remover quando autenticação via AD estiver implementada.
-            usuario.set_password(MOCK_SENHA_PADRAO)
-            usuario.save(update_fields=['password'])
 
         return Response(
             UsuarioSerializer(usuario).data,
