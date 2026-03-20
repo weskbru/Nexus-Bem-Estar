@@ -74,13 +74,18 @@ class LDAPOrLocalBackend(ModelBackend):
         except Usuario.DoesNotExist:
             return None
 
+        # Superusuários (CTI) sempre usam senha local — não dependem do AD
+        if usuario.is_superuser:
+            if not usuario.check_password(password):
+                return None
+            return usuario
+
         usar_ldap = getattr(settings, 'USUARIO_BUSCA_BACKEND', 'mock').lower() == 'ldap'
 
         if usar_ldap:
             if not _validar_ldap(username, password):
                 return None
         else:
-            # Mock: valida contra senha local
             if not usuario.check_password(password):
                 return None
 
