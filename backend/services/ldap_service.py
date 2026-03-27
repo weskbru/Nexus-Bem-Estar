@@ -59,6 +59,8 @@ def buscar_usuarios(query: str) -> list[dict]:
 
 
 def email_existe_no_ad(email: str) -> bool:
+    if getattr(settings, 'LDAP_SKIP_AD_CHECK', False):
+        return True
     from ldap3 import SUBTREE
     base_dn = getattr(settings, 'LDAP_BASE_DN', 'OU=USUARIOS,OU=AEB,DC=aeb,DC=gov,DC=br')
     try:

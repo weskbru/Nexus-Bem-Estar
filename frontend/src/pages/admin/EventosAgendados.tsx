@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Calendar, AlertTriangle, X, CheckCircle2 } from 'lucide-react';
-import { adminEventosApi, type EventoDTO } from '../../services/api';
+import { Plus, Calendar, AlertTriangle, X, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { adminEventosApi, type EventoDTO, type ApiError } from '../../services/api';
 import {
   EventCard,
   EventActionsModal,
@@ -68,8 +68,15 @@ export default function AdminEventos() {
     try {
       await adminEventosApi.enviarEmails(evento.id);
       mostrarToast('sucesso', 'E-mail enviado com sucesso para a lista de distribuição.');
+      await carregarEventos();
     } catch (err) {
-      mostrarToast('erro', err instanceof Error ? err.message : 'Erro ao enviar e-mails.');
+      const apiErr = err as ApiError;
+      if (apiErr.data?.codigo === 'lista_presenca_pendente') {
+        setConfirmAction(null);
+        setListaPresencaId(apiErr.data.evento_id as number);
+      } else {
+        mostrarToast('erro', err instanceof Error ? err.message : 'Erro ao enviar e-mails.');
+      }
     } finally {
       setEmailLoadingId(null);
     }
@@ -174,6 +181,31 @@ export default function AdminEventos() {
           </button>
         </Link>
       </div>
+
+      {/* Banner: presença pendente */}
+      {eventos.some(e => e.presenca_pendente) && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+          <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-amber-800 mb-1">Lista de presença pendente</p>
+            <p className="text-xs text-amber-700 mb-3">
+              Confirme a presença dos participantes nos eventos abaixo antes de criar ou disparar um novo evento.
+            </p>
+            <div className="flex flex-col gap-2">
+              {eventos.filter(e => e.presenca_pendente).map(e => (
+                <button
+                  key={e.id}
+                  onClick={() => setListaPresencaId(e.id)}
+                  className="flex items-center gap-2 w-fit px-3 py-1.5 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors group"
+                >
+                  <span className="text-xs font-bold text-amber-900">{e.titulo}</span>
+                  <span className="text-xs text-amber-600 group-hover:text-amber-800 transition-colors">→ Confirmar presença</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filtros Estilo "Chips" */}
       <div className="flex gap-2.5 mb-8 flex-wrap">
@@ -281,7 +313,7 @@ export default function AdminEventos() {
       {listaPresencaId !== null && (
         <ListaPresencaModal
           eventoId={listaPresencaId}
-          onClose={() => setListaPresencaId(null)}
+          onClose={() => { setListaPresencaId(null); carregarEventos(); }}
         />
       )}
     </div>

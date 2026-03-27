@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from ..views.admin.usuario_viewset import AdminUsuarioViewSet
-from ..views.admin.evento_viewset import AdminEventoViewSet, AdminAgendamentoViewSet
+from ..views.admin.evento_viewset import AdminEventoViewSet, AdminAgendamentoViewSet, AdminPenalidadeViewSet
 from ..views.admin.dashboard_view import AdminDashboardView
 from ..views.admin.ldap_views import LdapSearchView, PromoverAdminView, RevogarAdminView, ListarAdminsView
 from ..views.auth.login_view import AdminLoginView
@@ -14,9 +14,10 @@ from ..views.colaborador.agendamento_view import ReservarHorarioView, CancelarAg
 from ..views.colaborador.lista_espera_view import EntrarListaEsperaView, MinhaListaEsperaView
 
 router = DefaultRouter()
-router.register(r'admin/usuarios',     AdminUsuarioViewSet,    basename='admin-usuarios')
-router.register(r'admin/eventos',      AdminEventoViewSet,     basename='admin-eventos')
-router.register(r'admin/agendamentos', AdminAgendamentoViewSet, basename='admin-agendamentos')
+router.register(r'admin/usuarios',     AdminUsuarioViewSet,      basename='admin-usuarios')
+router.register(r'admin/eventos',      AdminEventoViewSet,       basename='admin-eventos')
+router.register(r'admin/agendamentos', AdminAgendamentoViewSet,  basename='admin-agendamentos')
+router.register(r'admin/penalidades',  AdminPenalidadeViewSet,   basename='admin-penalidades')
 
 urlpatterns = [
     # -----------------------------------------------------------------------

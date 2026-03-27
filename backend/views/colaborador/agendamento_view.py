@@ -4,7 +4,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ...models.models import Agendamento, ConviteEmail, Horario, ListaEspera
+from ...models.models import Agendamento, ConviteEmail, Horario, ListaEspera, Penalidade
 from ...serializers.serializers import AgendamentoSerializer
 from ...services import email_service
 from ...services.lista_espera_service import notificar_proximo_na_fila
@@ -42,6 +42,34 @@ class ReservarHorarioView(APIView):
                 {'erro': 'Este horário está lotado. Escolha outro horário disponível.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Verificar penalidade ativa por falta em evento anterior
+        penalidade = (
+            Penalidade.objects
+            .select_related('evento_punicao')
+            .filter(usuario=request.user, ativa=True)
+            .first()
+        )
+        if penalidade:
+            # Se o evento de punição já foi encerrado, libera automaticamente
+            if penalidade.evento_punicao and penalidade.evento_punicao.status == 'encerrado':
+                penalidade.ativa = False
+                penalidade.save(update_fields=['ativa'])
+            else:
+                # Primeiro acesso após a falta: registra este evento como o de punição
+                if penalidade.evento_punicao is None:
+                    penalidade.evento_punicao = horario.evento
+                    penalidade.save(update_fields=['evento_punicao'])
+                return Response(
+                    {
+                        'erro': (
+                            'Você possui uma penalidade ativa por não comparecimento em evento anterior. '
+                            'Seu acesso será liberado após o encerramento do evento atual.'
+                        ),
+                        'penalidade': True,
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         agendamento_existente = (
             Agendamento.objects

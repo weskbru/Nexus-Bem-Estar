@@ -94,10 +94,37 @@ class EventoPublicoView(APIView):
 
     def get(self, _request, evento_id):
         try:
-            evento = Evento.objects.get(id=evento_id, status='publicado')
+            evento = Evento.objects.get(id=evento_id)
         except Evento.DoesNotExist:
             return Response(
-                {'erro': 'Evento não encontrado ou não está disponível.'},
+                {'erro': 'Evento não encontrado.', 'codigo': 'nao_encontrado'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if evento.status == 'encerrado':
+            return Response(
+                {
+                    'erro': 'Este evento já foi encerrado.',
+                    'codigo': 'encerrado',
+                    'titulo': evento.titulo,
+                    'data': str(evento.data),
+                },
+                status=status.HTTP_410_GONE,
+            )
+
+        if evento.status == 'cancelado':
+            return Response(
+                {
+                    'erro': 'Este evento foi cancelado.',
+                    'codigo': 'cancelado',
+                    'titulo': evento.titulo,
+                },
+                status=status.HTTP_410_GONE,
+            )
+
+        if evento.status != 'publicado':
+            return Response(
+                {'erro': 'Evento não disponível.', 'codigo': 'indisponivel'},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response({
@@ -122,6 +149,7 @@ class AcessarEventoView(APIView):
         evento_id     = request.data.get('evento_id')
         email         = (request.data.get('email') or '').strip().lower()
         palavra_chave = (request.data.get('palavra_chave') or '').strip()
+        ramal         = (request.data.get('ramal') or '').strip()
 
         if not evento_id or not email:
             return Response(
@@ -161,6 +189,11 @@ class AcessarEventoView(APIView):
         except Usuario.DoesNotExist:
             nome_padrao = email.split('@')[0].replace('.', ' ').replace('-', ' ').title()
             usuario = Usuario.objects.create_user(email=email, nome=nome_padrao, password=None)
+
+        # Atualiza o ramal se informado (campo opcional)
+        if ramal and usuario.ramal != ramal:
+            usuario.ramal = ramal
+            usuario.save(update_fields=['ramal'])
 
         refresh = RefreshToken.for_user(usuario)
         return Response({
