@@ -49,6 +49,7 @@ export default function EventDetails() {
   const [modoModal, setModoModal] = useState<'detalhes' | 'confirmacao' | 'sucesso'>('detalhes');
   const [reservando, setReservando] = useState(false);
   const [erroReserva, setErroReserva] = useState('');
+  const [erroPenalidade, setErroPenalidade] = useState('');
   const [agendamentoExistente, setAgendamentoExistente] = useState<AgendamentoDetalhes | null>(null);
   const [alterando, setAlterando] = useState(false);
 
@@ -136,7 +137,15 @@ export default function EventDetails() {
         }
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.erro ?? 'Erro ao reservar.');
+      if (!res.ok) {
+        if (data.penalidade) {
+          setModalAgendamento(null);
+          setModoModal('detalhes');
+          setErroPenalidade(data.erro);
+          return;
+        }
+        throw new Error(data.erro ?? 'Erro ao reservar.');
+      }
       setModoModal('sucesso');
       await carregarEvento();
       setTimeout(() => {
@@ -359,7 +368,15 @@ export default function EventDetails() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 animate-in fade-in duration-300">
-      
+
+      {/* Banner de penalidade ativa */}
+      {erroPenalidade && (
+        <div className="mb-6 flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 text-sm text-rose-800 shadow-sm">
+          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-rose-500" />
+          <span>{erroPenalidade}</span>
+        </div>
+      )}
+
       {/* Breadcrumb Padrão */}
       <div className="flex items-center text-xs sm:text-sm text-slate-500 mb-6 font-medium">
         <CalendarIcon className="w-4 h-4 mr-1.5 text-slate-400" />

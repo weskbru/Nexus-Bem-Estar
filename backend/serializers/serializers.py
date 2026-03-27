@@ -3,7 +3,7 @@ from datetime import date
 from django.conf import settings
 from django.utils import timezone
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade
 
 
 def _add_months(base_date: date, months: int) -> date:
@@ -127,6 +127,7 @@ class EventoDetailSerializer(serializers.ModelSerializer):
 class EventoAdminSerializer(serializers.ModelSerializer):
     horarios = HorarioSerializer(many=True, read_only=True)
     total_agendamentos = serializers.SerializerMethodField()
+    presenca_pendente = serializers.SerializerMethodField()
 
     class Meta:
         model = Evento
@@ -136,6 +137,15 @@ class EventoAdminSerializer(serializers.ModelSerializer):
         return Agendamento.objects.filter(
             horario__evento=obj, status='confirmado'
         ).count()
+
+    def get_presenca_pendente(self, obj):
+        if obj.status != 'encerrado':
+            return False
+        return Agendamento.objects.filter(
+            horario__evento=obj,
+            status='confirmado',
+            compareceu__isnull=True,
+        ).exists()
 
     def validate_duracao_sessao(self, value):
         if value <= 0:
@@ -213,7 +223,7 @@ class AgendamentoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Agendamento
         fields = [
-            'id', 'usuario', 'horario', 'status',
+            'id', 'usuario', 'horario', 'status', 'compareceu',
             'evento_id', 'evento_titulo', 'evento_data', 'nome_profissional',
             'criado_em', 'atualizado_em',
         ]
@@ -268,6 +278,37 @@ class AgendamentoManualSerializer(serializers.ModelSerializer):
             f"{obj.horario.hora_inicio.strftime('%H:%M')} – "
             f"{obj.horario.hora_fim.strftime('%H:%M')}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Penalidade
+# ---------------------------------------------------------------------------
+
+class PenalidadeSerializer(serializers.ModelSerializer):
+    usuario = UsuarioSerializer(read_only=True)
+    evento_origem_titulo = serializers.SerializerMethodField()
+    evento_punicao_titulo = serializers.SerializerMethodField()
+    evento_punicao_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Penalidade
+        fields = [
+            'id', 'usuario', 'ativa',
+            'evento_origem_titulo', 'evento_punicao_titulo', 'evento_punicao_status',
+            'criada_em', 'revogada_em', 'motivo_revogacao',
+        ]
+        read_only_fields = ['id', 'criada_em']
+
+    def get_evento_origem_titulo(self, obj):
+        if obj.agendamento:
+            return obj.agendamento.horario.evento.titulo
+        return None
+
+    def get_evento_punicao_titulo(self, obj):
+        return obj.evento_punicao.titulo if obj.evento_punicao else None
+
+    def get_evento_punicao_status(self, obj):
+        return obj.evento_punicao.status if obj.evento_punicao else None
 
 
 # ---------------------------------------------------------------------------

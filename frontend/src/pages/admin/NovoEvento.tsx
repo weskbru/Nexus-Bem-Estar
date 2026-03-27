@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -7,10 +7,11 @@ import {
   Save,
   Info,
   CalendarDays,
+  ShieldAlert,
 } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { adminEventosApi } from '../../services/api';
+import { adminEventosApi, type ApiError } from '../../services/api';
 import {
   MAX_MESES_FUTURO,
   dataAposLimite,
@@ -388,6 +389,7 @@ export default function NovoEvento() {
   const [erros, setErros] = useState<FormErrors>({});
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [presencaBloqueio, setPresencaBloqueio] = useState<{ titulo: string } | null>(null);
 
   function update(field: keyof FormState, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -422,7 +424,13 @@ export default function NovoEvento() {
       });
       navigate('/admin/agendamentos');
     } catch (err) {
-      setErroGeral(err instanceof Error ? err.message : 'Erro ao salvar evento.');
+      const apiErr = err as ApiError;
+      if (apiErr.data?.codigo === 'lista_presenca_pendente') {
+        setPresencaBloqueio({ titulo: apiErr.data.evento_titulo as string });
+        globalThis.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setErroGeral(err instanceof Error ? err.message : 'Erro ao salvar evento.');
+      }
     } finally {
       setSalvando(false);
     }
@@ -445,6 +453,24 @@ export default function NovoEvento() {
 
       {/* Card Principal */}
       <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100 p-6 md:p-10">
+
+        {presencaBloqueio && (
+          <div className="mb-8 flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm font-medium animate-in slide-in-from-top-2">
+            <ShieldAlert className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+            <div>
+              <p className="font-bold mb-1">Lista de presença pendente</p>
+              <p>
+                Confirme a presença dos participantes no evento <strong>"{presencaBloqueio.titulo}"</strong> antes de criar um novo evento.
+              </p>
+              <Link
+                to="/admin/agendamentos"
+                className="inline-block mt-2 text-xs font-bold text-amber-700 underline hover:text-amber-900"
+              >
+                Ir para Eventos e confirmar presença →
+              </Link>
+            </div>
+          </div>
+        )}
 
         {erroGeral && (
           <div className="mb-8 flex items-start gap-3 bg-red-50/50 border border-red-200 text-red-800 rounded-xl p-4 text-sm font-medium animate-in slide-in-from-top-2">
@@ -596,7 +622,7 @@ export default function NovoEvento() {
                   ref={quillRef}
                   className="email-editor border-none"
                   value={form.corpo_email}
-                  onChange={(value) => update('corpo_email', value)}
+                  onChange={(value: string) => update('corpo_email', value)}
                   placeholder="Escreva os detalhes que os convidados precisam saber..."
                   theme="snow"
                   modules={emailModules}

@@ -27,14 +27,19 @@ function getToken(): string | null {
   return localStorage.getItem('access_token');
 }
 
+// Rotas públicas que não devem enviar token nem redirecionar ao receber 401
+const ROTAS_PUBLICAS = ['/auth/evento-publico/', '/auth/acessar-evento/', '/auth/acesso/', '/auth/login/'];
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
+  const ehRotaPublica = ROTAS_PUBLICAS.some(r => path.startsWith(r));
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    // Não envia token em rotas públicas para evitar 401 por token expirado
+    ...(!ehRotaPublica && token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers ?? {}),
   };
 
@@ -43,16 +48,21 @@ async function request<T>(
   if (res.status === 401) {
     localStorage.removeItem('access_token');
     localStorage.removeItem('usuario');
-    window.location.href = '/admin/login';
+    // Só redireciona para login em rotas protegidas (não em páginas públicas)
+    if (!ehRotaPublica) {
+      window.location.href = '/admin/login';
+    }
     throw new Error('Sessão expirada. Faça login novamente.');
   }
 
   if (!res.ok) {
     const erro = await safeJson(res);
-    throw new Error(
+    const err = new Error(
       (erro?.erro as string) ?? (erro?.detail as string) ??
       'Não foi possível completar a operação. Tente novamente.'
     );
+    if (erro) Object.assign(err, { data: erro });
+    throw err;
   }
 
   const body = await safeJson(res);
@@ -102,6 +112,12 @@ export interface EventoPublicoDTO {
   requer_palavra_chave: boolean;
 }
 
+export interface EventoIndisponivelDTO {
+  codigo: 'encerrado' | 'cancelado' | 'nao_encontrado' | 'indisponivel';
+  titulo?: string;
+  data?: string;
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     request<LoginResponse>('/auth/login/', {
@@ -123,15 +139,27 @@ export const authApi = {
       { method: 'POST', body: JSON.stringify({ palavra_chave }) }
     ),
 
-  eventoPublico: (eventoId: number) =>
-    request<EventoPublicoDTO>(`/auth/evento-publico/${eventoId}/`),
+  eventoPublico: async (eventoId: number): Promise<EventoPublicoDTO> => {
+    const res = await fetch(`${BASE_URL}/auth/evento-publico/${eventoId}/`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(body.erro ?? 'Evento não disponível.');
+      (err as Error & { indisponivel: EventoIndisponivelDTO }).indisponivel = {
+        codigo: body.codigo ?? 'nao_encontrado',
+        titulo: body.titulo,
+        data: body.data,
+      };
+      throw err;
+    }
+    return body as EventoPublicoDTO;
+  },
 
-  acessarEvento: (eventoId: number, email: string, palavraChave?: string) =>
+  acessarEvento: (eventoId: number, email: string, palavraChave?: string, ramal?: string) =>
     request<LoginResponse & { evento_id: number }>(
       '/auth/acessar-evento/',
       {
         method: 'POST',
-        body: JSON.stringify({ evento_id: eventoId, email, palavra_chave: palavraChave ?? '' }),
+        body: JSON.stringify({ evento_id: eventoId, email, palavra_chave: palavraChave ?? '', ramal: ramal ?? '' }),
       }
     ),
 };
@@ -155,7 +183,10 @@ export interface EventoDTO {
   horarios: HorarioDTO[];
   total_agendamentos?: number;
   emails_enviados_em?: string | null;
+  presenca_pendente?: boolean;
 }
+
+export type ApiError = Error & { data?: Record<string, unknown> };
 
 export interface HorarioDTO {
   id: number;
@@ -188,17 +219,25 @@ export const adminEventosApi = {
     request<ListaPresencaDTO>(`/admin/eventos/${id}/lista-presenca/`),
   removerParticipante: (eventoId: number, participanteId: number) =>
     request<void>(`/admin/eventos/${eventoId}/remover-participante/${participanteId}/`, { method: 'DELETE' }),
+  marcarPresenca: (eventoId: number, dados: { presentes: number[]; ausentes: number[] }) =>
+    request<{ mensagem: string; penalidades_criadas: number }>(
+      `/admin/eventos/${eventoId}/marcar-presenca/`,
+      { method: 'POST', body: JSON.stringify(dados) }
+    ),
 };
 
 // ── Lista de presença ─────────────────────────────────────────────────────────
 
 export interface ParticipantePresencaDTO {
   participante_id?: number;
+  agendamento_id?: number;
   nome: string;
   email: string;
+  ramal?: string;
   hora_inicio: string;
   hora_fim: string;
   tipo: 'email' | 'manual';
+  compareceu?: boolean | null;
 }
 
 export interface HorarioPresencaDTO {
