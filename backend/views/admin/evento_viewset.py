@@ -9,11 +9,26 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from ...models.models import Agendamento, AgendamentoManual, Evento, Horario
+from ...models.models import Agendamento, AgendamentoManual, Evento, Horario, Penalidade
+
+
+def _verificar_presencas_pendentes():
+    """Retorna o primeiro evento encerrado com agendamentos sem confirmação de presença, ou None."""
+    return (
+        Evento.objects
+        .filter(
+            status='encerrado',
+            horarios__agendamentos__status='confirmado',
+            horarios__agendamentos__compareceu__isnull=True,
+        )
+        .distinct()
+        .first()
+    )
 from ...serializers.serializers import (
     AgendamentoManualSerializer,
     AgendamentoSerializer,
     EventoAdminSerializer,
+    PenalidadeSerializer,
 )
 from ...services import email_service
 from ...services.lista_espera_service import notificar_proximo_na_fila
@@ -41,6 +56,20 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         encerrar_eventos_expirados()
         return super().get_queryset()
+
+    def create(self, request, *args, **kwargs):
+        pendente = _verificar_presencas_pendentes()
+        if pendente:
+            return Response(
+                {
+                    'erro': f'Confirme a lista de presença do evento "{pendente.titulo}" antes de criar um novo evento.',
+                    'codigo': 'lista_presenca_pendente',
+                    'evento_id': pendente.id,
+                    'evento_titulo': pendente.titulo,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().create(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], url_path='publicar')
     def publicar(self, request, pk=None):
@@ -103,6 +132,18 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         Envia UM único e-mail para o endereço configurado em EMAIL_DESTINO_EVENTO
         (normalmente uma Lista de Distribuição corporativa).
         """
+        pendente = _verificar_presencas_pendentes()
+        if pendente:
+            return Response(
+                {
+                    'erro': f'Confirme a lista de presença do evento "{pendente.titulo}" antes de disparar e-mails.',
+                    'codigo': 'lista_presenca_pendente',
+                    'evento_id': pendente.id,
+                    'evento_titulo': pendente.titulo,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         evento = self.get_object()
         if evento.status != 'publicado':
             return Response(
@@ -117,16 +158,13 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        # MODO TESTE — trocar pelo bloco MODO PRODUÇÃO quando a LD estiver configurada.
-        destinatario = 'jonas.silva@aeb.gov.br'
-
-        # MODO PRODUÇÃO:
-        # destinatario = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
-        # if not destinatario:
-        #     return Response(
-        #         {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
-        #         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        #     )
+        destinatarios_raw = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
+        if not destinatarios_raw:
+            return Response(
+                {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        destinatario = [d.strip() for d in destinatarios_raw.split(',') if d.strip()]
 
         corpo_html = evento.corpo_email or ''
         link_acesso = f"{settings.FRONTEND_URL}/evento/{evento.id}/entrar"
@@ -156,7 +194,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 subject=evento.titulo,
                 message='',
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[destinatario],
+                recipient_list=destinatario,
                 html_message=corpo_html,
                 fail_silently=False,
             )
@@ -272,11 +310,14 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             participantes = []
             for ag in horario.agendamentos.filter(status='confirmado'):
                 participantes.append({
+                    'agendamento_id': ag.id,
                     'nome':        ag.usuario.nome,
                     'email':       ag.usuario.email,
+                    'ramal':       ag.usuario.ramal,
                     'hora_inicio': horario.hora_inicio.strftime('%H:%M'),
                     'hora_fim':    horario.hora_fim.strftime('%H:%M'),
                     'tipo':        'email',
+                    'compareceu':  ag.compareceu,
                 })
             for pm in horario.participantes_manuais.all():
                 participantes.append({
@@ -308,6 +349,59 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             },
             'horarios': resultado,
             'total':    total,
+        })
+
+    @action(detail=True, methods=['post'], url_path='marcar-presenca')
+    def marcar_presenca(self, request, pk=None):
+        """
+        POST /api/admin/eventos/<id>/marcar-presenca/
+        Marca presença/falta dos participantes de um evento encerrado.
+        Body: { presentes: [agendamento_id, ...], ausentes: [agendamento_id, ...] }
+        Cria uma Penalidade para cada ausente que ainda não possua uma.
+        """
+        evento = self.get_object()
+        if evento.status not in ('encerrado', 'publicado'):
+            return Response(
+                {'erro': 'Só é possível marcar presença em eventos publicados ou encerrados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        presentes_ids = request.data.get('presentes', [])
+        ausentes_ids = request.data.get('ausentes', [])
+
+        if not isinstance(presentes_ids, list) or not isinstance(ausentes_ids, list):
+            return Response(
+                {'erro': 'Os campos "presentes" e "ausentes" devem ser listas de IDs.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        Agendamento.objects.filter(
+            id__in=presentes_ids, horario__evento=evento
+        ).update(compareceu=True)
+
+        ausentes_qs = (
+            Agendamento.objects
+            .filter(id__in=ausentes_ids, horario__evento=evento)
+            .select_related('usuario')
+        )
+        ausentes_qs.update(compareceu=False)
+
+        penalidades_criadas = 0
+        for ag in ausentes_qs:
+            _, created = Penalidade.objects.get_or_create(
+                agendamento=ag,
+                defaults={'usuario': ag.usuario, 'ativa': True},
+            )
+            if created:
+                penalidades_criadas += 1
+
+        return Response({
+            'mensagem': (
+                f'Presença registrada. '
+                f'{len(presentes_ids)} presentes, {ausentes_qs.count()} ausentes. '
+                f'{penalidades_criadas} penalidade(s) criada(s).'
+            ),
+            'penalidades_criadas': penalidades_criadas,
         })
 
     @action(detail=True, methods=['get'], url_path='exportar-csv')
@@ -359,3 +453,47 @@ class AdminAgendamentoViewSet(viewsets.ReadOnlyModelViewSet):
         if status_param:
             qs = qs.filter(status=status_param)
         return qs.order_by('-criado_em')
+
+
+class AdminPenalidadeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET  /api/admin/penalidades/              — lista todas as penalidades
+    GET  /api/admin/penalidades/?ativa=true   — filtra por ativas
+    GET  /api/admin/penalidades/?usuario_id=  — filtra por usuário
+    POST /api/admin/penalidades/<id>/revogar/ — revoga penalidade manualmente
+    """
+    serializer_class = PenalidadeSerializer
+    permission_classes = [IsAdminUsuario]
+
+    def get_queryset(self):
+        qs = Penalidade.objects.select_related(
+            'usuario', 'agendamento__horario__evento', 'evento_punicao', 'revogada_por'
+        )
+        ativa_param = self.request.query_params.get('ativa')
+        usuario_id  = self.request.query_params.get('usuario_id')
+        if ativa_param is not None:
+            qs = qs.filter(ativa=ativa_param.lower() == 'true')
+        if usuario_id:
+            qs = qs.filter(usuario_id=usuario_id)
+        return qs.order_by('-criada_em')
+
+    @action(detail=True, methods=['post'], url_path='revogar')
+    def revogar(self, request, pk=None):
+        """
+        POST /api/admin/penalidades/<id>/revogar/
+        Body: { motivo: "..." }
+        Revoga manualmente uma penalidade ativa (ex.: falta justificada).
+        """
+        penalidade = self.get_object()
+        if not penalidade.ativa:
+            return Response(
+                {'erro': 'Esta penalidade já está inativa.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        motivo = request.data.get('motivo', '').strip()
+        penalidade.ativa = False
+        penalidade.revogada_por = request.user
+        penalidade.revogada_em = timezone.now()
+        penalidade.motivo_revogacao = motivo
+        penalidade.save(update_fields=['ativa', 'revogada_por', 'revogada_em', 'motivo_revogacao'])
+        return Response(PenalidadeSerializer(penalidade).data)

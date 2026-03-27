@@ -9,7 +9,7 @@ export default function ColaboradorLayout() {
 
   function handleLogout() {
     logout();
-    navigate('/');
+    navigate('/login');
   }
 
   return (

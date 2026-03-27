@@ -41,6 +41,7 @@ class Usuario(AbstractBaseUser):
     nome = models.CharField(max_length=200, verbose_name='Nome completo')
     matricula = models.CharField(max_length=50, blank=True, verbose_name='Matrícula')
     departamento = models.CharField(max_length=100, blank=True, verbose_name='Departamento')
+    ramal = models.CharField(max_length=20, blank=True, verbose_name='Ramal')
     is_admin = models.BooleanField(default=False, verbose_name='É administrador?')
     is_active = models.BooleanField(default=True, verbose_name='Ativo')
     is_staff = models.BooleanField(default=False)       # acesso ao django-admin
@@ -140,11 +141,16 @@ class Evento(models.Model):
     def __str__(self):
         return f'{self.titulo} – {self.data}'
 
+    # Horário de almoço: slots que se sobreponham a este intervalo são descartados
+    ALMOCO_INICIO = datetime.strptime('11:40', '%H:%M').time()
+    ALMOCO_FIM    = datetime.strptime('13:30', '%H:%M').time()
+
     def gerar_horarios(self):
         """
         Gera os slots de horário com base nas configurações do evento.
         Só pode ser chamado se não houver agendamentos existentes.
-        Slots que não completam a duração no final são descartados silenciosamente.
+        Slots que se sobreponham ao horário de almoço (11:40–13:30) são descartados.
+        Slots que não completam a duração no final também são descartados.
         """
         if self.horarios.filter(agendamentos__isnull=False).exists():
             raise ValueError(
@@ -159,12 +165,16 @@ class Evento(models.Model):
 
         slots = []
         while atual + delta <= fim:
-            slots.append(Horario(
-                evento=self,
-                hora_inicio=atual.time(),
-                hora_fim=(atual + delta).time(),
-                vagas_disponiveis=self.capacidade_por_horario,
-            ))
+            slot_inicio = atual.time()
+            slot_fim = (atual + delta).time()
+            # Descarta slots que se sobreponham ao horário de almoço
+            if not (slot_inicio < self.ALMOCO_FIM and slot_fim > self.ALMOCO_INICIO):
+                slots.append(Horario(
+                    evento=self,
+                    hora_inicio=slot_inicio,
+                    hora_fim=slot_fim,
+                    vagas_disponiveis=self.capacidade_por_horario,
+                ))
             atual += delta
 
         Horario.objects.bulk_create(slots)
@@ -281,6 +291,10 @@ class Agendamento(models.Model):
         max_length=20, choices=Status.choices, default=Status.CONFIRMADO,
         verbose_name='Status'
     )
+    # None = pendente (evento ainda não ocorreu), True = compareceu, False = faltou
+    compareceu = models.BooleanField(
+        null=True, blank=True, default=None, verbose_name='Compareceu'
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -362,6 +376,49 @@ class ListaEspera(models.Model):
 
     def __str__(self):
         return f'{self.usuario.email} – {self.horario} [pos {self.posicao}]'
+
+
+# ---------------------------------------------------------------------------
+# Penalidade (falta sem aviso)
+# ---------------------------------------------------------------------------
+
+class Penalidade(models.Model):
+    """
+    Criada quando um colaborador confirma agendamento mas não comparece.
+    Bloqueia o usuário de agendar no próximo evento que tentar acessar.
+    A penalidade é desativada automaticamente quando esse evento é encerrado.
+    """
+    usuario = models.ForeignKey(
+        Usuario, on_delete=models.CASCADE, related_name='penalidades'
+    )
+    # Agendamento de origem (no evento em que o usuário faltou)
+    agendamento = models.OneToOneField(
+        Agendamento, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='penalidade'
+    )
+    # Evento "de punição": o próximo evento que o usuário tentou acessar após a falta.
+    # Quando esse evento for encerrado, a penalidade é desativada automaticamente.
+    evento_punicao = models.ForeignKey(
+        Evento, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='penalidades'
+    )
+    ativa = models.BooleanField(default=True, verbose_name='Ativa')
+    criada_em = models.DateTimeField(auto_now_add=True)
+    # Revogação manual pelo admin
+    revogada_por = models.ForeignKey(
+        Usuario, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='penalidades_revogadas'
+    )
+    revogada_em = models.DateTimeField(null=True, blank=True)
+    motivo_revogacao = models.TextField(blank=True, verbose_name='Motivo da revogação')
+
+    class Meta:
+        verbose_name = 'Penalidade'
+        verbose_name_plural = 'Penalidades'
+        ordering = ['-criada_em']
+
+    def __str__(self):
+        return f'Penalidade – {self.usuario.nome} ({"ativa" if self.ativa else "inativa"})'
 
 
 # ---------------------------------------------------------------------------
