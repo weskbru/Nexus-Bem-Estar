@@ -9,8 +9,26 @@ class EntrarListaEsperaView(APIView):
     """
     POST /api/colaborador/horarios/<horario_id>/lista-espera/
     Insere o colaborador autenticado na lista de espera do horário lotado.
+
+    DELETE /api/colaborador/horarios/<horario_id>/lista-espera/
+    Remove o colaborador da fila de espera do horário.
     """
     permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, horario_id):
+        atualizado = ListaEspera.objects.filter(
+            usuario=request.user,
+            horario_id=horario_id,
+            status__in=['aguardando', 'notificado'],
+        ).update(status='expirado')
+
+        if not atualizado:
+            return Response(
+                {'erro': 'Você não está na fila deste horário.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response({'mensagem': 'Você saiu da fila de espera com sucesso.'})
 
     def post(self, request, horario_id):
         try:
@@ -50,6 +68,14 @@ class EntrarListaEsperaView(APIView):
                 'status':        entrada.status,
                 'ja_inscrito':   True,
             })
+
+        # Cancela qualquer posição ativa do usuário em outro slot deste mesmo evento.
+        # Garante que o usuário esteja em apenas uma fila por vez.
+        ListaEspera.objects.filter(
+            usuario=request.user,
+            horario__evento=horario.evento,
+            status__in=['aguardando', 'notificado'],
+        ).exclude(horario=horario).update(status='expirado')
 
         proxima_posicao = ListaEspera.objects.filter(horario=horario).count() + 1
         entrada = ListaEspera.objects.create(

@@ -59,7 +59,7 @@ def enviar_vaga_lista_espera(entrada) -> None:
         {f'<p style="margin:0;color:#166534;">👤 {evento.nome_profissional}</p>' if evento.nome_profissional else ''}
       </div>
       <p style="color:#dc2626;font-weight:600;">
-        ⚠️ Você tem <strong>2 horas</strong> para confirmar sua participação.
+        ⚠️ Você tem <strong>5 minutos</strong> para confirmar sua participação.
         Após esse prazo a vaga será oferecida ao próximo da fila.
       </p>
       <p style="text-align:center;margin:28px 0;">
