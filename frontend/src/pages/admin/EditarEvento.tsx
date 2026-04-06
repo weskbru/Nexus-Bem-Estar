@@ -6,7 +6,9 @@ import {
   AlertCircle,
   ArrowLeft,
   Save,
-  Lock} from 'lucide-react';
+  Lock,
+  Info,
+} from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { adminEventosApi, type EventoDTO } from '../../services/api';
@@ -582,6 +584,17 @@ export default function EditarEvento() {
                     <FieldError msg={erros.hora_fim} />
                   </div>
                 </div>
+
+                {/* Aviso de bloqueio do almoço */}
+                {form.hora_inicio && form.hora_fim && form.hora_fim > form.hora_inicio &&
+                  form.hora_inicio < '13:30' && form.hora_fim > '11:40' && (
+                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 font-medium">
+                    <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <span>
+                      O intervalo de almoço <strong>(11:40 – 13:30)</strong> é bloqueado automaticamente. Sessões que coincidam com esse período serão descartadas ao salvar.
+                    </span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>

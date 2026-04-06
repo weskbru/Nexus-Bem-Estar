@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.db import transaction
 
 from rest_framework import generics, permissions, status
@@ -9,6 +10,7 @@ from ...serializers.serializers import AgendamentoSerializer
 from ...services import email_service
 from ...services.lista_espera_service import notificar_proximo_na_fila
 from ..permissions import encerrar_eventos_expirados
+from .otp_agendamento_view import cache_key_otp
 
 
 class ReservarHorarioView(APIView):
@@ -22,6 +24,45 @@ class ReservarHorarioView(APIView):
 
     @transaction.atomic
     def post(self, request, evento_id, horario_id):
+        # Validar OTP antes de qualquer operação no banco
+        otp_informado = (request.data.get('otp') or '').strip()
+        if not otp_informado:
+            return Response(
+                {'erro': 'Informe o código de confirmação enviado ao seu e-mail.', 'requer_otp': True},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        key = cache_key_otp(request.user.id, horario_id)
+        dados_otp = cache.get(key)
+
+        if not dados_otp:
+            return Response(
+                {'erro': 'Código expirado. Solicite um novo código e tente novamente.', 'otp_expirado': True},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if dados_otp['tentativas'] >= 3:
+            cache.delete(key)
+            return Response(
+                {'erro': 'Número máximo de tentativas atingido. Solicite um novo código.', 'otp_expirado': True},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        if otp_informado != dados_otp['codigo']:
+            dados_otp['tentativas'] += 1
+            cache.set(key, dados_otp, timeout=300)
+            restantes = 3 - dados_otp['tentativas']
+            return Response(
+                {
+                    'erro': f'Código incorreto. {restantes} tentativa{"s" if restantes != 1 else ""} restante{"s" if restantes != 1 else ""}.',
+                    'otp_incorreto': True,
+                },
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # OTP válido — invalida para uso único
+        cache.delete(key)
+
         encerrar_eventos_expirados()
 
         try:
@@ -70,6 +111,26 @@ class ReservarHorarioView(APIView):
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
+
+        # Bloquear agendamento direto se o usuário está na fila de espera deste evento.
+        # Garante que ninguém fure a fila permanecendo na página e reservando direto.
+        na_fila = ListaEspera.objects.filter(
+            usuario=request.user,
+            horario__evento_id=evento_id,
+            status__in=['aguardando', 'notificado'],
+        ).exists()
+
+        if na_fila:
+            return Response(
+                {
+                    'erro': (
+                        'Você está na fila de espera deste evento. '
+                        'Aguarde ser chamado por e-mail — você terá 5 minutos para confirmar sua vaga.'
+                    ),
+                    'na_fila': True,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         agendamento_existente = (
             Agendamento.objects
