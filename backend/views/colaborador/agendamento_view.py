@@ -112,11 +112,11 @@ class ReservarHorarioView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        # Bloquear agendamento direto se o usuário está na fila de espera deste evento.
-        # Garante que ninguém fure a fila permanecendo na página e reservando direto.
+        # Bloquear agendamento direto apenas se o usuário está na fila deste slot específico.
+        # Permite que o usuário reserve outro slot disponível mesmo estando na fila de um slot lotado.
         na_fila = ListaEspera.objects.filter(
             usuario=request.user,
-            horario__evento_id=evento_id,
+            horario_id=horario_id,
             status__in=['aguardando', 'notificado'],
         ).exists()
 
@@ -124,7 +124,7 @@ class ReservarHorarioView(APIView):
             return Response(
                 {
                     'erro': (
-                        'Você está na fila de espera deste evento. '
+                        'Você está na fila de espera deste horário. '
                         'Aguarde ser chamado por e-mail — você terá 5 minutos para confirmar sua vaga.'
                     ),
                     'na_fila': True,

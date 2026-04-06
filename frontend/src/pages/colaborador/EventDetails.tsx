@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User, RefreshCw, AlertCircle, Info, Ticket } from 'lucide-react';
+import { ChevronRight, Calendar as CalendarIcon, Clock, Users, CheckCircle2, User, RefreshCw, AlertCircle, Info, Ticket } from 'lucide-react';
 import { parseFetchError } from '../../services/api';
 import ModalDetalhesAgendamento, { type AgendamentoDetalhes } from '../../components/ModalDetalhesAgendamento';
 
@@ -56,6 +56,7 @@ export default function EventDetails() {
   // Lista de espera
   const [listaEsperaMap, setListaEsperaMap] = useState<Record<number, ListaEsperaInfo>>({});
   const [entrandoFila, setEntrandoFila] = useState<number | null>(null);
+  const [saiindoFila, setSaiindoFila] = useState<number | null>(null);
 
   useEffect(() => {
     carregarEvento();
@@ -166,6 +167,31 @@ export default function EventDetails() {
     }
   }
 
+  async function handleSairFila(e: React.MouseEvent, horarioId: number) {
+    e.stopPropagation();
+    setSaiindoFila(horarioId);
+    try {
+      const res = await fetch(
+        `${API}/colaborador/horarios/${horarioId}/lista-espera/`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro ?? 'Erro ao sair da fila.');
+      setListaEsperaMap(prev => {
+        const novo = { ...prev };
+        delete novo[horarioId];
+        return novo;
+      });
+    } catch (err) {
+      setErroReserva(parseFetchError(err, 'Não foi possível sair da fila de espera.'));
+    } finally {
+      setSaiindoFila(null);
+    }
+  }
+
   async function handleEntrarFila(e: React.MouseEvent, horarioId: number) {
     e.stopPropagation(); // Evita acionar o clique do card principal
     setEntrandoFila(horarioId);
@@ -179,15 +205,15 @@ export default function EventDetails() {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro ?? 'Erro ao entrar na fila.');
-      setListaEsperaMap(prev => ({
-        ...prev,
+      // Substitui todo o mapa: apenas uma fila ativa por evento
+      setListaEsperaMap({
         [horarioId]: {
           horario_id: horarioId,
           posicao: data.posicao,
           total_na_fila: data.total_na_fila,
           status: data.status,
         },
-      }));
+      });
     } catch (err) {
       setErroReserva(parseFetchError(err, 'Não foi possível entrar na lista de espera.'));
     } finally {
@@ -273,21 +299,37 @@ export default function EventDetails() {
   ): ReactNode {
     if (filaInfo) {
       return (
-        <div className="bg-amber-100/80 text-amber-800 rounded-lg py-1.5 px-2 flex flex-col items-center">
-          <span className="text-[10px] font-bold uppercase tracking-wider">Na fila</span>
-          <span className="text-xs font-semibold">{filaInfo.posicao}º lugar</span>
+        <div className="flex flex-col gap-1.5 items-center w-full">
+          <div className="bg-amber-100/80 text-amber-800 rounded-lg py-1.5 px-2 flex flex-col items-center w-full">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Na fila</span>
+            <span className="text-xs font-semibold">{filaInfo.posicao}º lugar</span>
+          </div>
+          <button
+            onClick={(e) => handleSairFila(e, h.id)}
+            disabled={saiindoFila === h.id}
+            className="w-full bg-white border border-red-200 hover:bg-red-50 hover:border-red-300 hover:text-red-700 text-red-400 text-[10px] font-bold py-1 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {saiindoFila === h.id ? 'Saindo...' : 'Sair da fila'}
+          </button>
         </div>
       );
     }
 
     if (!existeAgendamento) {
+      const migrando = naFilaAtiva;
       return (
         <button
           onClick={(e) => handleEntrarFila(e, h.id)}
           disabled={carregandoFila}
-          className="w-full bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 text-slate-500 text-xs font-bold py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          className={`w-full bg-white border text-xs font-bold py-1.5 rounded-lg transition-colors disabled:opacity-50
+            ${migrando
+              ? 'border-amber-200 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 text-amber-600'
+              : 'border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 text-slate-500'
+            }`}
         >
-          {carregandoFila ? 'Entrando...' : 'Entrar na fila'}
+          {carregandoFila
+            ? (migrando ? 'Migrando...' : 'Entrando...')
+            : (migrando ? 'Migrar para esta fila' : 'Entrar na fila')}
         </button>
       );
     }
@@ -369,8 +411,10 @@ export default function EventDetails() {
     const filaInfo = listaEsperaMap[h.id];
     const carregandoFila = entrandoFila === h.id;
     const existeAgendamento = Boolean(agendamentoExistente);
-    // Bloqueia seleção se: slot lotado, já tem agendamento (sem modo alterar), ou está na fila ativa
-    const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando) || naFilaAtiva;
+    // Bloqueia seleção se: slot lotado, já tem agendamento (sem modo alterar),
+    // ou está na fila de espera especificamente deste slot
+    const naFilaDesteSlot = Boolean(filaInfo && (filaInfo.status === 'aguardando' || filaInfo.status === 'notificado'));
+    const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando) || naFilaDesteSlot;
 
     if (!h.disponivel) {
       return renderCardHorarioLotado(h, selecionado, existeAgendamento, filaInfo, carregandoFila);
@@ -534,7 +578,7 @@ export default function EventDetails() {
             <div>
               <p className="text-sm font-bold text-amber-900 mb-1">Você está na fila de espera</p>
               <p className="text-sm font-medium text-amber-800 leading-relaxed">
-                A reserva direta está bloqueada enquanto você aguarda na fila. Quando uma vaga surgir, você receberá um e-mail — terá <strong>5 minutos</strong> para confirmar clicando no link enviado.
+                O horário em que você está na fila permanece bloqueado. Caso surja outro horário disponível, você pode reservá-lo normalmente — isso cancela sua posição na fila automaticamente. Quando sua vez chegar, você receberá um e-mail e terá <strong>5 minutos</strong> para confirmar.
               </p>
             </div>
           </div>
@@ -557,18 +601,6 @@ export default function EventDetails() {
         </div>
       )}
 
-      {/* Botão Voltar (Apenas se não tiver agendamento e não estiver alterando) */}
-      {!agendamentoExistente && !alterando && (
-        <div className="flex justify-center mt-8">
-          <Link
-            to="/login"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 rounded-xl font-bold transition-all shadow-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Voltar para o Menu
-          </Link>
-        </div>
-      )}
 
       {/* Modal Reutilizável de Confirmação/Sucesso */}
       {modalAgendamento && (
