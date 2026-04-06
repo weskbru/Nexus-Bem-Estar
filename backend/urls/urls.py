@@ -12,6 +12,7 @@ from ..views.auth.confirmar_vaga_view import ConfirmarVagaListaEsperaView
 from ..views.colaborador.evento_view import EventoListView, EventoDetailView
 from ..views.colaborador.agendamento_view import ReservarHorarioView, CancelarAgendamentoView, MeusAgendamentosView
 from ..views.colaborador.lista_espera_view import EntrarListaEsperaView, MinhaListaEsperaView
+from ..views.colaborador.otp_agendamento_view import SolicitarOTPAgendamentoView
 
 router = DefaultRouter()
 router.register(r'admin/usuarios',     AdminUsuarioViewSet,      basename='admin-usuarios')
@@ -64,6 +65,11 @@ urlpatterns = [
     # -----------------------------------------------------------------------
     # Colaborador — Lista de Espera
     # -----------------------------------------------------------------------
+    path(
+        'colaborador/horarios/<int:horario_id>/solicitar-otp/',
+        SolicitarOTPAgendamentoView.as_view(),
+        name='solicitar-otp-agendamento',
+    ),
     path(
         'colaborador/horarios/<int:horario_id>/lista-espera/',
         EntrarListaEsperaView.as_view(),
