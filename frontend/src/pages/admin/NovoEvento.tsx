@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useMemo, useRef, useState, type RefObject } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -186,89 +186,6 @@ function FieldError({ msg }: FieldErrorProps) {
   );
 }
 
-function minutosParaHora(totalMinutos: number): string {
-  const horas = Math.floor(totalMinutos / 60);
-  const minutos = totalMinutos % 60;
-  return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
-}
-
-const HORARIOS_OPCOES = Array.from({ length: 24 * 12 }, (_, index) => minutosParaHora(index * 5));
-
-type TimePickerSelectProps = Readonly<{
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-  placeholder?: string;
-}>;
-
-function TimePickerSelect({
-  value,
-  onChange,
-  error,
-  placeholder,
-}: TimePickerSelectProps) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, []);
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(prev => !prev)}
-        className={`w-full px-4 py-3 rounded-xl border text-sm text-left outline-none transition-all duration-200 bg-white shadow-sm
-          hover:border-emerald-300 hover:bg-slate-50
-          focus-visible:ring-4 focus-visible:ring-emerald-500/20 focus-visible:border-emerald-500
-          ${error ? 'border-red-400 bg-red-50/30' : 'border-slate-200'}`}
-      >
-        <span className={value ? 'text-slate-800 font-medium' : 'text-slate-400'}>{value || placeholder || 'Selecione...'}</span>
-      </button>
-
-      {open && (
-        <div className="absolute z-30 mt-2 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-100">
-          <div className="max-h-56 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-            {HORARIOS_OPCOES.map((horario) => {
-              const isSelected = value === horario;
-              return (
-                <button
-                  key={horario}
-                  type="button"
-                  onClick={() => {
-                    onChange(horario);
-                    setOpen(false);
-                  }}
-                  className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors mb-0.5 last:mb-0
-                    ${isSelected
-                      ? 'bg-emerald-600 text-white font-semibold shadow-sm'
-                      : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
-                    }`}
-                >
-                  {horario}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 const EMAIL_FORMATS = [
   'header', 'bold', 'italic', 'underline', 'strike',
@@ -550,20 +467,43 @@ export default function NovoEvento() {
               <div className="lg:col-span-7 space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="block text-sm font-semibold text-slate-700 mb-2">
+                    <label htmlFor="hora_inicio" className="block text-sm font-semibold text-slate-700 mb-2">
                       Início <span className="text-red-500">*</span>
-                    </span>
-                    <TimePickerSelect value={form.hora_inicio} onChange={(v) => update('hora_inicio', v)} error={erros.hora_inicio} />
+                    </label>
+                    <input
+                      id="hora_inicio"
+                      type="time"
+                      value={form.hora_inicio}
+                      onChange={e => update('hora_inicio', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.hora_inicio ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                    />
                     <FieldError msg={erros.hora_inicio} />
                   </div>
                   <div>
-                    <span className="block text-sm font-semibold text-slate-700 mb-2">
+                    <label htmlFor="hora_fim" className="block text-sm font-semibold text-slate-700 mb-2">
                       Término <span className="text-red-500">*</span>
-                    </span>
-                    <TimePickerSelect value={form.hora_fim} onChange={(v) => update('hora_fim', v)} error={erros.hora_fim} />
+                    </label>
+                    <input
+                      id="hora_fim"
+                      type="time"
+                      value={form.hora_fim}
+                      onChange={e => update('hora_fim', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.hora_fim ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                    />
                     <FieldError msg={erros.hora_fim} />
                   </div>
                 </div>
+
+                {/* Aviso de bloqueio do almoço */}
+                {form.hora_inicio && form.hora_fim && form.hora_fim > form.hora_inicio &&
+                  form.hora_inicio < '13:30' && form.hora_fim > '11:40' && (
+                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 font-medium">
+                    <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <span>
+                      O intervalo de almoço <strong>(11:40 – 13:30)</strong> é bloqueado automaticamente. Sessões que coincidam com esse período serão descartadas ao salvar.
+                    </span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>

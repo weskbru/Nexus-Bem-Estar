@@ -178,7 +178,7 @@ def notificar_proximo_na_fila(horario_id: int) -> None:
 
     proximo.status = StatusListaEspera.NOTIFICADO
     proximo.notificado_em = agora
-    proximo.expira_em = agora + timedelta(hours=2)
+    proximo.expira_em = agora + timedelta(minutes=5)
     proximo.save(update_fields=['status', 'notificado_em', 'expira_em'])
 
     email_service.enviar_vaga_lista_espera(proximo)

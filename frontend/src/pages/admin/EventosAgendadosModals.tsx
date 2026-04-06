@@ -346,6 +346,7 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
                 <th style="padding:7px 10px;text-align:left;border-bottom:1px solid #cbd5e1;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">E-mail corporativo</th>
                 <th style="width:80px;padding:7px 10px;text-align:center;border-bottom:1px solid #cbd5e1;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Ramal</th>
                 <th style="width:72px;padding:7px 10px;text-align:center;border-bottom:1px solid #cbd5e1;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Presença</th>
+                <th style="padding:7px 10px;text-align:center;border-bottom:1px solid #cbd5e1;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Assinatura</th>
               </tr>
             </thead>
             <tbody>
@@ -357,6 +358,9 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
                   <td style="padding:7px 10px;text-align:center;border-bottom:1px solid #e2e8f0;font-family:monospace;color:#334155;">${p.ramal || '—'}</td>
                   <td style="padding:7px 10px;text-align:center;border-bottom:1px solid #e2e8f0;">
                     <div style="width:18px;height:18px;border:1.5px solid #94a3b8;border-radius:4px;display:inline-block;"></div>
+                  </td>
+                  <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;">
+                    <div style="border-bottom:1px solid #94a3b8;min-width:120px;height:20px;"></div>
                   </td>
                 </tr>
               `).join('')}

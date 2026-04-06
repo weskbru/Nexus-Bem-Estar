@@ -123,7 +123,7 @@ export default function EventDetails() {
     }
   }
 
-  async function handleReservar() {
+  async function handleReservar(otp: string) {
     if (!horarioSelecionado || !evento) return;
     setReservando(true);
     setErroReserva('');
@@ -133,7 +133,7 @@ export default function EventDetails() {
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ alterar: alterando }),
+          body: JSON.stringify({ alterar: alterando, otp }),
         }
       );
       const data = await res.json();
@@ -142,6 +142,13 @@ export default function EventDetails() {
           setModalAgendamento(null);
           setModoModal('detalhes');
           setErroPenalidade(data.erro);
+          return;
+        }
+        if (data.na_fila) {
+          setModalAgendamento(null);
+          setModoModal('detalhes');
+          setErroReserva(data.erro);
+          await carregarEvento();
           return;
         }
         throw new Error(data.erro ?? 'Erro ao reservar.');
@@ -224,6 +231,11 @@ export default function EventDetails() {
   
   const horariosDisponiveis = evento.horarios.filter(h => h.disponivel);
   const qtdHorariosDisponiveis = horariosDisponiveis.length;
+
+  // Usuário está na fila de espera ativa (aguardando ou notificado) em qualquer slot deste evento
+  const naFilaAtiva = Object.values(listaEsperaMap).some(
+    e => e.status === 'aguardando' || e.status === 'notificado'
+  );
 
   function abrirModalDetalhes(ag: AgendamentoDetalhes) {
     setModalAgendamento(ag);
@@ -357,7 +369,8 @@ export default function EventDetails() {
     const filaInfo = listaEsperaMap[h.id];
     const carregandoFila = entrandoFila === h.id;
     const existeAgendamento = Boolean(agendamentoExistente);
-    const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando);
+    // Bloqueia seleção se: slot lotado, já tem agendamento (sem modo alterar), ou está na fila ativa
+    const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando) || naFilaAtiva;
 
     if (!h.disponivel) {
       return renderCardHorarioLotado(h, selecionado, existeAgendamento, filaInfo, carregandoFila);
@@ -515,7 +528,18 @@ export default function EventDetails() {
         </div>
 
         {/* Aviso Fila de Espera Ativa */}
-        {Object.keys(listaEsperaMap).length > 0 && (
+        {naFilaAtiva && (
+          <div className="mt-8 flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-2xl p-5 shadow-sm">
+            <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-amber-900 mb-1">Você está na fila de espera</p>
+              <p className="text-sm font-medium text-amber-800 leading-relaxed">
+                A reserva direta está bloqueada enquanto você aguarda na fila. Quando uma vaga surgir, você receberá um e-mail — terá <strong>5 minutos</strong> para confirmar clicando no link enviado.
+              </p>
+            </div>
+          </div>
+        )}
+        {!naFilaAtiva && Object.keys(listaEsperaMap).length > 0 && (
           <div className="mt-8 flex items-start sm:items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4">
             <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5 sm:mt-0" />
             <p className="text-sm font-medium text-blue-800 leading-relaxed">
@@ -555,6 +579,7 @@ export default function EventDetails() {
             setModalAgendamento(null);
             setModoModal('detalhes');
           }}
+          horarioId={horarioSelecionado ?? undefined}
           onConfirmarReserva={modoModal === 'confirmacao' ? handleReservar : undefined}
           confirmandoReserva={modoModal === 'confirmacao' ? reservando : false}
           textoConfirmar={alterando ? 'Confirmar Novo Horário' : 'Confirmar Reserva'}
