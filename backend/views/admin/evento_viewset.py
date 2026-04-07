@@ -1,7 +1,6 @@
 import csv
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 
@@ -190,14 +189,8 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         )
 
         try:
-            send_mail(
-                subject=evento.titulo,
-                message='',
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=destinatario,
-                html_message=corpo_html,
-                fail_silently=False,
-            )
+            for dest in destinatario:
+                email_service.enviar_html_evento(evento.titulo, corpo_html, dest)
             evento.emails_enviados_em = timezone.now()
             evento.save(update_fields=['emails_enviados_em'])
             return Response({

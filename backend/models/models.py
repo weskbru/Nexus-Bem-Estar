@@ -422,6 +422,35 @@ class Penalidade(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# Comunicado
+# ---------------------------------------------------------------------------
+
+class Comunicado(models.Model):
+    """
+    Comunicado avulso enviado pelo admin para todos os colaboradores ativos.
+    Guarda histórico de tudo que foi enviado.
+    """
+    assunto = models.CharField(max_length=200, verbose_name='Assunto')
+    corpo_html = models.TextField(verbose_name='Corpo HTML')
+    enviado_por = models.ForeignKey(
+        Usuario, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='comunicados_enviados',
+        verbose_name='Enviado por',
+    )
+    enviado_em = models.DateTimeField(auto_now_add=True, verbose_name='Enviado em')
+    total_destinatarios = models.PositiveIntegerField(default=0, verbose_name='Total de destinatários')
+
+    class Meta:
+        verbose_name = 'Comunicado'
+        verbose_name_plural = 'Comunicados'
+        ordering = ['-enviado_em']
+
+    def __str__(self):
+        return f'{self.assunto} — {self.enviado_em.strftime("%d/%m/%Y %H:%M")}'
+
+
+# ---------------------------------------------------------------------------
 # Helpers internos
 # ---------------------------------------------------------------------------
 
