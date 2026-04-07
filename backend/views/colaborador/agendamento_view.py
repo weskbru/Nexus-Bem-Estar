@@ -84,6 +84,24 @@ class ReservarHorarioView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Bloqueia reserva direta se outro usuário já foi notificado e está dentro do prazo de confirmação
+        reservado_para_outro = ListaEspera.objects.filter(
+            horario=horario,
+            status='notificado',
+        ).exclude(usuario=request.user).exists()
+
+        if reservado_para_outro:
+            return Response(
+                {
+                    'erro': (
+                        'Este horário está reservado para confirmação de um colaborador da fila de espera. '
+                        'Aguarde — se ele não confirmar em 5 minutos, a vaga será liberada novamente.'
+                    ),
+                    'reservado_para_fila': True,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         # Verificar penalidade ativa por falta em evento anterior
         penalidade = (
             Penalidade.objects

@@ -15,6 +15,7 @@ interface HorarioData {
   vagas_livres: number;
   vagas_ocupadas: number;
   disponivel: boolean;
+  reservado_para_fila: boolean;
 }
 
 interface EventoData {
@@ -342,7 +343,8 @@ export default function EventDetails() {
     selecionado: boolean,
     existeAgendamento: boolean,
     filaInfo: ListaEsperaInfo | undefined,
-    carregandoFila: boolean
+    carregandoFila: boolean,
+    bloqueadoPorFila = false,
   ): ReactNode {
     const isMeuHorarioAtual = selecionado && existeAgendamento && !alterando;
 
@@ -353,6 +355,11 @@ export default function EventDetails() {
         {isMeuHorarioAtual && (
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap shadow-sm">
             Seu Horário
+          </div>
+        )}
+        {bloqueadoPorFila && !isMeuHorarioAtual && (
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap shadow-sm">
+            Reservado — fila
           </div>
         )}
 
@@ -411,13 +418,15 @@ export default function EventDetails() {
     const filaInfo = listaEsperaMap[h.id];
     const carregandoFila = entrandoFila === h.id;
     const existeAgendamento = Boolean(agendamentoExistente);
-    // Bloqueia seleção se: slot lotado, já tem agendamento (sem modo alterar),
-    // ou está na fila de espera especificamente deste slot
     const naFilaDesteSlot = Boolean(filaInfo && (filaInfo.status === 'aguardando' || filaInfo.status === 'notificado'));
+
+    // Slot disponível mas reservado para confirmação de outro usuário da fila
+    const bloqueadoPorFila = h.disponivel && h.reservado_para_fila && !naFilaDesteSlot;
+
     const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando) || naFilaDesteSlot;
 
-    if (!h.disponivel) {
-      return renderCardHorarioLotado(h, selecionado, existeAgendamento, filaInfo, carregandoFila);
+    if (!h.disponivel || bloqueadoPorFila) {
+      return renderCardHorarioLotado(h, selecionado, existeAgendamento, filaInfo, carregandoFila, bloqueadoPorFila);
     }
 
     return renderCardHorarioDisponivel(h, selecionado, selecaoBloqueada);

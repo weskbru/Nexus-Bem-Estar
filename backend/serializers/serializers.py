@@ -3,7 +3,7 @@ from datetime import date
 from django.conf import settings
 from django.utils import timezone
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade, ListaEspera
 
 
 def _add_months(base_date: date, months: int) -> date:
@@ -70,13 +70,22 @@ class HorarioSerializer(serializers.ModelSerializer):
     vagas_ocupadas = serializers.ReadOnlyField()
     vagas_livres = serializers.ReadOnlyField()
     disponivel = serializers.ReadOnlyField()
+    reservado_para_fila = serializers.SerializerMethodField()
 
     class Meta:
         model = Horario
         fields = [
             'id', 'hora_inicio', 'hora_fim',
             'vagas_disponiveis', 'vagas_ocupadas', 'vagas_livres', 'disponivel',
+            'reservado_para_fila',
         ]
+
+    def get_reservado_para_fila(self, obj) -> bool:
+        """True quando há alguém com status 'notificado' aguardando confirmação neste slot."""
+        return ListaEspera.objects.filter(
+            horario=obj,
+            status='notificado',
+        ).exists()
 
 
 # ---------------------------------------------------------------------------
