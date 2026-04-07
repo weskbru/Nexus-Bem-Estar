@@ -209,7 +209,7 @@ export default function Comunicados() {
             <p className="text-xs text-slate-400 mb-2">
               Use a barra de ferramentas para formatar texto, adicionar links e inserir imagens por URL.
             </p>
-            <EditorComunicado value={corpoHtml} onChange={setCorpoHtml} onUploadError={setErro} />
+            <EditorComunicado value={corpoHtml} onChange={setCorpoHtml} />
           </div>
 
           {erro && (
