@@ -12,6 +12,7 @@ import NovoEvento from './pages/admin/NovoEvento';
 import EditarEvento from './pages/admin/EditarEvento';
 import Relatorios from './pages/admin/Relatorios';
 import GestaoUsuarios from './pages/admin/GestaoUsuarios';
+import Comunicados from './pages/admin/Comunicados';
 import ColaboradorLayout from './layouts/ColaboradorLayout';
 import EventDetails from './pages/colaborador/EventDetails';
 import Confirmacao from './pages/colaborador/Confirmacao';
@@ -54,6 +55,7 @@ function App() {
             <Route path="eventos/:id/editar" element={<EditarEvento />} />
             <Route path="relatorios" element={<Relatorios />} />
             <Route path="gestao-usuarios" element={<GestaoUsuarios />} />
+            <Route path="comunicados" element={<Comunicados />} />
           </Route>
 
           <Route
