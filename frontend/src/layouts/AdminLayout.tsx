@@ -7,6 +7,7 @@ import {
   HelpCircle,
   LogOut,
   ShieldCheck,
+  Megaphone,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import logoAeb from '../images/logoaeb.png';
@@ -54,6 +55,7 @@ function formatDateTime(iso: string): string {
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/agendamentos', icon: Calendar, label: 'Agendamentos', end: false },
+  { to: '/admin/comunicados', icon: Megaphone, label: 'Comunicados', end: false },
 ];
 
 export default function AdminLayout() {
