@@ -1,10 +1,11 @@
 import logging
 
+from django.conf import settings
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ...models.models import Comunicado, Usuario
+from ...models.models import Comunicado
 from ...services import email_service
 
 logger = logging.getLogger(__name__)
@@ -14,13 +15,17 @@ def _is_admin(request):
     return request.user.is_authenticated and request.user.is_admin
 
 
+def _get_destinatarios() -> list[str]:
+    """Retorna a lista de destinatários configurada em EMAIL_DESTINO_EVENTO."""
+    raw = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
+    return [d.strip() for d in raw.split(',') if d.strip()]
+
+
 def _enviar_para_todos(assunto: str, corpo_html: str) -> int:
-    destinatarios = Usuario.objects.filter(is_active=True, is_admin=False)
-    total = 0
-    for usuario in destinatarios:
-        email_service.enviar_comunicado(usuario, assunto, corpo_html)
-        total += 1
-    return total
+    destinatarios = _get_destinatarios()
+    for dest in destinatarios:
+        email_service.enviar_html_evento(assunto, corpo_html, dest)
+    return len(destinatarios)
 
 
 class AdminComunicadoView(APIView):
@@ -58,6 +63,11 @@ class AdminComunicadoView(APIView):
             return Response({'erro': 'O assunto é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
         if not corpo_html:
             return Response({'erro': 'O corpo do comunicado é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not _get_destinatarios():
+            return Response(
+                {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         try:
             total = _enviar_para_todos(assunto, corpo_html)
@@ -114,6 +124,11 @@ class AdminComunicadoDetailView(APIView):
             return Response({'erro': 'O assunto é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
         if not corpo_html:
             return Response({'erro': 'O corpo do comunicado é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        if reenviar and not _get_destinatarios():
+            return Response(
+                {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         try:
             obj.assunto = assunto
