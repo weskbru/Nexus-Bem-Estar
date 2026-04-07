@@ -1,6 +1,7 @@
 import logging
 
 from django.conf import settings
+from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -45,7 +46,7 @@ class AdminComunicadoView(APIView):
                 'id': c.id,
                 'assunto': c.assunto,
                 'enviado_por': c.enviado_por.nome if c.enviado_por else '—',
-                'enviado_em': c.enviado_em.strftime('%d/%m/%Y às %H:%M'),
+                'enviado_em': timezone.localtime(c.enviado_em).strftime('%d/%m/%Y às %H:%M'),
                 'total_destinatarios': c.total_destinatarios,
             }
             for c in comunicados
