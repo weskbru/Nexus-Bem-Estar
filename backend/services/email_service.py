@@ -4,8 +4,60 @@ Serviço de e-mail — funções puras de envio, sem lógica de negócio.
 Movido de views.py para quebrar o acoplamento entre a camada de apresentação
 e os side-effects de infraestrutura (SMTP).
 """
+import base64
+import re
+import uuid
+from email.mime.image import MIMEImage
+
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives, send_mail
+
+
+def _enviar_html_com_imagens(subject: str, html: str, recipient: str) -> None:
+    """
+    Envia e-mail HTML substituindo imagens base64 por anexos CID inline.
+    Funciona em Outlook, Gmail, Exchange e demais clientes corporativos.
+    """
+    imagens: list[tuple[str, str, bytes]] = []
+
+    def _extrair_imagem(match: re.Match) -> str:
+        mime_type = match.group(1)          # ex: image/png
+        b64_data  = match.group(2)
+        cid       = f"img_{uuid.uuid4().hex}"
+        try:
+            dados = base64.b64decode(b64_data)
+        except Exception:
+            return match.group(0)           # mantém original se falhar
+        imagens.append((cid, mime_type, dados))
+        return f'src="cid:{cid}"'
+
+    html_processado = re.sub(
+        r'src="data:(image/[^;]+);base64,([^"]+)"',
+        _extrair_imagem,
+        html,
+    )
+
+    msg = EmailMultiAlternatives(
+        subject=subject,
+        body='',
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[recipient],
+    )
+    msg.attach_alternative(html_processado, 'text/html')
+
+    if imagens:
+        msg.mixed_subtype = 'related'
+        for cid, mime_type, dados in imagens:
+            subtype = mime_type.split('/')[-1]
+            img_part = MIMEImage(dados, _subtype=subtype)
+            img_part.add_header('Content-ID', f'<{cid}>')
+            img_part.add_header('Content-Disposition', 'inline')
+            msg.attach(img_part)
+
+    try:
+        msg.send(fail_silently=True)
+    except Exception:
+        pass
 
 
 def enviar_confirmacao_agendamento(agendamento) -> None:
@@ -85,6 +137,29 @@ def enviar_vaga_lista_espera(entrada) -> None:
         )
     except Exception:
         pass
+
+
+def enviar_comunicado(usuario, assunto: str, corpo_html: str) -> None:
+    """Envia um comunicado avulso para um colaborador."""
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px 24px;">
+      <div style="border-bottom:2px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px;">
+        <h2 style="color:#1d4ed8;margin:0;font-size:18px;">Agenda Bem-Estar — AEB</h2>
+      </div>
+      {corpo_html}
+      <div style="border-top:1px solid #e5e7eb;margin-top:32px;padding-top:16px;text-align:center;">
+        <p style="color:#9ca3af;font-size:12px;margin:0;">
+          Equipe de Qualidade de Vida no Trabalho — Agência Espacial Brasileira
+        </p>
+      </div>
+    </div>"""
+
+    _enviar_html_com_imagens(assunto, html, usuario.email)
+
+
+def enviar_html_evento(subject: str, corpo_html: str, destinatario: str) -> None:
+    """Envia o HTML do evento (corpo_email) tratando imagens base64 como CID."""
+    _enviar_html_com_imagens(subject, corpo_html, destinatario)
 
 
 def enviar_cancelamento_evento(evento, agendamentos) -> None:

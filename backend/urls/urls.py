@@ -5,6 +5,7 @@ from ..views.admin.usuario_viewset import AdminUsuarioViewSet
 from ..views.admin.evento_viewset import AdminEventoViewSet, AdminAgendamentoViewSet, AdminPenalidadeViewSet
 from ..views.admin.dashboard_view import AdminDashboardView
 from ..views.admin.ldap_views import LdapSearchView, PromoverAdminView, RevogarAdminView, ListarAdminsView
+from ..views.admin.comunicado_view import AdminComunicadoView, AdminComunicadoDetailView
 from ..views.auth.login_view import AdminLoginView
 from ..views.auth.acesso_view import AcessoViaTokenView, EventoPublicoView, AcessarEventoView
 from ..views.auth.otp_view import SolicitarAcessoView, VerificarCodigoView
@@ -40,6 +41,8 @@ urlpatterns = [
     path('admin/ldap/promover/',                      PromoverAdminView.as_view(),   name='ldap-promover'),
     path('admin/ldap/revogar/<int:usuario_id>/',      RevogarAdminView.as_view(),    name='ldap-revogar'),
     path('admin/ldap/admins/',                        ListarAdminsView.as_view(),    name='ldap-admins'),
+    path('admin/comunicados/',                        AdminComunicadoView.as_view(),       name='admin-comunicados'),
+    path('admin/comunicados/<int:pk>/',               AdminComunicadoDetailView.as_view(),  name='admin-comunicado-detail'),
 
     # -----------------------------------------------------------------------
     # Colaborador — Eventos
