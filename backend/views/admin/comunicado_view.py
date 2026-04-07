@@ -1,9 +1,13 @@
+import logging
+
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ...models.models import Comunicado, Usuario
 from ...services import email_service
+
+logger = logging.getLogger(__name__)
 
 
 def _is_admin(request):
@@ -55,14 +59,17 @@ class AdminComunicadoView(APIView):
         if not corpo_html:
             return Response({'erro': 'O corpo do comunicado é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        total = _enviar_para_todos(assunto, corpo_html)
-
-        comunicado = Comunicado.objects.create(
-            assunto=assunto,
-            corpo_html=corpo_html,
-            enviado_por=request.user,
-            total_destinatarios=total,
-        )
+        try:
+            total = _enviar_para_todos(assunto, corpo_html)
+            comunicado = Comunicado.objects.create(
+                assunto=assunto,
+                corpo_html=corpo_html,
+                enviado_por=request.user,
+                total_destinatarios=total,
+            )
+        except Exception as exc:
+            logger.exception('Erro ao enviar comunicado')
+            return Response({'erro': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(
             {'id': comunicado.id, 'total_enviado': total},
@@ -108,16 +115,21 @@ class AdminComunicadoDetailView(APIView):
         if not corpo_html:
             return Response({'erro': 'O corpo do comunicado é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        obj.assunto = assunto
-        obj.corpo_html = corpo_html
+        try:
+            obj.assunto = assunto
+            obj.corpo_html = corpo_html
 
-        total_enviado = 0
-        if reenviar:
-            total_enviado = _enviar_para_todos(assunto, corpo_html)
-            obj.total_destinatarios = total_enviado
-            obj.enviado_por = request.user
+            total_enviado = 0
+            if reenviar:
+                total_enviado = _enviar_para_todos(assunto, corpo_html)
+                obj.total_destinatarios = total_enviado
+                obj.enviado_por = request.user
 
-        obj.save()
+            obj.save()
+        except Exception as exc:
+            logger.exception('Erro ao salvar/reenviar comunicado')
+            return Response({'erro': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         return Response({'id': obj.id, 'total_enviado': total_enviado, 'reenviado': reenviar})
 
     def delete(self, request, pk):
