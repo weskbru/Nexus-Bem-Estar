@@ -204,6 +204,10 @@ class EventoAdminSerializer(serializers.ModelSerializer):
         return evento
 
     def update(self, instance, validated_data):
+        if instance.emails_enviados_em and instance.status != 'encerrado':
+            raise serializers.ValidationError(
+                {'non_field_errors': 'Este evento não pode ser editado pois o e-mail de divulgação já foi enviado.'}
+            )
         campos_de_horario = {
             'duracao_sessao', 'hora_inicio', 'hora_fim', 'capacidade_por_horario', 'data'
         }
