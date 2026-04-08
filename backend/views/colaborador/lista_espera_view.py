@@ -57,15 +57,17 @@ class EntrarListaEsperaView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        if ListaEspera.objects.filter(horario=horario, usuario=request.user).exists():
-            entrada = ListaEspera.objects.get(horario=horario, usuario=request.user)
+        entrada_existente = ListaEspera.objects.filter(
+            horario=horario, usuario=request.user
+        ).first()
+        if entrada_existente:
             total = ListaEspera.objects.filter(
                 horario=horario, status__in=['aguardando', 'notificado']
             ).count()
             return Response({
-                'posicao':       entrada.posicao,
+                'posicao':       entrada_existente.posicao,
                 'total_na_fila': total,
-                'status':        entrada.status,
+                'status':        entrada_existente.status,
                 'ja_inscrito':   True,
             })
 

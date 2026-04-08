@@ -157,6 +157,20 @@ def enviar_comunicado(usuario, assunto: str, corpo_html: str) -> None:
     _enviar_html_com_imagens(assunto, html, usuario.email)
 
 
+def get_destinatarios_evento() -> list[str]:
+    """Retorna a lista de destinatários configurada em EMAIL_DESTINO_EVENTO."""
+    raw = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
+    return [d.strip() for d in raw.split(',') if d.strip()]
+
+
+def enviar_para_lista_evento(assunto: str, corpo_html: str) -> int:
+    """Envia comunicado para todos os endereços de EMAIL_DESTINO_EVENTO. Retorna o total enviado."""
+    destinatarios = get_destinatarios_evento()
+    for dest in destinatarios:
+        enviar_html_evento(assunto, corpo_html, dest)
+    return len(destinatarios)
+
+
 def enviar_html_evento(subject: str, corpo_html: str, destinatario: str) -> None:
     """Envia o HTML do evento (corpo_email) tratando imagens base64 como CID."""
     _enviar_html_com_imagens(subject, corpo_html, destinatario)

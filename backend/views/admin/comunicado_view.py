@@ -1,45 +1,27 @@
 import logging
 
-from django.conf import settings
 from django.utils import timezone
-from rest_framework import permissions, status
+from rest_framework import status
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from ...domain.exceptions import ComunicadoEnvioError
 from ...models.models import Comunicado
 from ...services import email_service
+from ..permissions import IsAdminUsuario
 
 logger = logging.getLogger(__name__)
-
-
-def _is_admin(request):
-    return request.user.is_authenticated and request.user.is_admin
-
-
-def _get_destinatarios() -> list[str]:
-    """Retorna a lista de destinatários configurada em EMAIL_DESTINO_EVENTO."""
-    raw = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
-    return [d.strip() for d in raw.split(',') if d.strip()]
-
-
-def _enviar_para_todos(assunto: str, corpo_html: str) -> int:
-    destinatarios = _get_destinatarios()
-    for dest in destinatarios:
-        email_service.enviar_html_evento(assunto, corpo_html, dest)
-    return len(destinatarios)
 
 
 class AdminComunicadoView(APIView):
     """
     GET  /api/admin/comunicados/   — lista histórico de comunicados
-    POST /api/admin/comunicados/   — envia novo comunicado para todos os colaboradores ativos
+    POST /api/admin/comunicados/   — envia novo comunicado para todos os destinatários configurados
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminUsuario]
 
-    def get(self, request):
-        if not _is_admin(request):
-            return Response(status=status.HTTP_403_FORBIDDEN)
-
+    def get(self, request: Request) -> Response:
         comunicados = Comunicado.objects.select_related('enviado_por').all()
         data = [
             {
@@ -53,34 +35,34 @@ class AdminComunicadoView(APIView):
         ]
         return Response(data)
 
-    def post(self, request):
-        if not _is_admin(request):
-            return Response(status=status.HTTP_403_FORBIDDEN)
-
-        assunto = (request.data.get('assunto') or '').strip()
-        corpo_html = (request.data.get('corpo_html') or '').strip()
+    def post(self, request: Request) -> Response:
+        assunto: str = (request.data.get('assunto') or '').strip()
+        corpo_html: str = (request.data.get('corpo_html') or '').strip()
 
         if not assunto:
             return Response({'erro': 'O assunto é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
         if not corpo_html:
             return Response({'erro': 'O corpo do comunicado é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
-        if not _get_destinatarios():
+        if not email_service.get_destinatarios_evento():
             return Response(
                 {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         try:
-            total = _enviar_para_todos(assunto, corpo_html)
+            total = email_service.enviar_para_lista_evento(assunto, corpo_html)
             comunicado = Comunicado.objects.create(
                 assunto=assunto,
                 corpo_html=corpo_html,
                 enviado_por=request.user,
                 total_destinatarios=total,
             )
-        except Exception as exc:
-            logger.exception('Erro ao enviar comunicado')
-            return Response({'erro': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except ComunicadoEnvioError as exc:
+            logger.error('comunicado_envio_falhou', extra={'usuario_id': request.user.id, 'assunto': assunto, 'detalhe': str(exc)})
+            return Response({'erro': 'Falha ao enviar o comunicado. Tente novamente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            logger.exception('comunicado_envio_erro_inesperado', extra={'usuario_id': request.user.id, 'assunto': assunto})
+            return Response({'erro': 'Erro interno.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(
             {'id': comunicado.id, 'total_enviado': total},
@@ -90,42 +72,38 @@ class AdminComunicadoView(APIView):
 
 class AdminComunicadoDetailView(APIView):
     """
-    GET    /api/admin/comunicados/<id>/           — retorna assunto + corpo_html para edição
-    PUT    /api/admin/comunicados/<id>/           — atualiza; se reenviar=true também reenvia
-    DELETE /api/admin/comunicados/<id>/           — exclui o registro
+    GET    /api/admin/comunicados/<id>/   — retorna assunto + corpo_html para edição
+    PUT    /api/admin/comunicados/<id>/   — atualiza; se reenviar=true também reenvia
+    DELETE /api/admin/comunicados/<id>/   — exclui o registro
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAdminUsuario]
 
-    def _get_objeto(self, pk):
+    def _get_objeto(self, pk: int) -> Comunicado | None:
         try:
             return Comunicado.objects.get(pk=pk)
         except Comunicado.DoesNotExist:
             return None
 
-    def get(self, request, pk):
-        if not _is_admin(request):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+    def get(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:
             return Response({'erro': 'Comunicado não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response({'id': obj.id, 'assunto': obj.assunto, 'corpo_html': obj.corpo_html})
 
-    def put(self, request, pk):
-        if not _is_admin(request):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+    def put(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:
             return Response({'erro': 'Comunicado não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
 
-        assunto = (request.data.get('assunto') or '').strip()
-        corpo_html = (request.data.get('corpo_html') or '').strip()
-        reenviar = bool(request.data.get('reenviar', False))
+        assunto: str = (request.data.get('assunto') or '').strip()
+        corpo_html: str = (request.data.get('corpo_html') or '').strip()
+        reenviar: bool = bool(request.data.get('reenviar', False))
 
         if not assunto:
             return Response({'erro': 'O assunto é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
         if not corpo_html:
             return Response({'erro': 'O corpo do comunicado é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
-        if reenviar and not _get_destinatarios():
+        if reenviar and not email_service.get_destinatarios_evento():
             return Response(
                 {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -137,20 +115,21 @@ class AdminComunicadoDetailView(APIView):
 
             total_enviado = 0
             if reenviar:
-                total_enviado = _enviar_para_todos(assunto, corpo_html)
+                total_enviado = email_service.enviar_para_lista_evento(assunto, corpo_html)
                 obj.total_destinatarios = total_enviado
                 obj.enviado_por = request.user
 
             obj.save()
-        except Exception as exc:
-            logger.exception('Erro ao salvar/reenviar comunicado')
-            return Response({'erro': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except ComunicadoEnvioError as exc:
+            logger.error('comunicado_reenvio_falhou', extra={'usuario_id': request.user.id, 'comunicado_id': pk, 'detalhe': str(exc)})
+            return Response({'erro': 'Falha ao reenviar o comunicado. Tente novamente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            logger.exception('comunicado_reenvio_erro_inesperado', extra={'usuario_id': request.user.id, 'comunicado_id': pk})
+            return Response({'erro': 'Erro interno.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({'id': obj.id, 'total_enviado': total_enviado, 'reenviado': reenviar})
 
-    def delete(self, request, pk):
-        if not _is_admin(request):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+    def delete(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:
             return Response({'erro': 'Comunicado não encontrado.'}, status=status.HTTP_404_NOT_FOUND)

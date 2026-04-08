@@ -32,3 +32,7 @@ class PrazoConfirmacaoExpiradoError(ListaEsperaError):
 class VagaIndisponivelError(ListaEsperaError):
     http_status = 409
     mensagem = 'A vaga foi preenchida antes de sua confirmação. O próximo da fila foi notificado.'
+
+
+class ComunicadoEnvioError(Exception):
+    """Falha ao enviar ou persistir um comunicado."""
