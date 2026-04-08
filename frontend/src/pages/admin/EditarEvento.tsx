@@ -331,6 +331,7 @@ export default function EditarEvento() {
   const [carregando, setCarregando] = useState(true);
   const [erroCarregar, setErroCarregar] = useState('');
   const [statusEvento, setStatusEvento] = useState('');
+  const [emailEnviadoEm, setEmailEnviadoEm] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
     titulo: '', tipo: '', data: '', hora_inicio: '', hora_fim: '',
@@ -345,6 +346,7 @@ export default function EditarEvento() {
     adminEventosApi.obter(Number(id))
       .then((evento) => {
         setStatusEvento(evento.status);
+        setEmailEnviadoEm(evento.emails_enviados_em ?? null);
         setForm(mapEventoToForm(evento));
       })
       .catch(() => setErroCarregar('Não foi possível carregar o evento.'))
@@ -424,9 +426,16 @@ export default function EditarEvento() {
   const normalizedStatus = statusEvento.toUpperCase() === 'PUBLICADO' ? 'ATIVO' : statusEvento.toUpperCase();
   const isCancelado = normalizedStatus === 'CANCELADO';
   const isEncerrado = normalizedStatus === 'ENCERRADO';
+  const isEmailEnviado = Boolean(emailEnviadoEm) && !isEncerrado;
   const statusBadgeInfo = getStatusBadgeInfo(normalizedStatus);
 
-  if (isEncerrado || isCancelado) {
+  if (isEncerrado || isCancelado || isEmailEnviado) {
+    const motivo = isEncerrado
+      ? { titulo: 'Evento Encerrado', descricao: 'Por questões de histórico e auditoria, as informações deste evento estão bloqueadas para edição. Para realizar uma nova atividade, crie um novo evento.' }
+      : isCancelado
+      ? { titulo: 'Evento Cancelado', descricao: 'Por questões de histórico e auditoria, as informações deste evento estão bloqueadas para edição. Para realizar uma nova atividade, crie um novo evento.' }
+      : { titulo: 'E-mail já disparado', descricao: `O e-mail de divulgação foi enviado em ${emailEnviadoEm}. Para garantir a consistência das informações recebidas pelos colaboradores, o evento não pode mais ser editado.` };
+
     return (
       <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6">
         <div className="flex items-center gap-4 mb-8">
@@ -435,7 +444,7 @@ export default function EditarEvento() {
           </Link>
           <div>
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Editar Evento</h1>
-            <p className="text-slate-500 text-sm mt-1 font-medium">Eventos cancelados ou encerrados não podem ser alterados.</p>
+            <p className="text-slate-500 text-sm mt-1 font-medium">Este evento não pode ser alterado.</p>
           </div>
         </div>
 
@@ -443,9 +452,9 @@ export default function EditarEvento() {
           <div className="w-16 h-16 bg-white border border-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-sm">
             <Lock className="w-8 h-8 text-slate-400" />
           </div>
-          <h2 className="text-xl font-bold text-slate-800 mb-2">Evento {isEncerrado ? 'Encerrado' : 'Cancelado'}</h2>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">{motivo.titulo}</h2>
           <p className="text-slate-500 font-medium max-w-md mx-auto mb-6">
-            Por questões de histórico e auditoria, as informações deste evento estão bloqueadas para edição. Para realizar uma nova atividade, crie um novo evento.
+            {motivo.descricao}
           </p>
           <Link to="/admin/agendamentos" className="inline-flex items-center justify-center px-6 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm focus:ring-4 focus:ring-slate-100 outline-none">
             Voltar para Agendamentos
