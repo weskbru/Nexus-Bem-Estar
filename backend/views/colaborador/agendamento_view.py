@@ -84,6 +84,14 @@ class ReservarHorarioView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Limpa notificações vencidas antes de verificar o bloqueio.
+        # Sem isso, se o prazo de 5 min expirou e ninguém cancelou,
+        # o slot fica bloqueado indefinidamente com reservado_para_fila=True.
+        notificar_proximo_na_fila(horario.id)
+
+        # Recarrega disponivel após possível limpeza de expirados
+        horario.refresh_from_db(fields=['vagas_disponiveis'])
+
         # Bloqueia reserva direta se outro usuário já foi notificado e está dentro do prazo de confirmação
         reservado_para_outro = ListaEspera.objects.filter(
             horario=horario,

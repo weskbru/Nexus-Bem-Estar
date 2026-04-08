@@ -296,8 +296,10 @@ export default function EventDetails() {
     h: HorarioData,
     filaInfo: ListaEsperaInfo | undefined,
     carregandoFila: boolean,
-    existeAgendamento: boolean
+    existeAgendamento: boolean,
+    bloqueadoPorFila = false,
   ): ReactNode {
+    // Usuário já está nesta fila — mostra posição + botão sair
     if (filaInfo) {
       return (
         <div className="flex flex-col gap-1.5 items-center w-full">
@@ -314,6 +316,11 @@ export default function EventDetails() {
           </button>
         </div>
       );
+    }
+
+    // Slot reservado para confirmação de outro usuário — não permite entrar
+    if (bloqueadoPorFila) {
+      return <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Aguardando confirmação</span>;
     }
 
     if (!existeAgendamento) {
@@ -372,7 +379,7 @@ export default function EventDetails() {
 
         {!isMeuHorarioAtual && (
           <div className="mt-auto pt-2 border-t border-slate-200">
-            {renderAcaoHorarioLotado(h, filaInfo, carregandoFila, existeAgendamento)}
+            {renderAcaoHorarioLotado(h, filaInfo, carregandoFila, existeAgendamento, bloqueadoPorFila)}
           </div>
         )}
       </div>
