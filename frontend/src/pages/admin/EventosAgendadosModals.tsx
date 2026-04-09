@@ -16,6 +16,7 @@ import {
   XCircle,
   ShieldAlert,
   Search,
+  ClipboardCheck,
 } from 'lucide-react';
 import {
   adminEventosApi,
@@ -93,6 +94,57 @@ export function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: Con
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
             {loading ? 'Excluindo...' : 'Sim, Excluir'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type ErroPresencaModalProps = Readonly<{
+  mensagem: string;
+  onClose: () => void;
+  onVerPresenca?: () => void;
+}>
+
+export function ErroPresencaModal({ mensagem, onClose, onVerPresenca }: ErroPresencaModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-amber-50 border border-amber-100 rounded-full flex items-center justify-center shrink-0">
+              <ClipboardCheck className="w-6 h-6 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">Lista de presença pendente</h3>
+              <p className="text-sm text-amber-600 font-medium">Ação bloqueada</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 -mr-2 -mt-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mb-6">
+          <p className="text-sm text-slate-700 leading-relaxed">{mensagem}</p>
+        </div>
+
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-700 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition-all"
+          >
+            Fechar
+          </button>
+          {onVerPresenca && (
+            <button
+              onClick={onVerPresenca}
+              className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-sm hover:shadow-md hover:shadow-amber-500/20 rounded-xl transition-all flex items-center justify-center gap-2"
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              Ver lista de presença
+            </button>
+          )}
         </div>
       </div>
     </div>

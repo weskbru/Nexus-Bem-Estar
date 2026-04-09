@@ -70,6 +70,26 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             )
         return super().create(request, *args, **kwargs)
 
+    def destroy(self, request, *args, **kwargs):
+        evento = self.get_object()
+        if evento.status == 'encerrado':
+            presenca_pendente = Agendamento.objects.filter(
+                horario__evento=evento,
+                status='confirmado',
+                compareceu__isnull=True,
+            ).exists()
+            if presenca_pendente:
+                return Response(
+                    {
+                        'erro': f'Preencha e salve a lista de presença do evento "{evento.titulo}" antes de excluí-lo.',
+                        'codigo': 'lista_presenca_pendente',
+                        'evento_id': evento.id,
+                        'evento_titulo': evento.titulo,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=True, methods=['post'], url_path='publicar')
     def publicar(self, request, pk=None):
         """Publica o evento, gera os slots de horário e distribui participantes pendentes."""
