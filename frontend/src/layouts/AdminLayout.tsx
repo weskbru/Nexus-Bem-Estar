@@ -274,7 +274,11 @@ export default function AdminLayout() {
                 </span>
               )}
             </button>
-            <button className="hover:text-slate-700">
+            <button
+              onClick={() => navigate('/admin/manual')}
+              className="hover:text-slate-700"
+              title="Manual do Sistema"
+            >
               <HelpCircle className="w-5 h-5" />
             </button>
 

@@ -13,6 +13,7 @@ import {
   ConfirmActionModal,
   ListaPresencaModal,
   RegistrarParticipanteModal,
+  ErroPresencaModal,
 } from './EventosAgendadosModals';
 
 export default function AdminEventos() {
@@ -29,6 +30,7 @@ export default function AdminEventos() {
   const [actionTarget, setActionTarget] = useState<EventoDTO | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ evento: EventoDTO; tipo: 'emails' | 'cancelar' } | null>(null);
   const [toast, setToast] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null);
+  const [erroPresenca, setErroPresenca] = useState<{ msg: string; eventoId: number } | null>(null);
 
   useEffect(() => { carregarEventos(); }, []);
 
@@ -91,6 +93,15 @@ export default function AdminEventos() {
         `${import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api'}/admin/eventos/${deleteTarget.id}/`,
         { method: 'DELETE', headers: { Authorization: `Bearer ${token ?? ''}` } }
       );
+      if (res.status === 409) {
+        const data = await res.json();
+        setDeleteTarget(null);
+        setErroPresenca({
+          msg: data.erro ?? 'Preencha a lista de presença antes de excluir o evento.',
+          eventoId: data.evento_id,
+        });
+        return;
+      }
       if (!res.ok) throw new Error('Falha ao deletar o evento');
       setEventos(prev => prev.filter(e => e.id !== deleteTarget.id));
       setDeleteTarget(null);
@@ -314,6 +325,17 @@ export default function AdminEventos() {
         <ListaPresencaModal
           eventoId={listaPresencaId}
           onClose={() => { setListaPresencaId(null); carregarEventos(); }}
+        />
+      )}
+
+      {erroPresenca && (
+        <ErroPresencaModal
+          mensagem={erroPresenca.msg}
+          onClose={() => setErroPresenca(null)}
+          onVerPresenca={() => {
+            setListaPresencaId(erroPresenca.eventoId);
+            setErroPresenca(null);
+          }}
         />
       )}
     </div>

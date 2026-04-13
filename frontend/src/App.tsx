@@ -13,6 +13,7 @@ import EditarEvento from './pages/admin/EditarEvento';
 import Relatorios from './pages/admin/Relatorios';
 import GestaoUsuarios from './pages/admin/GestaoUsuarios';
 import Comunicados from './pages/admin/Comunicados';
+import Manual from './pages/admin/Manual';
 import ColaboradorLayout from './layouts/ColaboradorLayout';
 import EventDetails from './pages/colaborador/EventDetails';
 import Confirmacao from './pages/colaborador/Confirmacao';
@@ -56,6 +57,7 @@ function App() {
             <Route path="relatorios" element={<Relatorios />} />
             <Route path="gestao-usuarios" element={<GestaoUsuarios />} />
             <Route path="comunicados" element={<Comunicados />} />
+            <Route path="manual" element={<Manual />} />
           </Route>
 
           <Route
