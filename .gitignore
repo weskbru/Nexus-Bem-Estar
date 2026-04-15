@@ -32,3 +32,6 @@ gunicorn.log
 
 # Docker volumes locais
 postgres_data/
+
+# Testes de carga — tokens gerados contra banco, nunca versionar
+load_tests/tokens.csv
