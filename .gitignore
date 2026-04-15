@@ -33,5 +33,16 @@ gunicorn.log
 # Docker volumes locais
 postgres_data/
 
-# Testes de carga — tokens gerados contra banco, nunca versionar
-load_tests/tokens.csv
+# Testes de carga — não vai para o servidor
+load_tests/
+
+# Documentação e arquivos que não precisam ir para a VM
+README.md
+CHECKLIST_BACKEND.md
+FLUXO_EMAIL_TOKEN.md
+GUIA_CONFIRMACAO_EMAIL.md
+
+# Backups automáticos do nginx (gerados no servidor)
+nginx.conf.save
+nginx.conf.save.1
+*.conf.save*
