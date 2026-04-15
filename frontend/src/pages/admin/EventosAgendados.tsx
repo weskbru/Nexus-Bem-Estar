@@ -30,7 +30,7 @@ export default function AdminEventos() {
   const [actionTarget, setActionTarget] = useState<EventoDTO | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ evento: EventoDTO; tipo: 'emails' | 'cancelar' } | null>(null);
   const [toast, setToast] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null);
-  const [erroPresenca, setErroPresenca] = useState<{ msg: string; eventoId: number } | null>(null);
+  const [erroPresenca, setErroPresenca] = useState<{ msg: string; eventoId: number; codigo?: string } | null>(null);
 
   useEffect(() => { carregarEventos(); }, []);
 
@@ -97,8 +97,9 @@ export default function AdminEventos() {
         const data = await res.json();
         setDeleteTarget(null);
         setErroPresenca({
-          msg: data.erro ?? 'Preencha a lista de presença antes de excluir o evento.',
+          msg: data.erro ?? 'Não foi possível excluir o evento.',
           eventoId: data.evento_id,
+          codigo: data.codigo,
         });
         return;
       }
@@ -331,11 +332,16 @@ export default function AdminEventos() {
       {erroPresenca && (
         <ErroPresencaModal
           mensagem={erroPresenca.msg}
+          codigo={erroPresenca.codigo}
           onClose={() => setErroPresenca(null)}
-          onVerPresenca={() => {
-            setListaPresencaId(erroPresenca.eventoId);
-            setErroPresenca(null);
-          }}
+          onVerPresenca={
+            erroPresenca.codigo === 'lista_presenca_pendente'
+              ? () => {
+                  setListaPresencaId(erroPresenca.eventoId);
+                  setErroPresenca(null);
+                }
+              : undefined
+          }
         />
       )}
     </div>

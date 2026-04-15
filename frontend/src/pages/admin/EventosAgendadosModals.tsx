@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   Search,
   ClipboardCheck,
+  MailX,
 } from 'lucide-react';
 import {
   adminEventosApi,
@@ -104,19 +105,24 @@ type ErroPresencaModalProps = Readonly<{
   mensagem: string;
   onClose: () => void;
   onVerPresenca?: () => void;
+  codigo?: string;
 }>
 
-export function ErroPresencaModal({ mensagem, onClose, onVerPresenca }: ErroPresencaModalProps) {
+export function ErroPresencaModal({ mensagem, onClose, onVerPresenca, codigo }: ErroPresencaModalProps) {
+  const isEmailAtivo = codigo === 'email_enviado_evento_ativo';
+  const Icone = isEmailAtivo ? MailX : ClipboardCheck;
+  const titulo = isEmailAtivo ? 'Exclusão não permitida' : 'Lista de presença pendente';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-amber-50 border border-amber-100 rounded-full flex items-center justify-center shrink-0">
-              <ClipboardCheck className="w-6 h-6 text-amber-600" />
+              <Icone className="w-6 h-6 text-amber-600" />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-slate-900 tracking-tight">Lista de presença pendente</h3>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">{titulo}</h3>
               <p className="text-sm text-amber-600 font-medium">Ação bloqueada</p>
             </div>
           </div>
