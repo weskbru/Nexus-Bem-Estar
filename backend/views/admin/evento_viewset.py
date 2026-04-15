@@ -71,7 +71,29 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         return super().create(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
+        from datetime import datetime as dt
         evento = self.get_object()
+
+        # Bloqueia exclusão se o e-mail já foi disparado e o evento ainda está em andamento
+        if evento.emails_enviados_em and evento.status == 'publicado':
+            fim_evento = timezone.make_aware(
+                dt.combine(evento.data, evento.hora_fim)
+            )
+            if timezone.now() < fim_evento:
+                return Response(
+                    {
+                        'erro': (
+                            f'Não é possível excluir o evento "{evento.titulo}" pois os e-mails de convite '
+                            'já foram enviados e o horário do evento ainda não encerrou.'
+                        ),
+                        'codigo': 'email_enviado_evento_ativo',
+                        'evento_id': evento.id,
+                        'evento_titulo': evento.titulo,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        # Bloqueia exclusão se o evento já encerrou mas a lista de presença ainda não foi preenchida
         if evento.status == 'encerrado':
             presenca_pendente = Agendamento.objects.filter(
                 horario__evento=evento,

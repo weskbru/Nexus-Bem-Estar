@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -9,9 +9,8 @@ import {
   Lock,
   Info,
 } from 'lucide-react';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
 import { adminEventosApi, type EventoDTO } from '../../services/api';
+import EditorEmailConvite from '../../components/EditorEmailConvite';
 import {
   dataAposLimite,
   dataNoPassado,
@@ -259,36 +258,6 @@ function validarFormEvento(form: FormState): FormErrors {
   return e;
 }
 
-function inserirImagemNoEditor(file: File, quillRef: RefObject<ReactQuill | null>): void {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const editor = quillRef.current?.getEditor();
-    if (!editor || typeof reader.result !== 'string') return;
-    const range = editor.getSelection(true);
-    const index = range ? range.index : editor.getLength();
-    editor.insertEmbed(index, 'image', reader.result, 'user');
-    editor.setSelection(index + 1);
-  };
-  reader.readAsDataURL(file);
-}
-
-function abrirSeletorImagem(quillRef: RefObject<ReactQuill | null>): void {
-  const input = document.createElement('input');
-  input.setAttribute('type', 'file');
-  input.setAttribute('accept', 'image/png,image/jpeg,image/jpg,image/webp');
-  input.click();
-
-  input.onchange = () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      globalThis.alert('A imagem deve ter no máximo 5MB.');
-      return;
-    }
-    inserirImagemNoEditor(file, quillRef);
-  };
-}
-
 type StatusBadgeInfo = Readonly<{ label: string; className: string }>;
 
 function getStatusBadgeInfo(status: string): StatusBadgeInfo {
@@ -301,32 +270,11 @@ function getStatusBadgeInfo(status: string): StatusBadgeInfo {
   return { label: 'Encerrado', className: 'bg-slate-100 text-slate-700 border border-slate-200/60' };
 }
 
-const EMAIL_FORMATS = [
-  'header', 'bold', 'italic', 'underline', 'strike',
-  'list', 'bullet', 'align', 'link', 'image',
-];
-
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function EditarEvento() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const quillRef = useRef<ReactQuill | null>(null);
-
-  const emailModules = useMemo(() => ({
-    toolbar: {
-      container: [
-        [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        [{ align: [] }],
-        ['link', 'image', 'clean'],
-      ],
-      handlers: {
-        image: () => abrirSeletorImagem(quillRef),
-      },
-    },
-  }), []);
 
   const [carregando, setCarregando] = useState(true);
   const [erroCarregar, setErroCarregar] = useState('');
@@ -545,15 +493,10 @@ export default function EditarEvento() {
                   Mensagem do E-mail Convite
                 </p>
                 <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm focus-within:ring-4 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all duration-200">
-                  <ReactQuill
-                    ref={quillRef}
-                    className="email-editor border-none"
-                    aria-labelledby="mensagem-email-label"
+                  <EditorEmailConvite
                     value={form.corpo_email}
-                    onChange={(value: string) => update('corpo_email', value)}
-                    theme="snow"
-                    modules={emailModules}
-                    formats={EMAIL_FORMATS}
+                    onChange={(value) => update('corpo_email', value)}
+                    disabled={isEmailEnviado || isEncerrado || isCancelado}
                   />
                 </div>
               </div>
@@ -658,6 +601,7 @@ export default function EditarEvento() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }

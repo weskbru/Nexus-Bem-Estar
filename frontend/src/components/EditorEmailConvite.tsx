@@ -2,10 +2,17 @@ import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
-interface EditorComunicadoProps {
+interface Props {
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
 }
+
+const FORMATS = [
+  'header', 'bold', 'italic', 'underline', 'strike',
+  'list', 'align', 'link', 'image',
+];
 
 type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
@@ -32,7 +39,7 @@ function handleCSS(h: Handle): React.CSSProperties {
   }
 }
 
-export default function EditorComunicado({ value, onChange }: EditorComunicadoProps) {
+export default function EditorEmailConvite({ value, onChange, disabled, placeholder }: Props) {
   const quillRef  = useRef<ReactQuill | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -51,7 +58,7 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
   function openPicker() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/png,image/jpeg,image/jpg,image/webp,image/gif';
+    input.accept = 'image/png,image/jpeg,image/jpg,image/webp';
     input.click();
     input.onchange = () => {
       const file = input.files?.[0];
@@ -75,24 +82,17 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
     toolbar: {
       container: [
         [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline'],
-        [{ color: [] }, { background: [] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
         [{ align: [] }],
-        ['link', 'image'],
-        ['clean'],
+        ['link', 'image', 'clean'],
       ],
       handlers: { image: openPicker },
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
 
-  const formats = [
-    'header', 'bold', 'italic', 'underline',
-    'color', 'background', 'align',
-    'link', 'image',
-  ];
-
-  // ── Sincroniza o overlay com a imagem selecionada
+  // ── Sincroniza posição/tamanho do overlay com a imagem selecionada
   const syncOverlay = useCallback((img: HTMLImageElement) => {
     const overlay = overlayRef.current;
     const wrapper = wrapperRef.current;
@@ -106,7 +106,7 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
     overlay.style.display = 'block';
   }, []);
 
-  // ── Detecta clique em imagem
+  // ── Detecta clique em imagem dentro do editor
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
@@ -127,12 +127,13 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [syncOverlay]);
 
-  // ── Inicia drag
+  // ── Inicia drag em um handle
   function onHandleMouseDown(e: React.MouseEvent, handle: Handle) {
-    if (!selectedImg) return;
+    const img = selectedImg;
+    if (!img) return;
     e.preventDefault();
     e.stopPropagation();
-    const rect = selectedImg.getBoundingClientRect();
+    const rect = img.getBoundingClientRect();
     dragRef.current = {
       handle,
       startX: e.clientX,
@@ -143,7 +144,7 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
     };
   }
 
-  // ── Drag e mouseup
+  // ── Movimentação e finalização do drag
   useEffect(() => {
     function onMove(e: MouseEvent) {
       const drag = dragRef.current;
@@ -162,6 +163,7 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
       }
 
       newW = Math.max(40, Math.min(newW, 900));
+      // Durante o drag: apenas feedback visual via style (não persiste no Delta)
       img.style.width  = `${Math.round(newW)}px`;
       img.style.height = 'auto';
       syncOverlay(img);
@@ -172,14 +174,19 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
       dragRef.current = null;
       if (!selectedImg) return;
 
+      // Lê a largura final renderizada
       const finalW = Math.round(selectedImg.getBoundingClientRect().width);
+
+      // Converte para atributo HTML — o Image Blot do Quill persiste 'width' no Delta
       selectedImg.setAttribute('width', String(finalW));
       selectedImg.removeAttribute('height');
+      // Remove o style inline usado apenas durante o drag
       selectedImg.style.removeProperty('width');
       selectedImg.style.removeProperty('height');
 
       syncOverlay(selectedImg);
 
+      // Notifica o React/parent com o HTML atualizado
       const editor = quillRef.current?.getEditor();
       if (editor) onChange((editor.root as HTMLElement).innerHTML);
     }
@@ -193,21 +200,20 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
   }, [selectedImg, syncOverlay, onChange]);
 
   return (
-    <div ref={wrapperRef} className="relative editor-comunicado">
+    <div ref={wrapperRef} className="relative">
       <ReactQuill
         ref={quillRef}
         theme="snow"
         value={value}
         onChange={onChange}
         modules={modules}
-        formats={formats}
-        placeholder="Escreva o comunicado aqui..."
+        formats={FORMATS}
+        placeholder={placeholder ?? 'Escreva os detalhes que os convidados precisam saber...'}
+        readOnly={disabled}
+        className="email-editor border-none"
       />
-      <p className="text-xs text-slate-400 mt-1.5">
-        Para inserir imagem clique no ícone 🖼️ na barra e selecione o arquivo (PNG, JPG, WEBP — máx. 10 MB). Clique numa imagem inserida para redimensioná-la.
-      </p>
 
-      {/* Overlay de resize */}
+      {/* Overlay de resize — posicionado absolutamente sobre a imagem */}
       <div
         ref={overlayRef}
         style={{
@@ -238,28 +244,6 @@ export default function EditorComunicado({ value, onChange }: EditorComunicadoPr
           />
         ))}
       </div>
-
-      <style>{`
-        .editor-comunicado .ql-container {
-          min-height: 280px;
-          font-size: 14px;
-          border-bottom-left-radius: 8px;
-          border-bottom-right-radius: 8px;
-        }
-        .editor-comunicado .ql-toolbar {
-          border-top-left-radius: 8px;
-          border-top-right-radius: 8px;
-          background: #f8fafc;
-        }
-        .editor-comunicado .ql-editor {
-          min-height: 280px;
-        }
-        .editor-comunicado .ql-editor img {
-          max-width: 100%;
-          border-radius: 6px;
-          margin: 8px 0;
-        }
-      `}</style>
     </div>
   );
 }

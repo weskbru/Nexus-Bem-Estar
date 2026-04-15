@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type RefObject } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -9,9 +9,8 @@ import {
   CalendarDays,
   ShieldAlert,
 } from 'lucide-react';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
 import { adminEventosApi, type ApiError } from '../../services/api';
+import EditorEmailConvite from '../../components/EditorEmailConvite';
 import {
   MAX_MESES_FUTURO,
   dataAposLimite,
@@ -187,11 +186,6 @@ function FieldError({ msg }: FieldErrorProps) {
 }
 
 
-const EMAIL_FORMATS = [
-  'header', 'bold', 'italic', 'underline', 'strike',
-  'list', 'bullet', 'align', 'link', 'image',
-];
-
 function validarCamposBasicos(form: FormState, e: FormErrors): void {
   if (!form.titulo.trim()) e.titulo = 'Nome do evento é obrigatório.';
   if (!form.tipo) e.tipo = 'Selecione o tipo de atividade.';
@@ -246,56 +240,10 @@ function validarFormEvento(form: FormState): FormErrors {
   return e;
 }
 
-function inserirImagemNoEditor(file: File, quillRef: RefObject<ReactQuill | null>): void {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const editor = quillRef.current?.getEditor();
-    if (!editor || typeof reader.result !== 'string') return;
-    const range = editor.getSelection(true);
-    const index = range ? range.index : editor.getLength();
-    editor.insertEmbed(index, 'image', reader.result, 'user');
-    editor.setSelection(index + 1);
-  };
-  reader.readAsDataURL(file);
-}
-
-function abrirSeletorImagem(quillRef: RefObject<ReactQuill | null>): void {
-  const input = document.createElement('input');
-  input.setAttribute('type', 'file');
-  input.setAttribute('accept', 'image/png,image/jpeg,image/jpg,image/webp');
-  input.click();
-
-  input.onchange = () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      globalThis.alert('A imagem deve ter no máximo 5MB.');
-      return;
-    }
-    inserirImagemNoEditor(file, quillRef);
-  };
-}
-
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function NovoEvento() {
   const navigate = useNavigate();
-  const quillRef = useRef<ReactQuill | null>(null);
-
-  const emailModules = useMemo(() => ({
-    toolbar: {
-      container: [
-        [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        [{ align: [] }],
-        ['link', 'image', 'clean'],
-      ],
-      handlers: {
-        image: () => abrirSeletorImagem(quillRef),
-      },
-    },
-  }), []);
 
   const [form, setForm] = useState<FormState>({
     titulo: '', tipo: '', data: '',
@@ -556,22 +504,15 @@ export default function NovoEvento() {
               <label htmlFor="corpo_email" className="block text-sm font-semibold text-slate-700 mb-2">
                 Mensagem do E-mail Convite
               </label>
-              <input id="corpo_email" type="hidden" value={form.corpo_email} />
               <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm focus-within:ring-4 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all duration-200">
-                <ReactQuill
-                  ref={quillRef}
-                  className="email-editor border-none"
+                <EditorEmailConvite
                   value={form.corpo_email}
-                  onChange={(value: string) => update('corpo_email', value)}
-                  placeholder="Escreva os detalhes que os convidados precisam saber..."
-                  theme="snow"
-                  modules={emailModules}
-                  formats={EMAIL_FORMATS}
+                  onChange={(value) => update('corpo_email', value)}
                 />
               </div>
               <p className="mt-2 text-[13px] text-slate-500 flex items-center gap-1.5">
                 <Info className="w-3.5 h-3.5" />
-                Suporta formatação rica e imagens (PNG, JPG, WEBP até 5MB).
+                Suporta formatação rica e imagens (PNG, JPG, WEBP até 10 MB). Clique numa imagem inserida para redimensioná-la.
               </p>
             </div>
           </div>
@@ -603,8 +544,9 @@ export default function NovoEvento() {
             </p>
           </div>
         </div>
-        
+
       </div>
+
     </div>
   );
 }
