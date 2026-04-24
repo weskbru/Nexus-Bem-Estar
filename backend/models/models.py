@@ -142,14 +142,14 @@ class Evento(models.Model):
         return f'{self.titulo} – {self.data}'
 
     # Horário de almoço: slots que se sobreponham a este intervalo são descartados
-    ALMOCO_INICIO = datetime.strptime('11:40', '%H:%M').time()
+    ALMOCO_INICIO = datetime.strptime('12:00', '%H:%M').time()
     ALMOCO_FIM    = datetime.strptime('13:30', '%H:%M').time()
 
     def gerar_horarios(self):
         """
         Gera os slots de horário com base nas configurações do evento.
         Só pode ser chamado se não houver agendamentos existentes.
-        Slots que se sobreponham ao horário de almoço (11:40–13:30) são descartados.
+        Slots que se sobreponham ao horário de almoço (12:00–13:30) são descartados.
         Slots que não completam a duração no final também são descartados.
         """
         if self.horarios.filter(agendamentos__isnull=False).exists():
@@ -164,17 +164,23 @@ class Evento(models.Model):
         fim = datetime.combine(self.data, self.hora_fim)
 
         slots = []
+        almoco_fim_dt = datetime.combine(self.data, self.ALMOCO_FIM)
         while atual + delta <= fim:
             slot_inicio = atual.time()
             slot_fim = (atual + delta).time()
-            # Descarta slots que se sobreponham ao horário de almoço
-            if not (slot_inicio < self.ALMOCO_FIM and slot_fim > self.ALMOCO_INICIO):
-                slots.append(Horario(
-                    evento=self,
-                    hora_inicio=slot_inicio,
-                    hora_fim=slot_fim,
-                    vagas_disponiveis=self.capacidade_por_horario,
-                ))
+            # Descarta slots que se sobreponham ao horário de almoço e pula direto para o fim do almoço
+            if slot_inicio < self.ALMOCO_FIM and slot_fim > self.ALMOCO_INICIO:
+                if almoco_fim_dt > atual:
+                    atual = almoco_fim_dt
+                else:
+                    atual += delta
+                continue
+            slots.append(Horario(
+                evento=self,
+                hora_inicio=slot_inicio,
+                hora_fim=slot_fim,
+                vagas_disponiveis=self.capacidade_por_horario,
+            ))
             atual += delta
 
         Horario.objects.bulk_create(slots)

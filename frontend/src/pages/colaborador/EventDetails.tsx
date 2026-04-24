@@ -584,7 +584,23 @@ export default function EventDetails() {
 
         {/* The Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-          {evento.horarios.map(h => renderCardHorario(h))}
+          {evento.horarios.flatMap((h, i, arr) => {
+            const cards: React.ReactNode[] = [renderCardHorario(h)];
+            const next = arr[i + 1];
+            if (next && h.hora_fim.substring(0, 5) < next.hora_inicio.substring(0, 5)) {
+              cards.push(
+                <div
+                  key={`almoco-${h.id}`}
+                  className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 flex items-center gap-3 px-4 py-2.5 bg-orange-50 border border-orange-200 rounded-xl text-orange-700 text-sm font-semibold"
+                >
+                  <span className="text-base">🍽️</span>
+                  <span>Intervalo de Almoço</span>
+                  <span className="font-bold">{h.hora_fim.substring(0, 5)} – {next.hora_inicio.substring(0, 5)}</span>
+                </div>
+              );
+            }
+            return cards;
+          })}
         </div>
 
         {/* Aviso Fila de Espera Ativa */}
