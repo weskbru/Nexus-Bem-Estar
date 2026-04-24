@@ -21,14 +21,10 @@ def _enviar_html_com_imagens(subject: str, html: str, recipient: str) -> None:
     """
     imagens: list[tuple[str, str, bytes]] = []
 
-    def _extrair_imagem(match: re.Match) -> str:
-        mime_type = match.group(1)          # ex: image/png
-        b64_data  = match.group(2)
-        cid       = f"img_{uuid.uuid4().hex}"
-        try:
-            dados = base64.b64decode(b64_data)
-        except Exception:
-            return match.group(0)           # mantém original se falhar
+    def _extrair_imagem(match):
+        mime_type = match.group(1)
+        dados = base64.b64decode(match.group(2))
+        cid = str(uuid.uuid4())
         imagens.append((cid, mime_type, dados))
         return f'src="cid:{cid}"'
 
