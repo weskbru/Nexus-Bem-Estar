@@ -335,6 +335,7 @@ class AgendamentoManual(models.Model):
     nome = models.CharField(max_length=200, verbose_name='Nome completo')
     matricula = models.CharField(max_length=50, blank=True, verbose_name='Matrícula')
     departamento = models.CharField(max_length=100, blank=True, verbose_name='Departamento')
+    compareceu = models.BooleanField(null=True, blank=True, verbose_name='Compareceu')
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:

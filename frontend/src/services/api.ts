@@ -211,15 +211,15 @@ export const adminEventosApi = {
     request<{ mensagem: string }>(`/admin/eventos/${id}/cancelar/`, { method: 'POST' }),
   enviarEmails: (id: number) =>
     request<{ mensagem: string; enviados: number; erros: unknown[] }>(`/admin/eventos/${id}/enviar-emails/`, { method: 'POST' }),
-  registrarParticipanteManual: (id: number, dados: { horario_id: number; nome: string; matricula?: string; departamento?: string }) =>
-    request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
+  registrarParticipanteManual: (id: number, dados: { horario_id: number; nome: string; departamento?: string; email_verificacao?: string }) =>
+    request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string; aviso_penalidade?: { id: number; usuario_nome: string } }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
   adicionarParticipantePendente: (id: number, dados: { nome: string; matricula?: string; departamento?: string }) =>
     request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
   listaPresenca: (id: number) =>
     request<ListaPresencaDTO>(`/admin/eventos/${id}/lista-presenca/`),
   removerParticipante: (eventoId: number, participanteId: number) =>
     request<void>(`/admin/eventos/${eventoId}/remover-participante/${participanteId}/`, { method: 'DELETE' }),
-  marcarPresenca: (eventoId: number, dados: { presentes: number[]; ausentes: number[] }) =>
+  marcarPresenca: (eventoId: number, dados: { presentes: number[]; ausentes: number[]; presentes_manuais: number[]; ausentes_manuais: number[] }) =>
     request<{ mensagem: string; penalidades_criadas: number }>(
       `/admin/eventos/${eventoId}/marcar-presenca/`,
       { method: 'POST', body: JSON.stringify(dados) }
@@ -260,6 +260,32 @@ export interface ListaPresencaDTO {
   horarios: HorarioPresencaDTO[];
   total: number;
 }
+
+// ── Admin — Penalidades ───────────────────────────────────────────────────
+
+export interface PenalidadeDTO {
+  id: number;
+  usuario: UsuarioDTO;
+  ativa: boolean;
+  evento_origem_titulo: string | null;
+  evento_punicao_titulo: string | null;
+  evento_punicao_status: string | null;
+  criada_em: string;
+  revogada_em: string | null;
+  motivo_revogacao: string;
+}
+
+export const adminPenalidadesApi = {
+  listar: (params?: { ativa?: boolean }) => {
+    const qs = params?.ativa !== undefined ? `?ativa=${params.ativa}` : '';
+    return request<PenalidadeDTO[]>(`/admin/penalidades/${qs}`);
+  },
+  revogar: (id: number, motivo: string) =>
+    request<PenalidadeDTO>(`/admin/penalidades/${id}/revogar/`, {
+      method: 'POST',
+      body: JSON.stringify({ motivo }),
+    }),
+};
 
 // ── Admin — Dashboard ─────────────────────────────────────────────────────
 

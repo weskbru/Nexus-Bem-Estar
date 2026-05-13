@@ -298,7 +298,22 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             matricula=matricula,
             departamento=departamento,
         )
-        return Response(AgendamentoManualSerializer(participante).data, status=status.HTTP_201_CREATED)
+
+        data = AgendamentoManualSerializer(participante).data
+        email_verificacao = request.data.get('email_verificacao', '').strip().lower()
+        if email_verificacao:
+            penalidade_ativa = (
+                Penalidade.objects
+                .filter(usuario__email__iexact=email_verificacao, ativa=True)
+                .select_related('usuario')
+                .first()
+            )
+            if penalidade_ativa:
+                data['aviso_penalidade'] = {
+                    'id': penalidade_ativa.id,
+                    'usuario_nome': penalidade_ativa.usuario.nome,
+                }
+        return Response(data, status=status.HTTP_201_CREATED)
 
     @action(
         detail=True,
@@ -362,6 +377,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                     'hora_inicio':     horario.hora_inicio.strftime('%H:%M'),
                     'hora_fim':        horario.hora_fim.strftime('%H:%M'),
                     'tipo':            'manual',
+                    'compareceu':      pm.compareceu,
                 })
             participantes.sort(key=lambda p: p['nome'])
             total += len(participantes)
@@ -401,12 +417,14 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        presentes_ids = request.data.get('presentes', [])
-        ausentes_ids = request.data.get('ausentes', [])
+        presentes_ids         = request.data.get('presentes', [])
+        ausentes_ids          = request.data.get('ausentes', [])
+        presentes_manuais_ids = request.data.get('presentes_manuais', [])
+        ausentes_manuais_ids  = request.data.get('ausentes_manuais', [])
 
-        if not isinstance(presentes_ids, list) or not isinstance(ausentes_ids, list):
+        if not all(isinstance(v, list) for v in [presentes_ids, ausentes_ids, presentes_manuais_ids, ausentes_manuais_ids]):
             return Response(
-                {'erro': 'Os campos "presentes" e "ausentes" devem ser listas de IDs.'},
+                {'erro': 'Os campos de presença devem ser listas de IDs.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -429,6 +447,14 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             )
             if created:
                 penalidades_criadas += 1
+
+        # Presença de participantes manuais — apenas registro, sem penalidade
+        AgendamentoManual.objects.filter(
+            id__in=presentes_manuais_ids, evento=evento
+        ).update(compareceu=True)
+        AgendamentoManual.objects.filter(
+            id__in=ausentes_manuais_ids, evento=evento
+        ).update(compareceu=False)
 
         return Response({
             'mensagem': (
