@@ -281,7 +281,7 @@ class AgendamentoManualSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AgendamentoManual
-        fields = ['id', 'evento', 'horario', 'horario_info', 'nome', 'matricula', 'departamento', 'criado_em']
+        fields = ['id', 'evento', 'horario', 'horario_info', 'nome', 'matricula', 'departamento', 'compareceu', 'criado_em']
         read_only_fields = ['id', 'criado_em', 'horario_info']
 
     def get_horario_info(self, obj):

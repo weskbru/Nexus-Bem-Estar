@@ -15,12 +15,14 @@ import {
   Check,
   XCircle,
   ShieldAlert,
+  ShieldCheck,
   Search,
   ClipboardCheck,
   MailX,
 } from 'lucide-react';
 import {
   adminEventosApi,
+  adminPenalidadesApi,
   type EventoDTO,
   type HorarioDTO,
   type ListaPresencaDTO,
@@ -225,6 +227,8 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
   const [removendoId, setRemovendoId] = useState<number | null>(null);
   // presença: agendamento_id → true (compareceu) | false (faltou) | null (pendente)
   const [presenca, setPresenca] = useState<Record<number, boolean | null>>({});
+  // presença manual: participante_id → true | false | null
+  const [presencaManual, setPresencaManual] = useState<Record<number, boolean | null>>({});
   const [confirmando, setConfirmando] = useState(false);
   const [resultadoConfirmacao, setResultadoConfirmacao] = useState<{ penalidades: number } | null>(null);
   const [busca, setBusca] = useState('');
@@ -234,16 +238,19 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
     adminEventosApi.listaPresenca(eventoId)
       .then(d => {
         setDados(d);
-        // Inicializa estado de presença com valores já salvos no banco
         const inicial: Record<number, boolean | null> = {};
+        const inicialManual: Record<number, boolean | null> = {};
         for (const h of d.horarios) {
           for (const p of h.participantes) {
             if (p.tipo === 'email' && p.agendamento_id != null) {
               inicial[p.agendamento_id] = p.compareceu ?? null;
+            } else if (p.tipo === 'manual' && p.participante_id != null) {
+              inicialManual[p.participante_id] = p.compareceu ?? null;
             }
           }
         }
         setPresenca(inicial);
+        setPresencaManual(inicialManual);
       })
       .catch(() => setErro('Não foi possível carregar a lista de presença.'))
       .finally(() => setLoading(false));
@@ -270,19 +277,26 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
     }));
   }
 
+  function marcarPresencaManualFn(participanteId: number, valor: boolean) {
+    setPresencaManual(prev => ({
+      ...prev,
+      [participanteId]: prev[participanteId] === valor ? null : valor,
+    }));
+  }
+
   async function handleConfirmarPresenca() {
     setConfirmando(true);
     setErro('');
     try {
-      const presentes = Object.entries(presenca).filter(([, v]) => v === true).map(([k]) => Number(k));
-      const ausentes  = Object.entries(presenca).filter(([, v]) => v === false).map(([k]) => Number(k));
-      const resultado = await adminEventosApi.marcarPresenca(eventoId, { presentes, ausentes });
+      const presentes          = Object.entries(presenca).filter(([, v]) => v === true).map(([k]) => Number(k));
+      const ausentes           = Object.entries(presenca).filter(([, v]) => v === false).map(([k]) => Number(k));
+      const presentes_manuais  = Object.entries(presencaManual).filter(([, v]) => v === true).map(([k]) => Number(k));
+      const ausentes_manuais   = Object.entries(presencaManual).filter(([, v]) => v === false).map(([k]) => Number(k));
+      const resultado = await adminEventosApi.marcarPresenca(eventoId, { presentes, ausentes, presentes_manuais, ausentes_manuais });
       setResultadoConfirmacao({ penalidades: resultado.penalidades_criadas });
-      // Fecha o modal após 1.5s se todos os participantes foram marcados
-      const totalEmail = dados
-        ? dados.horarios.flatMap(h => h.participantes).filter(p => p.tipo === 'email').length
-        : 0;
-      if (presentes.length + ausentes.length >= totalEmail) {
+      const totalEmail  = dados ? dados.horarios.flatMap(h => h.participantes).filter(p => p.tipo === 'email').length : 0;
+      const totalManual = dados ? dados.horarios.flatMap(h => h.participantes).filter(p => p.tipo === 'manual').length : 0;
+      if (presentes.length + ausentes.length >= totalEmail && presentes_manuais.length + ausentes_manuais.length >= totalManual) {
         setTimeout(onClose, 1500);
       }
     } catch {
@@ -293,10 +307,16 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
   }
 
   const eventoEncerrado = dados?.evento.status === 'encerrado';
-  const totalMarcados = Object.values(presenca).filter(v => v !== null).length;
+  const totalMarcadosEmail   = Object.values(presenca).filter(v => v !== null).length;
+  const totalMarcadosManuais = Object.values(presencaManual).filter(v => v !== null).length;
+  const totalMarcados = totalMarcadosEmail + totalMarcadosManuais;
   const totalParticipantesEmail = dados
     ? dados.horarios.flatMap(h => h.participantes).filter(p => p.tipo === 'email').length
     : 0;
+  const totalParticipantesManuais = dados
+    ? dados.horarios.flatMap(h => h.participantes).filter(p => p.tipo === 'manual').length
+    : 0;
+  const totalParticipantes = totalParticipantesEmail + totalParticipantesManuais;
 
   const termo = busca.toLowerCase().trim();
   const horariosFiltrados = dados
@@ -702,6 +722,31 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
                                               <XCircle className="w-3 h-3" /> Não
                                             </button>
                                           </div>
+                                        ) : p.tipo === 'manual' && p.participante_id != null ? (
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <button
+                                              onClick={() => marcarPresencaManualFn(p.participante_id!, true)}
+                                              title="Compareceu"
+                                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                                                presencaManual[p.participante_id] === true
+                                                  ? 'bg-emerald-500 text-white border-emerald-500'
+                                                  : 'bg-white text-slate-400 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
+                                              }`}
+                                            >
+                                              <Check className="w-3 h-3" /> Sim
+                                            </button>
+                                            <button
+                                              onClick={() => marcarPresencaManualFn(p.participante_id!, false)}
+                                              title="Faltou"
+                                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                                                presencaManual[p.participante_id] === false
+                                                  ? 'bg-rose-500 text-white border-rose-500'
+                                                  : 'bg-white text-slate-400 border-slate-200 hover:border-rose-400 hover:text-rose-600'
+                                              }`}
+                                            >
+                                              <XCircle className="w-3 h-3" /> Não
+                                            </button>
+                                          </div>
                                         ) : (
                                           <span className="text-xs text-slate-300 italic">—</span>
                                         )}
@@ -744,7 +789,7 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
                     >
                       {confirmando
                         ? <><Loader2 className="w-4 h-4 animate-spin" /> Confirmando...</>
-                        : <><CheckCircle2 className="w-4 h-4" /> Confirmar Presenças {totalMarcados > 0 && `(${totalMarcados}/${totalParticipantesEmail})`}</>}
+                        : <><CheckCircle2 className="w-4 h-4" /> Confirmar Presenças {totalMarcados > 0 && `(${totalMarcados}/${totalParticipantes})`}</>}
                     </button>
                   )}
                 </div>
@@ -759,11 +804,16 @@ export function ListaPresencaModal({ eventoId, onClose }: ListaPresencaModalProp
 
 export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: RegistrarParticipanteModalProps) {
   const [nome, setNome] = useState('');
+  const [emailVerificacao, setEmailVerificacao] = useState('');
   const [departamento, setDepartamento] = useState('');
   const [horarioId, setHorarioId] = useState<number | ''>('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState(false);
+  const [avisoPenalidade, setAvisoPenalidade] = useState<{ id: number; usuario_nome: string } | null>(null);
+  const [motivoRevogacao, setMotivoRevogacao] = useState('');
+  const [revogando, setRevogando] = useState(false);
+  const [sucessoRevogacao, setSucessoRevogacao] = useState(false);
 
   const horarios: HorarioDTO[] = evento.horarios ?? [];
 
@@ -773,13 +823,17 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
     setSalvando(true);
     setErro('');
     try {
-      await adminEventosApi.registrarParticipanteManual(evento.id, {
+      const resultado = await adminEventosApi.registrarParticipanteManual(evento.id, {
         horario_id: horarioId as number,
         nome: nome.trim(),
         departamento: departamento.trim(),
+        email_verificacao: emailVerificacao.trim() || undefined,
       });
       setSucesso(true);
       onSuccess();
+      if (resultado.aviso_penalidade) {
+        setAvisoPenalidade(resultado.aviso_penalidade);
+      }
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Erro ao registrar participante no sistema.');
     } finally {
@@ -787,21 +841,90 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
     }
   }
 
+  async function handleRevogar() {
+    if (!avisoPenalidade) return;
+    setRevogando(true);
+    try {
+      await adminPenalidadesApi.revogar(avisoPenalidade.id, motivoRevogacao);
+      setSucessoRevogacao(true);
+      setAvisoPenalidade(null);
+    } catch {
+      // mantém o aviso visível — o admin pode tentar pela página de penalidades
+    } finally {
+      setRevogando(false);
+    }
+  }
+
+  function handleNovoRegistro() {
+    setNome('');
+    setEmailVerificacao('');
+    setDepartamento('');
+    setHorarioId('');
+    setSucesso(false);
+    setAvisoPenalidade(null);
+    setMotivoRevogacao('');
+    setSucessoRevogacao(false);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200">
         {sucesso ? (
-          <div className="text-center py-6 animate-in zoom-in-90 duration-300">
-            <div className="w-20 h-20 bg-emerald-50 border-4 border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5 relative">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500 animate-bounce" />
+          <div className="animate-in zoom-in-90 duration-300">
+            <div className="text-center py-4">
+              <div className="w-20 h-20 bg-emerald-50 border-4 border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500 animate-bounce" />
+              </div>
+              <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight mb-2">Inscrição Confirmada!</h3>
+              <p className="text-slate-500 mb-6 max-w-xs mx-auto">
+                <span className="font-bold text-slate-800">{nome}</span> foi adicionado(a) manualmente ao evento com sucesso.
+              </p>
             </div>
-            <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight mb-2">Inscrição Confirmada!</h3>
-            <p className="text-slate-500 mb-8 max-w-xs mx-auto">
-              <span className="font-bold text-slate-800">{nome}</span> foi adicionado(a) manualmente ao evento com sucesso.
-            </p>
+
+            {/* Aviso de penalidade ativa */}
+            {avisoPenalidade && !sucessoRevogacao && (
+              <div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">Usuário com penalidade ativa</p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      <strong>{avisoPenalidade.usuario_nome}</strong> está bloqueado por ausência em evento anterior.
+                      Ele pode participar deste evento, mas continuará bloqueado para se agendar sozinho no próximo.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <textarea
+                    value={motivoRevogacao}
+                    onChange={e => setMotivoRevogacao(e.target.value)}
+                    placeholder="Motivo da revogação (opcional)..."
+                    rows={2}
+                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 resize-none transition-all"
+                  />
+                  <button
+                    onClick={handleRevogar}
+                    disabled={revogando}
+                    className="w-full py-2 px-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                  >
+                    {revogando
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Revogando...</>
+                      : <><ShieldCheck className="w-4 h-4" /> Revogar penalidade agora</>}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {sucessoRevogacao && (
+              <div className="mb-5 flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-800">
+                <ShieldCheck className="w-5 h-5 shrink-0 text-emerald-500" />
+                <span>Penalidade revogada. O usuário poderá se agendar normalmente.</span>
+              </div>
+            )}
+
             <div className="flex flex-col gap-3">
               <button
-                onClick={() => { setNome(''); setDepartamento(''); setHorarioId(''); setSucesso(false); }}
+                onClick={handleNovoRegistro}
                 className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm hover:shadow-emerald-500/20 transition-all"
               >
                 Registrar Novo Participante
@@ -849,6 +972,20 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
               </div>
 
               <div>
+                <label htmlFor="participante_email" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  E-mail corporativo
+                </label>
+                <input
+                  id="participante_email"
+                  type="email"
+                  value={emailVerificacao}
+                  onChange={e => setEmailVerificacao(e.target.value)}
+                  placeholder="Opcional — para verificar penalidade ativa (@aeb.gov.br)"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 text-sm transition-all outline-none"
+                />
+              </div>
+
+              <div>
                 <label htmlFor="participante_departamento" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Setor / Departamento
                 </label>
@@ -884,13 +1021,12 @@ export function RegistrarParticipanteModal({ evento, onClose, onSuccess }: Regis
                         const lotado = h.vagas_livres === 0;
                         return (
                           <option key={h.id} value={h.id} disabled={lotado}>
-                            {h.hora_inicio.substring(0, 5)} até {h.hora_fim.substring(0, 5)} 
+                            {h.hora_inicio.substring(0, 5)} até {h.hora_fim.substring(0, 5)}
                             {lotado ? ' (Esgotado)' : ` - ${h.vagas_livres} vagas restantes`}
                           </option>
                         );
                       })}
                     </select>
-                    {/* Custom Dropdown Arrow */}
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
                       <svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                         <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />

@@ -14,6 +14,7 @@ import Relatorios from './pages/admin/Relatorios';
 import GestaoUsuarios from './pages/admin/GestaoUsuarios';
 import Comunicados from './pages/admin/Comunicados';
 import Manual from './pages/admin/Manual';
+import Penalidades from './pages/admin/Penalidades';
 import ColaboradorLayout from './layouts/ColaboradorLayout';
 import EventDetails from './pages/colaborador/EventDetails';
 import Confirmacao from './pages/colaborador/Confirmacao';
@@ -58,6 +59,7 @@ function App() {
             <Route path="gestao-usuarios" element={<GestaoUsuarios />} />
             <Route path="comunicados" element={<Comunicados />} />
             <Route path="manual" element={<Manual />} />
+            <Route path="penalidades" element={<Penalidades />} />
           </Route>
 
           <Route

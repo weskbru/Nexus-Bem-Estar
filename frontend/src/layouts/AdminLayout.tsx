@@ -7,6 +7,7 @@ import {
   HelpCircle,
   LogOut,
   ShieldCheck,
+  ShieldAlert,
   Megaphone,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -56,6 +57,7 @@ const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/agendamentos', icon: Calendar, label: 'Agendamentos', end: false },
   { to: '/admin/comunicados', icon: Megaphone, label: 'Comunicados', end: false },
+  { to: '/admin/penalidades', icon: ShieldAlert, label: 'Penalidades', end: false },
 ];
 
 export default function AdminLayout() {
@@ -193,7 +195,7 @@ export default function AdminLayout() {
             className="h-10 w-auto mr-3"
           />
           <div>
-            <div className="font-semibold text-slate-900 leading-tight">Agenda Bem-Estar</div>
+            <div className="font-semibold text-slate-900 leading-tight whitespace-nowrap">Agenda Bem-Estar</div>
             <div className="text-xs text-slate-500">Painel Administrativo</div>
           </div>
         </div>
