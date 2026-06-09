@@ -31,7 +31,7 @@ from ...serializers.serializers import (
 )
 from ...services import email_service
 from ...services.lista_espera_service import notificar_proximo_na_fila
-from ..permissions import IsAdminUsuario, encerrar_eventos_expirados
+from ..permissions import IsAdminUsuario, encerrar_eventos_expirados, liberar_penalidades_expiradas
 
 
 class AdminEventoViewSet(viewsets.ModelViewSet):
@@ -606,6 +606,8 @@ class AdminPenalidadeViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAdminUsuario]
 
     def get_queryset(self):
+        encerrar_eventos_expirados()
+        liberar_penalidades_expiradas()
         qs = Penalidade.objects.select_related(
             'usuario', 'agendamento__horario__evento', 'evento_punicao', 'revogada_por'
         )

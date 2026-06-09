@@ -20,7 +20,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade
+from ..views.permissions import liberar_penalidades_expiradas
 
 
 # ---------------------------------------------------------------------------
@@ -422,6 +423,71 @@ class ColaboradorEventoTest(APITestCase):
             f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/'
         )
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_libera_penalidade_com_evento_punicao_encerrado(self):
+        evento_origem = cria_evento(
+            titulo='Evento Origem',
+            status_evento='encerrado',
+            data=timezone.localdate() - timedelta(days=3),
+        )
+        evento_origem.gerar_horarios()
+        agendamento_origem = Agendamento.objects.create(
+            usuario=self.colaborador,
+            horario=evento_origem.horarios.first(),
+            status='confirmado',
+            compareceu=False,
+        )
+        evento_punicao = cria_evento(
+            titulo='Evento Punição',
+            status_evento='encerrado',
+            data=timezone.localdate() - timedelta(days=1),
+        )
+        penalidade = Penalidade.objects.create(
+            usuario=self.colaborador,
+            agendamento=agendamento_origem,
+            evento_punicao=evento_punicao,
+            ativa=True,
+        )
+
+        liberadas = liberar_penalidades_expiradas()
+
+        self.assertEqual(liberadas, 1)
+        penalidade.refresh_from_db()
+        self.assertFalse(penalidade.ativa)
+
+    def test_admin_penalidades_libera_expiradas_antes_de_listar_ativas(self):
+        admin = cria_admin('admin.penalidades@empresa.com.br')
+        evento_origem = cria_evento(
+            titulo='Evento Origem',
+            status_evento='encerrado',
+            data=timezone.localdate() - timedelta(days=3),
+        )
+        evento_origem.gerar_horarios()
+        agendamento_origem = Agendamento.objects.create(
+            usuario=self.colaborador,
+            horario=evento_origem.horarios.first(),
+            status='confirmado',
+            compareceu=False,
+        )
+        evento_punicao = cria_evento(
+            titulo='Evento Punição',
+            status_evento='encerrado',
+            data=timezone.localdate() - timedelta(days=1),
+        )
+        penalidade = Penalidade.objects.create(
+            usuario=self.colaborador,
+            agendamento=agendamento_origem,
+            evento_punicao=evento_punicao,
+            ativa=True,
+        )
+
+        self.client.force_authenticate(user=admin)
+        resp = self.client.get('/api/admin/penalidades/?ativa=true')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        penalidade.refresh_from_db()
+        self.assertFalse(penalidade.ativa)
+        self.assertEqual(len(resp.data), 0)
 
     def test_cancelar_agendamento(self):
         agendamento = Agendamento.objects.create(

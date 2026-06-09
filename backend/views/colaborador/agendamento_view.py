@@ -12,7 +12,7 @@ from ...models.models import Agendamento, ConviteEmail, Horario, ListaEspera, Pe
 from ...serializers.serializers import AgendamentoSerializer
 from ...services import email_service
 from ...services.lista_espera_service import notificar_proximo_na_fila
-from ..permissions import encerrar_eventos_expirados
+from ..permissions import encerrar_eventos_expirados, liberar_penalidades_expiradas
 from .otp_agendamento_view import cache_key_otp
 
 
@@ -103,6 +103,8 @@ class ReservarHorarioView(APIView):
         # Recarrega disponivel após possível limpeza de expirados
         horario.refresh_from_db(fields=['vagas_disponiveis'])
 
+        liberar_penalidades_expiradas()
+
         # Bloqueia reserva direta se outro usuário já foi notificado e está dentro do prazo de confirmação
         reservado_para_outro = ListaEspera.objects.filter(
             horario=horario,
@@ -129,25 +131,20 @@ class ReservarHorarioView(APIView):
             .first()
         )
         if penalidade:
-            # Se o evento de punição já foi encerrado, libera automaticamente
-            if penalidade.evento_punicao and penalidade.evento_punicao.status == 'encerrado':
-                penalidade.ativa = False
-                penalidade.save(update_fields=['ativa'])
-            else:
-                # Primeiro acesso após a falta: registra este evento como o de punição
-                if penalidade.evento_punicao is None:
-                    penalidade.evento_punicao = horario.evento
-                    penalidade.save(update_fields=['evento_punicao'])
-                return Response(
-                    {
-                        'erro': (
-                            'Você possui uma penalidade ativa por não comparecimento em evento anterior. '
-                            'Seu acesso será liberado após o encerramento do evento atual.'
-                        ),
-                        'penalidade': True,
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            # Primeiro acesso após a falta: registra este evento como o de punição
+            if penalidade.evento_punicao is None:
+                penalidade.evento_punicao = horario.evento
+                penalidade.save(update_fields=['evento_punicao'])
+            return Response(
+                {
+                    'erro': (
+                        'Você possui uma penalidade ativa por não comparecimento em evento anterior. '
+                        'Seu acesso será liberado após o encerramento do evento atual.'
+                    ),
+                    'penalidade': True,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Bloquear agendamento direto apenas se o usuário está na fila deste slot específico.
         # Permite que o usuário reserve outro slot disponível mesmo estando na fila de um slot lotado.
