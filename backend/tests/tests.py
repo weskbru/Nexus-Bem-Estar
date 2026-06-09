@@ -9,7 +9,8 @@ Cobertura:
   - Regras de negócio: vaga esgotada, duplicata de agendamento, concorrência
 """
 import uuid
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
+from unittest.mock import patch
 
 from django.core import mail
 from django.test import TestCase, override_settings
@@ -365,7 +366,10 @@ class ColaboradorEventoTest(APITestCase):
     def setUp(self):
         self.colaborador = cria_colaborador()
         self.client.force_authenticate(user=self.colaborador)
-        self.evento = cria_evento(status_evento='publicado')
+        self.evento = cria_evento(
+            status_evento='publicado',
+            data=timezone.localdate() + timedelta(days=1),
+        )
         self.evento.gerar_horarios()
         self.horario = self.evento.horarios.first()
 
@@ -434,6 +438,31 @@ class ColaboradorEventoTest(APITestCase):
         )
         resp = self.client.post(f'/api/colaborador/agendamentos/{agendamento.id}/cancelar/')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cancelar_agendamento_menos_de_30_minutos_antes_bloqueia(self):
+        agora = timezone.make_aware(datetime(2026, 7, 20, 10, 0))
+        evento = cria_evento(
+            status_evento='publicado',
+            data=agora.date(),
+            hora_inicio=time(10, 20),
+            hora_fim=time(10, 50),
+        )
+        horario = Horario.objects.create(
+            evento=evento,
+            hora_inicio=time(10, 20),
+            hora_fim=time(10, 50),
+            vagas_disponiveis=1,
+        )
+        agendamento = Agendamento.objects.create(
+            usuario=self.colaborador, horario=horario, status='confirmado'
+        )
+
+        with patch('backend.views.colaborador.agendamento_view.timezone.now', return_value=agora):
+            resp = self.client.post(f'/api/colaborador/agendamentos/{agendamento.id}/cancelar/')
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        agendamento.refresh_from_db()
+        self.assertEqual(agendamento.status, 'confirmado')
 
     def test_cancelar_agendamento_de_outro_usuario_retorna_404(self):
         outro = cria_colaborador('outro@empresa.com.br', 'Outro')
