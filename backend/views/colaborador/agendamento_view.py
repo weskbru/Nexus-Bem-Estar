@@ -1,5 +1,8 @@
+from datetime import datetime, timedelta
+
 from django.core.cache import cache
 from django.db import transaction
+from django.utils import timezone
 
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -11,6 +14,14 @@ from ...services import email_service
 from ...services.lista_espera_service import notificar_proximo_na_fila
 from ..permissions import encerrar_eventos_expirados
 from .otp_agendamento_view import cache_key_otp
+
+
+CANCELAMENTO_MINUTOS_ANTECEDENCIA = 30
+
+
+def _inicio_agendamento(horario):
+    inicio = datetime.combine(horario.evento.data, horario.hora_inicio)
+    return timezone.make_aware(inicio, timezone.get_current_timezone())
 
 
 class ReservarHorarioView(APIView):
@@ -213,7 +224,11 @@ class CancelarAgendamentoView(APIView):
 
     def post(self, request, agendamento_id):
         try:
-            agendamento = Agendamento.objects.get(id=agendamento_id, usuario=request.user)
+            agendamento = (
+                Agendamento.objects
+                .select_related('horario__evento')
+                .get(id=agendamento_id, usuario=request.user)
+            )
         except Agendamento.DoesNotExist:
             return Response(
                 {'erro': 'Agendamento não encontrado.'},
@@ -227,6 +242,20 @@ class CancelarAgendamentoView(APIView):
             )
 
         horario = agendamento.horario
+        limite_cancelamento = _inicio_agendamento(horario) - timedelta(
+            minutes=CANCELAMENTO_MINUTOS_ANTECEDENCIA
+        )
+        if timezone.now() > limite_cancelamento:
+            return Response(
+                {
+                    'erro': (
+                        'Cancelamento permitido apenas ate 30 minutos antes '
+                        'do horario agendado.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         agendamento.status = 'cancelado'
         agendamento.save(update_fields=['status', 'atualizado_em'])
 
