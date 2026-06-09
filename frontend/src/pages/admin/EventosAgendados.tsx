@@ -11,6 +11,7 @@ import {
 import {
   ConfirmDeleteModal,
   ConfirmActionModal,
+  FilaHistoricoModal,
   ListaPresencaModal,
   RegistrarParticipanteModal,
   ErroPresencaModal,
@@ -27,6 +28,7 @@ export default function AdminEventos() {
   const [filtro, setFiltro] = useState<'todos' | 'ATIVO' | 'CANCELADO' | 'ENCERRADO'>('todos');
   const [registrarTarget, setRegistrarTarget] = useState<EventoDTO | null>(null);
   const [listaPresencaId, setListaPresencaId] = useState<number | null>(null);
+  const [filaHistoricoId, setFilaHistoricoId] = useState<number | null>(null);
   const [actionTarget, setActionTarget] = useState<EventoDTO | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ evento: EventoDTO; tipo: 'emails' | 'cancelar' } | null>(null);
   const [toast, setToast] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null);
@@ -280,6 +282,7 @@ export default function AdminEventos() {
           onEnviarEmails={() => { setConfirmAction({ evento: actionTarget, tipo: 'emails' }); setActionTarget(null); }}
           onRegistrar={() => { setRegistrarTarget(actionTarget); setActionTarget(null); }}
           onListaPresenca={() => { setListaPresencaId(actionTarget.id); setActionTarget(null); }}
+          onFilaHistorico={() => { setFilaHistoricoId(actionTarget.id); setActionTarget(null); }}
           onClose={() => setActionTarget(null)}
         />
       )}
@@ -326,6 +329,13 @@ export default function AdminEventos() {
         <ListaPresencaModal
           eventoId={listaPresencaId}
           onClose={() => { setListaPresencaId(null); carregarEventos(); }}
+        />
+      )}
+
+      {filaHistoricoId !== null && (
+        <FilaHistoricoModal
+          eventoId={filaHistoricoId}
+          onClose={() => setFilaHistoricoId(null)}
         />
       )}
 

@@ -217,6 +217,8 @@ export const adminEventosApi = {
     request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
   listaPresenca: (id: number) =>
     request<ListaPresencaDTO>(`/admin/eventos/${id}/lista-presenca/`),
+  filaHistorico: (id: number) =>
+    request<FilaHistoricoDTO>(`/admin/eventos/${id}/fila-historico/`),
   removerParticipante: (eventoId: number, participanteId: number) =>
     request<void>(`/admin/eventos/${eventoId}/remover-participante/${participanteId}/`, { method: 'DELETE' }),
   marcarPresenca: (eventoId: number, dados: { presentes: number[]; ausentes: number[]; presentes_manuais: number[]; ausentes_manuais: number[] }) =>
@@ -259,6 +261,54 @@ export interface ListaPresencaDTO {
   };
   horarios: HorarioPresencaDTO[];
   total: number;
+}
+
+export interface ParticipanteFilaDTO {
+  id: number;
+  posicao: number;
+  status: 'aguardando' | 'notificado';
+  nome: string;
+  email: string;
+  ramal?: string | null;
+  matricula?: string | null;
+  departamento?: string | null;
+  criado_em: string;
+  notificado_em?: string | null;
+  expira_em?: string | null;
+}
+
+export interface HorarioFilaDTO {
+  horario_id: number;
+  hora_inicio: string;
+  hora_fim: string;
+  total_na_fila: number;
+  participantes: ParticipanteFilaDTO[];
+}
+
+export interface CancelamentoEventoDTO {
+  agendamento_id: number;
+  nome: string;
+  email: string;
+  ramal?: string | null;
+  matricula?: string | null;
+  departamento?: string | null;
+  hora_inicio: string;
+  hora_fim: string;
+  agendado_em: string;
+  cancelado_em: string;
+}
+
+export interface FilaHistoricoDTO {
+  evento: {
+    id: number;
+    titulo: string;
+    data: string;
+    status: string;
+  };
+  horarios: HorarioFilaDTO[];
+  total_fila: number;
+  cancelamentos: CancelamentoEventoDTO[];
+  total_cancelamentos: number;
 }
 
 // ── Admin — Penalidades ───────────────────────────────────────────────────

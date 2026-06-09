@@ -8,7 +8,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from ...models.models import Agendamento, AgendamentoManual, Evento, Horario, Penalidade
+from ...models.models import Agendamento, AgendamentoManual, Evento, Horario, ListaEspera, Penalidade
 
 
 def _verificar_presencas_pendentes():
@@ -400,6 +400,85 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             },
             'horarios': resultado,
             'total':    total,
+        })
+
+    @action(detail=True, methods=['get'], url_path='fila-historico')
+    def fila_historico(self, request, pk=None):
+        """
+        GET /api/admin/eventos/<id>/fila-historico/
+        Retorna a fila de espera ativa por horario e o historico de cancelamentos.
+        """
+        evento = self.get_object()
+        horarios = evento.horarios.order_by('hora_inicio')
+
+        filas_por_horario = []
+        total_fila = 0
+        for horario in horarios:
+            entradas = (
+                ListaEspera.objects
+                .filter(
+                    horario=horario,
+                    status__in=['aguardando', 'notificado'],
+                )
+                .select_related('usuario')
+                .order_by('posicao', 'criado_em')
+            )
+            participantes = []
+            for entrada in entradas:
+                participantes.append({
+                    'id': entrada.id,
+                    'posicao': entrada.posicao,
+                    'status': entrada.status,
+                    'nome': entrada.usuario.nome,
+                    'email': entrada.usuario.email,
+                    'ramal': entrada.usuario.ramal,
+                    'matricula': entrada.usuario.matricula,
+                    'departamento': entrada.usuario.departamento,
+                    'criado_em': entrada.criado_em,
+                    'notificado_em': entrada.notificado_em,
+                    'expira_em': entrada.expira_em,
+                })
+            total_fila += len(participantes)
+            filas_por_horario.append({
+                'horario_id': horario.id,
+                'hora_inicio': horario.hora_inicio.strftime('%H:%M'),
+                'hora_fim': horario.hora_fim.strftime('%H:%M'),
+                'total_na_fila': len(participantes),
+                'participantes': participantes,
+            })
+
+        cancelamentos = []
+        agendamentos_cancelados = (
+            Agendamento.objects
+            .filter(horario__evento=evento, status='cancelado')
+            .select_related('usuario', 'horario')
+            .order_by('-atualizado_em')
+        )
+        for ag in agendamentos_cancelados:
+            cancelamentos.append({
+                'agendamento_id': ag.id,
+                'nome': ag.usuario.nome,
+                'email': ag.usuario.email,
+                'ramal': ag.usuario.ramal,
+                'matricula': ag.usuario.matricula,
+                'departamento': ag.usuario.departamento,
+                'hora_inicio': ag.horario.hora_inicio.strftime('%H:%M'),
+                'hora_fim': ag.horario.hora_fim.strftime('%H:%M'),
+                'agendado_em': ag.criado_em,
+                'cancelado_em': ag.atualizado_em,
+            })
+
+        return Response({
+            'evento': {
+                'id': evento.id,
+                'titulo': evento.titulo,
+                'data': evento.data.strftime('%d/%m/%Y'),
+                'status': evento.status,
+            },
+            'horarios': filas_por_horario,
+            'total_fila': total_fila,
+            'cancelamentos': cancelamentos,
+            'total_cancelamentos': len(cancelamentos),
         })
 
     @action(detail=True, methods=['post'], url_path='marcar-presenca')

@@ -19,11 +19,15 @@ import {
   Search,
   ClipboardCheck,
   MailX,
+  History,
+  ListOrdered,
+  Clock,
 } from 'lucide-react';
 import {
   adminEventosApi,
   adminPenalidadesApi,
   type EventoDTO,
+  type FilaHistoricoDTO,
   type HorarioDTO,
   type ListaPresencaDTO,
 } from '../../services/api';
@@ -52,6 +56,11 @@ type RegistrarParticipanteModalProps = Readonly<{
   evento: EventoDTO;
   onClose: () => void;
   onSuccess: () => void;
+}>
+
+type FilaHistoricoModalProps = Readonly<{
+  eventoId: number;
+  onClose: () => void;
 }>
 
 export function ConfirmDeleteModal({ evento, onConfirm, onCancel, loading }: ConfirmDeleteProps) {
@@ -213,6 +222,206 @@ export function ConfirmActionModal({ evento, tipo, loading, onConfirm, onCancel 
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             {botao}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatarDataHora(valor?: string | null) {
+  if (!valor) return '-';
+  return new Date(valor).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export function FilaHistoricoModal({ eventoId, onClose }: FilaHistoricoModalProps) {
+  const [dados, setDados] = useState<FilaHistoricoDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState('');
+  const [aba, setAba] = useState<'fila' | 'cancelamentos'>('fila');
+
+  useEffect(() => {
+    setLoading(true);
+    setErro('');
+    adminEventosApi.filaHistorico(eventoId)
+      .then(setDados)
+      .catch(() => setErro('Nao foi possivel carregar fila e cancelamentos.'))
+      .finally(() => setLoading(false));
+  }, [eventoId]);
+
+  const totalFila = dados?.total_fila ?? 0;
+  const totalCancelamentos = dados?.total_cancelamentos ?? 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <ListOrdered className="w-5 h-5 text-blue-600" />
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">Fila e Cancelamentos</h3>
+            </div>
+            <p className="text-sm text-slate-500 font-medium truncate">
+              {dados ? `${dados.evento.titulo} - ${dados.evento.data}` : 'Carregando dados do evento'}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 -mr-2 -mt-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 pt-4 border-b border-slate-100 flex gap-2">
+          <button
+            onClick={() => setAba('fila')}
+            className={`px-4 py-2 rounded-t-xl text-sm font-bold border transition-colors ${
+              aba === 'fila'
+                ? 'bg-blue-50 text-blue-700 border-blue-200 border-b-blue-50'
+                : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'
+            }`}
+          >
+            Fila de espera ({totalFila})
+          </button>
+          <button
+            onClick={() => setAba('cancelamentos')}
+            className={`px-4 py-2 rounded-t-xl text-sm font-bold border transition-colors ${
+              aba === 'cancelamentos'
+                ? 'bg-blue-50 text-blue-700 border-blue-200 border-b-blue-50'
+                : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'
+            }`}
+          >
+            Cancelamentos ({totalCancelamentos})
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/60">
+          {loading && (
+            <div className="py-16 flex flex-col items-center justify-center text-slate-500">
+              <Loader2 className="w-8 h-8 animate-spin mb-3 text-blue-600" />
+              <span className="text-sm font-medium">Carregando informacoes...</span>
+            </div>
+          )}
+
+          {!loading && erro && (
+            <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              {erro}
+            </div>
+          )}
+
+          {!loading && !erro && dados && aba === 'fila' && (
+            <div className="space-y-4">
+              {dados.horarios.every(h => h.total_na_fila === 0) ? (
+                <div className="bg-white border border-slate-200 rounded-xl px-5 py-10 text-center">
+                  <Users className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm font-bold text-slate-700">Nenhum colaborador na fila de espera.</p>
+                </div>
+              ) : (
+                dados.horarios.filter(h => h.total_na_fila > 0).map(horario => (
+                  <div key={horario.horario_id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-slate-500" />
+                        <span className="text-sm font-bold text-slate-800">
+                          {horario.hora_inicio} ate {horario.hora_fim}
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded-full px-2.5 py-1">
+                        {horario.total_na_fila} na fila
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-slate-500 uppercase bg-white border-b border-slate-100">
+                            <th className="px-4 py-3 text-left font-bold">Posicao</th>
+                            <th className="px-4 py-3 text-left font-bold">Nome</th>
+                            <th className="px-4 py-3 text-left font-bold">E-mail</th>
+                            <th className="px-4 py-3 text-left font-bold">Ramal</th>
+                            <th className="px-4 py-3 text-left font-bold">Status</th>
+                            <th className="px-4 py-3 text-left font-bold">Entrada</th>
+                            <th className="px-4 py-3 text-left font-bold">Expira</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {horario.participantes.map(p => (
+                            <tr key={p.id} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 font-bold text-slate-900">{p.posicao}o</td>
+                              <td className="px-4 py-3 font-semibold text-slate-800">{p.nome}</td>
+                              <td className="px-4 py-3 text-slate-600">{p.email}</td>
+                              <td className="px-4 py-3 text-slate-500">{p.ramal || '-'}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex px-2 py-1 rounded-md text-xs font-bold uppercase ${
+                                  p.status === 'notificado'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}>
+                                  {p.status === 'notificado' ? 'Notificado' : 'Aguardando'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-500">{formatarDataHora(p.criado_em)}</td>
+                              <td className="px-4 py-3 text-slate-500">{formatarDataHora(p.expira_em)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {!loading && !erro && dados && aba === 'cancelamentos' && (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              {dados.cancelamentos.length === 0 ? (
+                <div className="px-5 py-10 text-center">
+                  <History className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm font-bold text-slate-700">Nenhum cancelamento registrado para este evento.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-slate-500 uppercase bg-slate-100 border-b border-slate-200">
+                        <th className="px-4 py-3 text-left font-bold">Nome</th>
+                        <th className="px-4 py-3 text-left font-bold">E-mail</th>
+                        <th className="px-4 py-3 text-left font-bold">Ramal</th>
+                        <th className="px-4 py-3 text-left font-bold">Horario</th>
+                        <th className="px-4 py-3 text-left font-bold">Agendado em</th>
+                        <th className="px-4 py-3 text-left font-bold">Cancelado em</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {dados.cancelamentos.map(c => (
+                        <tr key={c.agendamento_id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-semibold text-slate-800">{c.nome}</td>
+                          <td className="px-4 py-3 text-slate-600">{c.email}</td>
+                          <td className="px-4 py-3 text-slate-500">{c.ramal || '-'}</td>
+                          <td className="px-4 py-3 font-medium text-slate-700">{c.hora_inicio} ate {c.hora_fim}</td>
+                          <td className="px-4 py-3 text-slate-500">{formatarDataHora(c.agendado_em)}</td>
+                          <td className="px-4 py-3 text-slate-500">{formatarDataHora(c.cancelado_em)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition-colors"
+          >
+            Fechar
           </button>
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
   User,
   Mail,
   ClipboardList,
+  ListOrdered,
   ArrowRight,
   AlertTriangle
 } from 'lucide-react';
@@ -65,6 +66,7 @@ type EventActionsModalProps = Readonly<{
   onEnviarEmails: () => void;
   onRegistrar: () => void;
   onListaPresenca: () => void;
+  onFilaHistorico: () => void;
   onClose: () => void;
 }>
 export function SkeletonCard() {
@@ -101,6 +103,7 @@ export function EventActionsModal({
   onEnviarEmails,
   onRegistrar,
   onListaPresenca,
+  onFilaHistorico,
   onClose,
 }: EventActionsModalProps) {
   const status = normalizeStatus(evento.status);
@@ -145,7 +148,15 @@ export function EventActionsModal({
                 <ClipboardList className="w-5 h-5" />
                 Lista de Presença
               </button>
-              
+
+              <button
+                onClick={onFilaHistorico}
+                className="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+              >
+                <ListOrdered className="w-5 h-5" />
+                Fila e Cancelamentos
+              </button>
+
               {evento.emails_enviados_em ? (
                 <div className="w-full py-3 px-4 bg-emerald-50 border border-emerald-100 rounded-xl text-sm text-center flex items-center justify-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
@@ -179,6 +190,13 @@ export function EventActionsModal({
                 <ClipboardList className="w-5 h-5" />
                 Ver Inscritos
               </button>
+              <button
+                onClick={onFilaHistorico}
+                className="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+              >
+                <ListOrdered className="w-5 h-5" />
+                Fila e Cancelamentos
+              </button>
             </>
           )}
 
@@ -190,6 +208,13 @@ export function EventActionsModal({
               >
                 <ClipboardList className="w-5 h-5" />
                 Ver Lista de Presença
+              </button>
+              <button
+                onClick={onFilaHistorico}
+                className="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+              >
+                <ListOrdered className="w-5 h-5" />
+                Fila e Cancelamentos
               </button>
               <div className="w-full py-3 px-4 bg-slate-100 text-slate-500 rounded-xl font-medium text-sm text-center border border-slate-200 mt-3">
                 Evento concluído
