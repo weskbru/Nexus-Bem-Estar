@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { parseFetchError } from '../services/api';
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
+const CANCELAMENTO_MINUTOS_ANTECEDENCIA = 30;
 
 export interface AgendamentoDetalhes {
   id: number;
@@ -94,6 +95,28 @@ export default function ModalDetalhesAgendamento({
     return `${m}:${String(seg).padStart(2, '0')}`;
   }
 
+  function dataHoraInicioAgendamento() {
+    const horaInicio = ag.horario.hora_inicio.length === 5 ? `${ag.horario.hora_inicio}:00` : ag.horario.hora_inicio;
+    return new Date(`${ag.evento_data}T${horaInicio}`);
+  }
+
+  function limiteCancelamento() {
+    return new Date(dataHoraInicioAgendamento().getTime() - CANCELAMENTO_MINUTOS_ANTECEDENCIA * 60 * 1000);
+  }
+
+  const cancelamentoBloqueadoPorHorario = (
+    modo === 'detalhes' &&
+    ag.status === 'confirmado' &&
+    Date.now() > limiteCancelamento().getTime()
+  );
+  const limiteCancelamentoFormatado = limiteCancelamento().toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
   async function handleSolicitarOtp() {
     if (!horarioId) return;
     setEnviandoOtp(true);
@@ -141,6 +164,12 @@ export default function ModalDetalhesAgendamento({
   const emModoConfirmacao = modo === 'confirmacao';
 
   async function handleCancelar() {
+    if (cancelamentoBloqueadoPorHorario) {
+      setErro('Cancelamento permitido apenas ate 30 minutos antes do horario agendado.');
+      setConfirmando(false);
+      return;
+    }
+
     setCancelando(true);
     setErro('');
     try {
@@ -285,6 +314,15 @@ export default function ModalDetalhesAgendamento({
             </div>
           )}
 
+          {cancelamentoBloqueadoPorHorario && (
+            <div className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 px-4 py-3 rounded-xl border border-amber-200">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <p>
+                O prazo para cancelamento encerrou em {limiteCancelamentoFormatado}. Cancelamentos sao permitidos apenas ate 30 minutos antes do horario agendado.
+              </p>
+            </div>
+          )}
+
           {/* Botões de Ação Dinâmicos */}
           <div className="pt-2">
 
@@ -384,9 +422,10 @@ export default function ModalDetalhesAgendamento({
                   </button>
                   <button
                     onClick={() => setConfirmando(true)}
-                    className="flex-1 py-3 bg-white hover:bg-red-50 text-red-600 border-2 border-red-100 hover:border-red-200 rounded-xl font-bold text-sm transition-all"
+                    disabled={cancelamentoBloqueadoPorHorario}
+                    className="flex-1 py-3 bg-white hover:bg-red-50 text-red-600 border-2 border-red-100 hover:border-red-200 rounded-xl font-bold text-sm transition-all disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-red-100"
                   >
-                    Cancelar Agendamento
+                    {cancelamentoBloqueadoPorHorario ? 'Cancelamento Indisponivel' : 'Cancelar Agendamento'}
                   </button>
                 </div>
               </div>
