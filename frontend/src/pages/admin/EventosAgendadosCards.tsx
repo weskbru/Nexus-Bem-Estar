@@ -164,6 +164,13 @@ export function EventActionsModal({
                     Notificações enviadas em {new Date(evento.emails_enviados_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
+              ) : evento.emails_envio_status === 'agendado' && evento.emails_agendado_para ? (
+                <div className="w-full py-3 px-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-center flex items-center justify-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-500 shrink-0" />
+                  <span className="text-blue-800 font-medium">
+                    Notificacoes agendadas para {new Date(evento.emails_agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
               ) : (
                 <button
                   onClick={onEnviarEmails}

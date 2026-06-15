@@ -5,6 +5,9 @@ import {
   ChevronRight,
   AlertCircle,
   Save,
+  Send,
+  Clock,
+  X,
   Info,
   CalendarDays,
   ShieldAlert,
@@ -163,6 +166,7 @@ interface FormState {
 }
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
+type ModoEnvioEvento = 'somente_criar' | 'imediato' | 'agendado';
 
 const TIPOS = [
   { value: 'massagem',   label: '💆  Massagem' },
@@ -240,6 +244,19 @@ function validarFormEvento(form: FormState): FormErrors {
   return e;
 }
 
+const AGENDAMENTO_ENVIO_MINIMO_MINUTOS = 5;
+
+function hojeInputDate(): string {
+  const hoje = new Date();
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+}
+
+function montarDataHoraEnvio(data: string, hora: string): Date | null {
+  if (!data || !hora) return null;
+  const dataHora = new Date(`${data}T${hora}:00`);
+  return Number.isNaN(dataHora.getTime()) ? null : dataHora;
+}
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function NovoEvento() {
@@ -255,6 +272,9 @@ export default function NovoEvento() {
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [presencaBloqueio, setPresencaBloqueio] = useState<{ titulo: string } | null>(null);
+  const [modalAgendamentoAberto, setModalAgendamentoAberto] = useState(false);
+  const [dataEnvio, setDataEnvio] = useState(hojeInputDate());
+  const [horaEnvio, setHoraEnvio] = useState('08:00');
 
   function update(field: keyof FormState, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -269,12 +289,37 @@ export default function NovoEvento() {
     return Object.keys(e).length === 0;
   }
 
-  async function handleSalvar() {
+  function abrirModalAgendamento() {
     if (!validar()) return;
+    setErroGeral('');
+    setModalAgendamentoAberto(true);
+  }
+
+  function validarAgendamentoEnvio(): Date | null {
+    const dataHora = montarDataHoraEnvio(dataEnvio, horaEnvio);
+    if (!dataHora) {
+      setErroGeral('Informe a data e o horario do envio.');
+      return null;
+    }
+
+    const minimo = Date.now() + AGENDAMENTO_ENVIO_MINIMO_MINUTOS * 60 * 1000;
+    if (dataHora.getTime() < minimo) {
+      setErroGeral(`Agende o envio para pelo menos ${AGENDAMENTO_ENVIO_MINIMO_MINUTOS} minutos no futuro.`);
+      return null;
+    }
+
+    return dataHora;
+  }
+
+  async function handleSalvar(modoEnvio: ModoEnvioEvento) {
+    if (!validar()) return;
+    const dataHoraAgendada = modoEnvio === 'agendado' ? validarAgendamentoEnvio() : null;
+    if (modoEnvio === 'agendado' && !dataHoraAgendada) return;
+
     setSalvando(true);
     setErroGeral('');
     try {
-      await adminEventosApi.criar({
+      const evento = await adminEventosApi.criar({
         titulo:                 form.titulo.trim(),
         tipo:                   form.tipo,
         data:                   form.data,
@@ -287,6 +332,18 @@ export default function NovoEvento() {
         corpo_email:            form.corpo_email.trim(),
         status:                 'publicado',
       });
+
+      if (modoEnvio === 'imediato') {
+        await adminEventosApi.enviarEmails(evento.id, { modo_envio: 'imediato' });
+      }
+
+      if (modoEnvio === 'agendado' && dataHoraAgendada) {
+        await adminEventosApi.enviarEmails(evento.id, {
+          modo_envio: 'agendado',
+          agendado_para: dataHoraAgendada.toISOString(),
+        });
+      }
+
       navigate('/admin/agendamentos');
     } catch (err) {
       const apiErr = err as ApiError;
@@ -527,13 +584,27 @@ export default function NovoEvento() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <button type="button" onClick={handleSalvar} disabled={salvando}
-              className="w-full sm:w-auto flex-1 py-3.5 px-6 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 disabled:hover:bg-emerald-600 text-white rounded-xl font-bold text-sm tracking-wide transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus:ring-4 focus:ring-emerald-500/30 outline-none">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <button type="button" onClick={() => handleSalvar('somente_criar')} disabled={salvando}
+              className="w-full py-3.5 px-5 bg-white hover:bg-slate-50 disabled:opacity-70 text-slate-700 border border-slate-200 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-sm focus:ring-4 focus:ring-slate-500/20 outline-none">
               {salvando
                 ? <><svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg> Processando...</>
-                : <><Save className="w-5 h-5" /> Salvar e Publicar Evento</>
+                : <><Save className="w-5 h-5" /> Criar evento</>
               }
+            </button>
+
+            <button type="button" onClick={() => handleSalvar('imediato')} disabled={salvando}
+              className="w-full py-3.5 px-5 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:hover:bg-blue-600 text-white rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus:ring-4 focus:ring-blue-500/30 outline-none">
+              {salvando
+                ? <><svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg> Processando...</>
+                : <><Send className="w-5 h-5" /> Criar e enviar agora</>
+              }
+            </button>
+
+            <button type="button" onClick={abrirModalAgendamento} disabled={salvando}
+              className="w-full py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 disabled:hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus:ring-4 focus:ring-emerald-500/30 outline-none">
+              <Clock className="w-5 h-5" />
+              Criar e agendar envio
             </button>
           </div>
 
@@ -546,6 +617,86 @@ export default function NovoEvento() {
         </div>
 
       </div>
+
+      {modalAgendamentoAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Agendar envio do convite</h2>
+                <p className="mt-1 text-sm text-slate-500">Escolha quando o e-mail sera enviado.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalAgendamentoAberto(false)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              {erroGeral && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{erroGeral}</span>
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="data_envio_evento" className="block text-sm font-semibold text-slate-700 mb-2">
+                  Data do envio
+                </label>
+                <input
+                  id="data_envio_evento"
+                  type="date"
+                  min={hojeInputDate()}
+                  value={dataEnvio}
+                  onChange={(e) => setDataEnvio(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="hora_envio_evento" className="block text-sm font-semibold text-slate-700 mb-2">
+                  Horario do envio
+                </label>
+                <input
+                  id="hora_envio_evento"
+                  type="time"
+                  value={horaEnvio}
+                  onChange={(e) => setHoraEnvio(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                />
+              </div>
+
+              <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-sm text-emerald-800">
+                O evento sera criado e o convite ficara aguardando ate a data e horario definidos.
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 border-t border-slate-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setModalAgendamentoAberto(false)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSalvar('agendado')}
+                disabled={salvando}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-70 flex items-center justify-center gap-2"
+              >
+                <Clock className="w-4 h-4" />
+                {salvando ? 'Processando...' : 'Criar e agendar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
