@@ -3,7 +3,7 @@ import { Send, Clock, Users, Plus, X, Pencil, Trash2, RefreshCw, AlertCircle } f
 import { useAuth } from '../../contexts/AuthContext';
 import EditorComunicado from '../../components/EditorComunicado';
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
+const API = import.meta.env.VITE_API_URL || '/api';
 const AGENDAMENTO_MINIMO_MINUTOS = 5;
 
 interface ComunicadoItem {

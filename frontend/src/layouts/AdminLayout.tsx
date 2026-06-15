@@ -41,7 +41,7 @@ type DashboardResumo = {
   agendamentos: AgendamentoNotificacao[];
 };
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const NOTIFICACOES_REFRESH_MS = 30000;
 
 function formatDateTime(iso: string): string {
