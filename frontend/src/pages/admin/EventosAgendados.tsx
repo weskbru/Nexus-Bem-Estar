@@ -92,7 +92,7 @@ export default function AdminEventos() {
     try {
       const token = localStorage.getItem('access_token');
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api'}/admin/eventos/${deleteTarget.id}/`,
+        `${import.meta.env.VITE_API_URL ?? '/api'}/admin/eventos/${deleteTarget.id}/`,
         { method: 'DELETE', headers: { Authorization: `Bearer ${token ?? ''}` } }
       );
       if (res.status === 409) {
