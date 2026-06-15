@@ -9,10 +9,12 @@ Cobertura:
   - Regras de negócio: vaga esgotada, duplicata de agendamento, concorrência
 """
 import uuid
+from io import StringIO
 from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.core import mail
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -20,7 +22,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade, Comunicado
 from ..views.permissions import liberar_penalidades_expiradas
 
 
@@ -335,6 +337,82 @@ class EnviarEmailsTest(APITestCase):
 # ---------------------------------------------------------------------------
 # Testes Admin — Dashboard
 # ---------------------------------------------------------------------------
+
+@override_settings(EMAIL_DESTINO_EVENTO='lista@aeb.gov.br')
+class AdminComunicadoAgendamentoTest(APITestCase):
+    def setUp(self):
+        self.admin = cria_admin('admin.comunicados@empresa.com.br')
+        self.client.force_authenticate(user=self.admin)
+
+    @patch('backend.services.email_service.enviar_para_lista_evento', return_value=2)
+    def test_agendar_comunicado_futuro_nao_envia_imediatamente(self, enviar_mock):
+        agendado_para = timezone.now() + timedelta(minutes=10)
+
+        resp = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Agenda de massagem',
+            'corpo_html': '<p>Escolha seu horario.</p>',
+            'modo_envio': 'agendado',
+            'agendado_para': agendado_para.isoformat(),
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        enviar_mock.assert_not_called()
+        comunicado = Comunicado.objects.get(id=resp.data['id'])
+        self.assertEqual(comunicado.status, Comunicado.Status.AGENDADO)
+        self.assertIsNone(comunicado.enviado_em)
+
+    def test_agendar_comunicado_no_passado_retorna_400(self):
+        agendado_para = timezone.now() - timedelta(days=1)
+
+        resp = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Agenda de massagem',
+            'corpo_html': '<p>Escolha seu horario.</p>',
+            'modo_envio': 'agendado',
+            'agendado_para': agendado_para.isoformat(),
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Comunicado.objects.count(), 0)
+
+    @patch('backend.services.email_service.enviar_para_lista_evento', return_value=3)
+    def test_comando_envia_comunicado_agendado_vencido(self, enviar_mock):
+        comunicado = Comunicado.objects.create(
+            assunto='Agenda de massagem',
+            corpo_html='<p>Escolha seu horario.</p>',
+            enviado_por=self.admin,
+            status=Comunicado.Status.AGENDADO,
+            agendado_para=timezone.now() - timedelta(minutes=1),
+        )
+
+        call_command(
+            'enviar_comunicados_agendados',
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+
+        enviar_mock.assert_called_once_with(comunicado.assunto, comunicado.corpo_html)
+        comunicado.refresh_from_db()
+        self.assertEqual(comunicado.status, Comunicado.Status.ENVIADO)
+        self.assertEqual(comunicado.total_destinatarios, 3)
+        self.assertEqual(comunicado.tentativas_envio, 1)
+        self.assertIsNotNone(comunicado.enviado_em)
+
+    def test_delete_de_comunicado_agendado_cancela_sem_excluir(self):
+        comunicado = Comunicado.objects.create(
+            assunto='Agenda de massagem',
+            corpo_html='<p>Escolha seu horario.</p>',
+            enviado_por=self.admin,
+            status=Comunicado.Status.AGENDADO,
+            agendado_para=timezone.now() + timedelta(hours=1),
+        )
+
+        resp = self.client.delete(f'/api/admin/comunicados/{comunicado.id}/')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        comunicado.refresh_from_db()
+        self.assertEqual(comunicado.status, Comunicado.Status.CANCELADO)
+        self.assertIsNotNone(comunicado.cancelado_em)
+
 
 class AdminDashboardTest(APITestCase):
     def setUp(self):
