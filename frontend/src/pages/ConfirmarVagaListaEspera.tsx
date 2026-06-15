@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { CheckCircle2, AlertCircle, Loader2, ArrowLeft, Ticket } from 'lucide-react';
 import logoAeb from '../images/logoaeb.png';
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
+const API = import.meta.env.VITE_API_URL || '/api';
 
 type Estado = 'carregando' | 'sucesso' | 'erro';
 
