@@ -5,7 +5,7 @@ import { ChevronRight, Calendar as CalendarIcon, Clock, Users, CheckCircle2, Use
 import { parseFetchError } from '../../services/api';
 import ModalDetalhesAgendamento, { type AgendamentoDetalhes } from '../../components/ModalDetalhesAgendamento';
 
-const API = import.meta.env.VITE_API_URL ?? '/api';
+const API = import.meta.env.VITE_API_URL || '/api';
 
 interface HorarioData {
   id: number;

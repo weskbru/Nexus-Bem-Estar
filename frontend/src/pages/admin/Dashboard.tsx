@@ -36,7 +36,7 @@ function StatSkeleton() {
 
 // ─── Componente Principal ────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
