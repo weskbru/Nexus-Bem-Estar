@@ -154,8 +154,9 @@ export default function Comunicados() {
     return true;
   }
 
-  function abrirModalEnvio() {
+  function abrirModalEnvio(modoSelecionado: ModoEnvio) {
     if (!validarFormulario()) return;
+    setModoEnvio(modoSelecionado);
     setModalEnvio(true);
   }
 
@@ -306,14 +307,24 @@ export default function Comunicados() {
             <p className="text-xs text-slate-400">
               O disparo sera unico. Para outro envio, crie ou reutilize um comunicado.
             </p>
-            <button
-              onClick={abrirModalEnvio}
-              disabled={enviando}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-bold text-sm transition-all shadow-sm"
-            >
-              <Send className="w-4 h-4" />
-              Continuar
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+              <button
+                onClick={() => abrirModalEnvio('imediato')}
+                disabled={enviando}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white border-2 border-blue-200 hover:bg-blue-50 hover:border-blue-300 disabled:opacity-60 text-blue-700 rounded-xl font-bold text-sm transition-all shadow-sm"
+              >
+                <Send className="w-4 h-4" />
+                Enviar agora
+              </button>
+              <button
+                onClick={() => abrirModalEnvio('agendado')}
+                disabled={enviando}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-bold text-sm transition-all shadow-sm"
+              >
+                <Clock className="w-4 h-4" />
+                Agendar envio
+              </button>
+            </div>
           </div>
         </div>
       )}
