@@ -352,6 +352,14 @@ export interface DashboardDTO {
   taxa_ocupacao: number;
   total_eventos_ativos: number;
   agendamentos_recentes: AgendamentoDTO[];
+  agendamentos_paginacao?: DashboardPaginationDTO;
+}
+
+export interface DashboardPaginationDTO {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
 }
 
 export interface AgendamentoDTO {
@@ -359,14 +367,25 @@ export interface AgendamentoDTO {
   usuario: UsuarioDTO;
   horario: HorarioDTO;
   status: string;
+  compareceu?: boolean | null;
+  evento_id: number;
   evento_titulo: string;
   evento_data: string;
   nome_profissional: string;
   criado_em: string;
+  atualizado_em?: string;
 }
 
 export const adminDashboardApi = {
-  obter: () => request<DashboardDTO>('/admin/dashboard/'),
+  obter: (params?: { status?: string; evento_data?: string; page?: number; page_size?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set('status', params.status);
+    if (params?.evento_data) search.set('evento_data', params.evento_data);
+    if (params?.page) search.set('page', String(params.page));
+    if (params?.page_size) search.set('page_size', String(params.page_size));
+    const qs = search.toString();
+    return request<DashboardDTO>(`/admin/dashboard/${qs ? `?${qs}` : ''}`);
+  },
 };
 
 // ── SuperAdmin (CTI) — Gestão de Usuários LDAP ────────────────────────────
