@@ -1,8 +1,6 @@
 import logging
-from datetime import timedelta
 
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -15,144 +13,68 @@ from ..permissions import IsAdminUsuario
 
 logger = logging.getLogger(__name__)
 
-MODO_ENVIO_IMEDIATO = 'imediato'
-MODO_ENVIO_AGENDADO = 'agendado'
-AGENDAMENTO_MINIMO_MINUTOS = 5
-
-
-def _localtime_formatado(dt):
-    if not dt:
-        return None
-    return timezone.localtime(dt).strftime('%d/%m/%Y as %H:%M')
-
-
-def _serializar_comunicado(c: Comunicado) -> dict:
-    return {
-        'id': c.id,
-        'assunto': c.assunto,
-        'corpo_html': c.corpo_html,
-        'enviado_por': c.enviado_por.nome if c.enviado_por else '-',
-        'status': c.status,
-        'status_label': c.get_status_display(),
-        'agendado_para': c.agendado_para.isoformat() if c.agendado_para else None,
-        'agendado_para_formatado': _localtime_formatado(c.agendado_para),
-        'enviado_em': _localtime_formatado(c.enviado_em),
-        'cancelado_em': _localtime_formatado(c.cancelado_em),
-        'total_destinatarios': c.total_destinatarios,
-        'tentativas_envio': c.tentativas_envio,
-        'erro_envio': c.erro_envio,
-    }
-
-
-def _validar_agendamento(raw_agendado_para: str | None):
-    if not raw_agendado_para:
-        return None, Response(
-            {'erro': 'Informe a data e o horario do envio agendado.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    agendado_para = parse_datetime(raw_agendado_para)
-    if not agendado_para:
-        return None, Response(
-            {'erro': 'Data e horario de agendamento invalidos.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if timezone.is_naive(agendado_para):
-        agendado_para = timezone.make_aware(agendado_para, timezone.get_current_timezone())
-
-    minimo = timezone.now() + timedelta(minutes=AGENDAMENTO_MINIMO_MINUTOS)
-    if agendado_para < minimo:
-        return None, Response(
-            {'erro': f'Agende o envio para pelo menos {AGENDAMENTO_MINIMO_MINUTOS} minutos no futuro.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    return agendado_para, None
-
-
-def _validar_conteudo(request: Request):
-    assunto: str = (request.data.get('assunto') or '').strip()
-    corpo_html: str = (request.data.get('corpo_html') or '').strip()
-
-    if not assunto:
-        return None, None, Response({'erro': 'O assunto e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
-    if not corpo_html:
-        return None, None, Response({'erro': 'O corpo do comunicado e obrigatorio.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    return assunto, corpo_html, None
-
-
-def _enviar_agora(assunto: str, corpo_html: str) -> int:
-    if not email_service.get_destinatarios_evento():
-        raise ComunicadoEnvioError('Destinatario nao configurado.')
-    return email_service.enviar_para_lista_evento(assunto, corpo_html)
-
 
 class AdminComunicadoView(APIView):
     """
-    GET  /api/admin/comunicados/ - lista historico de comunicados
-    POST /api/admin/comunicados/ - envia agora ou agenda um comunicado
+    GET  /api/admin/comunicados/   — lista histórico de comunicados
+    POST /api/admin/comunicados/   — envia novo comunicado para todos os destinatários configurados
     """
     permission_classes = [IsAdminUsuario]
 
     def get(self, request: Request) -> Response:
         comunicados = Comunicado.objects.select_related('enviado_por').all()
-        return Response([_serializar_comunicado(c) for c in comunicados])
+        data = [
+            {
+                'id': c.id,
+                'assunto': c.assunto,
+                'enviado_por': c.enviado_por.nome if c.enviado_por else '—',
+                'enviado_em': timezone.localtime(c.enviado_em).strftime('%d/%m/%Y às %H:%M'),
+                'total_destinatarios': c.total_destinatarios,
+            }
+            for c in comunicados
+        ]
+        return Response(data)
 
     def post(self, request: Request) -> Response:
-        assunto, corpo_html, erro = _validar_conteudo(request)
-        if erro:
-            return erro
+        assunto: str = (request.data.get('assunto') or '').strip()
+        corpo_html: str = (request.data.get('corpo_html') or '').strip()
 
-        modo_envio = request.data.get('modo_envio') or MODO_ENVIO_IMEDIATO
-        if modo_envio not in (MODO_ENVIO_IMEDIATO, MODO_ENVIO_AGENDADO):
-            return Response({'erro': 'Modo de envio invalido.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if modo_envio == MODO_ENVIO_AGENDADO:
-            agendado_para, erro_agendamento = _validar_agendamento(request.data.get('agendado_para'))
-            if erro_agendamento:
-                return erro_agendamento
-
-            comunicado = Comunicado.objects.create(
-                assunto=assunto,
-                corpo_html=corpo_html,
-                enviado_por=request.user,
-                status=Comunicado.Status.AGENDADO,
-                agendado_para=agendado_para,
+        if not assunto:
+            return Response({'erro': 'O assunto é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not corpo_html:
+            return Response({'erro': 'O corpo do comunicado é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not email_service.get_destinatarios_evento():
+            return Response(
+                {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            return Response(_serializar_comunicado(comunicado), status=status.HTTP_201_CREATED)
 
         try:
-            total = _enviar_agora(assunto, corpo_html)
+            total = email_service.enviar_para_lista_evento(assunto, corpo_html)
             comunicado = Comunicado.objects.create(
                 assunto=assunto,
                 corpo_html=corpo_html,
                 enviado_por=request.user,
-                status=Comunicado.Status.ENVIADO,
-                enviado_em=timezone.now(),
                 total_destinatarios=total,
             )
         except ComunicadoEnvioError as exc:
-            logger.error(
-                'comunicado_envio_falhou',
-                extra={'usuario_id': request.user.id, 'assunto': assunto, 'detalhe': str(exc)},
-            )
+            logger.error('comunicado_envio_falhou', extra={'usuario_id': request.user.id, 'assunto': assunto, 'detalhe': str(exc)})
             return Response({'erro': 'Falha ao enviar o comunicado. Tente novamente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception:
             logger.exception('comunicado_envio_erro_inesperado', extra={'usuario_id': request.user.id, 'assunto': assunto})
             return Response({'erro': 'Erro interno.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        data = _serializar_comunicado(comunicado)
-        data['total_enviado'] = total
-        return Response(data, status=status.HTTP_201_CREATED)
+        return Response(
+            {'id': comunicado.id, 'total_enviado': total},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class AdminComunicadoDetailView(APIView):
     """
-    GET    /api/admin/comunicados/<id>/ - retorna comunicado para edicao/reutilizacao
-    PUT    /api/admin/comunicados/<id>/ - atualiza comunicado ainda nao enviado
-    DELETE /api/admin/comunicados/<id>/ - cancela agendado ou exclui registro antigo
+    GET    /api/admin/comunicados/<id>/   — retorna assunto + corpo_html para edição
+    PUT    /api/admin/comunicados/<id>/   — atualiza; se reenviar=true também reenvia
+    DELETE /api/admin/comunicados/<id>/   — exclui o registro
     """
     permission_classes = [IsAdminUsuario]
 
@@ -165,77 +87,51 @@ class AdminComunicadoDetailView(APIView):
     def get(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:
-            return Response({'erro': 'Comunicado nao encontrado.'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(_serializar_comunicado(obj))
+            return Response({'erro': 'Comunicado não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'id': obj.id, 'assunto': obj.assunto, 'corpo_html': obj.corpo_html})
 
     def put(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:
-            return Response({'erro': 'Comunicado nao encontrado.'}, status=status.HTTP_404_NOT_FOUND)
-        if obj.status == Comunicado.Status.ENVIANDO:
-            return Response({'erro': 'Este comunicado esta em envio e nao pode ser alterado.'}, status=status.HTTP_400_BAD_REQUEST)
-        if obj.status == Comunicado.Status.ENVIADO:
+            return Response({'erro': 'Comunicado não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        assunto: str = (request.data.get('assunto') or '').strip()
+        corpo_html: str = (request.data.get('corpo_html') or '').strip()
+        reenviar: bool = bool(request.data.get('reenviar', False))
+
+        if not assunto:
+            return Response({'erro': 'O assunto é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not corpo_html:
+            return Response({'erro': 'O corpo do comunicado é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+        if reenviar and not email_service.get_destinatarios_evento():
             return Response(
-                {'erro': 'Comunicados ja enviados nao podem ser alterados. Use o conteudo como base para um novo envio.'},
-                status=status.HTTP_400_BAD_REQUEST,
+                {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        assunto, corpo_html, erro = _validar_conteudo(request)
-        if erro:
-            return erro
-
-        modo_envio = request.data.get('modo_envio') or MODO_ENVIO_AGENDADO
-        if modo_envio not in (MODO_ENVIO_IMEDIATO, MODO_ENVIO_AGENDADO):
-            return Response({'erro': 'Modo de envio invalido.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if modo_envio == MODO_ENVIO_AGENDADO:
-            agendado_para, erro_agendamento = _validar_agendamento(request.data.get('agendado_para'))
-            if erro_agendamento:
-                return erro_agendamento
-
-            obj.assunto = assunto
-            obj.corpo_html = corpo_html
-            obj.enviado_por = request.user
-            obj.status = Comunicado.Status.AGENDADO
-            obj.agendado_para = agendado_para
-            obj.cancelado_em = None
-            obj.erro_envio = ''
-            obj.save()
-            return Response(_serializar_comunicado(obj))
-
         try:
-            total = _enviar_agora(assunto, corpo_html)
             obj.assunto = assunto
             obj.corpo_html = corpo_html
-            obj.enviado_por = request.user
-            obj.status = Comunicado.Status.ENVIADO
-            obj.enviado_em = timezone.now()
-            obj.agendado_para = None
-            obj.cancelado_em = None
-            obj.total_destinatarios = total
-            obj.erro_envio = ''
+
+            total_enviado = 0
+            if reenviar:
+                total_enviado = email_service.enviar_para_lista_evento(assunto, corpo_html)
+                obj.total_destinatarios = total_enviado
+                obj.enviado_por = request.user
+
             obj.save()
         except ComunicadoEnvioError as exc:
-            logger.error('comunicado_envio_manual_falhou', extra={'usuario_id': request.user.id, 'comunicado_id': pk, 'detalhe': str(exc)})
-            return Response({'erro': 'Falha ao enviar o comunicado. Tente novamente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error('comunicado_reenvio_falhou', extra={'usuario_id': request.user.id, 'comunicado_id': pk, 'detalhe': str(exc)})
+            return Response({'erro': 'Falha ao reenviar o comunicado. Tente novamente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception:
-            logger.exception('comunicado_envio_manual_erro_inesperado', extra={'usuario_id': request.user.id, 'comunicado_id': pk})
+            logger.exception('comunicado_reenvio_erro_inesperado', extra={'usuario_id': request.user.id, 'comunicado_id': pk})
             return Response({'erro': 'Erro interno.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        data = _serializar_comunicado(obj)
-        data['total_enviado'] = obj.total_destinatarios
-        return Response(data)
+        return Response({'id': obj.id, 'total_enviado': total_enviado, 'reenviado': reenviar})
 
     def delete(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:
-            return Response({'erro': 'Comunicado nao encontrado.'}, status=status.HTTP_404_NOT_FOUND)
-
-        if obj.status == Comunicado.Status.AGENDADO:
-            obj.status = Comunicado.Status.CANCELADO
-            obj.cancelado_em = timezone.now()
-            obj.save(update_fields=['status', 'cancelado_em', 'atualizado_em'])
-            return Response(_serializar_comunicado(obj))
-
+            return Response({'erro': 'Comunicado não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         obj.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
