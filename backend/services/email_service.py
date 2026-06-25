@@ -13,8 +13,6 @@ from email.mime.image import MIMEImage
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, send_mail
 
-from ..domain.exceptions import ComunicadoEnvioError
-
 
 def _enviar_html_com_imagens(subject: str, html: str, recipient: str) -> None:
     """
@@ -54,11 +52,9 @@ def _enviar_html_com_imagens(subject: str, html: str, recipient: str) -> None:
             msg.attach(img_part)
 
     try:
-        enviados = msg.send(fail_silently=False)
-    except Exception as exc:
-        raise ComunicadoEnvioError(str(exc)) from exc
-    if enviados == 0:
-        raise ComunicadoEnvioError('Nenhuma mensagem foi enviada pelo backend de e-mail.')
+        msg.send(fail_silently=True)
+    except Exception:
+        pass
 
 
 def _gerar_ics(agendamento) -> bytes:
