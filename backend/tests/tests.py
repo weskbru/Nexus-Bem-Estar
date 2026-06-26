@@ -9,11 +9,10 @@ Cobertura:
   - Regras de negócio: vaga esgotada, duplicata de agendamento, concorrência
 """
 import uuid
-from io import StringIO
 from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
-from django.core.management import call_command
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -21,7 +20,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade, Comunicado
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade
 from ..views.permissions import liberar_penalidades_expiradas
 
 
@@ -291,178 +290,51 @@ class AdminEventoTest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
 
-@override_settings(EMAIL_DESTINO_EVENTO='lista@aeb.gov.br')
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
 class EnviarEmailsTest(APITestCase):
     def setUp(self):
         self.admin = cria_admin()
         self.client.force_authenticate(user=self.admin)
-        self.evento = cria_evento(status_evento='publicado', palavra_chave='MASSAGEM')
+        self.evento = cria_evento(status_evento='publicado')
         self.evento.gerar_horarios()
 
-    @patch('backend.services.email_service.enviar_html_evento')
-    def test_envia_email_para_destinatario_configurado(self, enviar_mock):
+    def test_envia_email_para_cada_colaborador(self):
+        cria_colaborador('ana@empresa.com.br', 'Ana')
+        cria_colaborador('pedro@empresa.com.br', 'Pedro')
+
         resp = self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/')
-
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data['destinatario'], ['lista@aeb.gov.br'])
-        enviar_mock.assert_called_once()
-        self.evento.refresh_from_db()
-        self.assertEqual(self.evento.emails_envio_status, 'enviado')
-        self.assertIsNotNone(self.evento.emails_enviados_em)
+        self.assertEqual(resp.data['enviados'], 2)
+        self.assertEqual(len(mail.outbox), 2)
 
-    @patch('backend.services.email_service.enviar_html_evento')
-    def test_email_contem_link_e_chave(self, enviar_mock):
+    def test_email_contem_link_e_chave(self):
+        colaborador = cria_colaborador()
         resp = self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
-        _, corpo_html, destinatario = enviar_mock.call_args.args
-        self.assertEqual(destinatario, 'lista@aeb.gov.br')
-        self.assertIn(f'/evento/{self.evento.id}/entrar', corpo_html)
-        self.assertIn('MASSAGEM', corpo_html)
+        convite = ConviteEmail.objects.get(usuario=colaborador, evento=self.evento)
+        email_enviado = mail.outbox[0]
+        self.assertIn(str(convite.token), email_enviado.body)
+        self.assertIn(convite.chave_mensagem, email_enviado.body)
 
-    @patch('backend.services.email_service.enviar_html_evento')
-    def test_reenvio_de_evento_ja_enviado_e_bloqueado(self, enviar_mock):
-        self.evento.emails_enviados_em = timezone.now()
-        self.evento.emails_envio_status = 'enviado'
-        self.evento.save(update_fields=['emails_enviados_em', 'emails_envio_status'])
+    def test_reenvio_usa_mesmo_convite(self):
+        cria_colaborador()
+        self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/')
+        qtd_convites_antes = ConviteEmail.objects.count()
 
-        resp = self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/')
-
-        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT)
-        enviar_mock.assert_not_called()
+        # Segundo envio
+        self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/')
+        self.assertEqual(ConviteEmail.objects.count(), qtd_convites_antes)
 
     def test_nao_envia_para_evento_nao_publicado(self):
         evento_cancelado = cria_evento(status_evento='cancelado')
         resp = self.client.post(f'/api/admin/eventos/{evento_cancelado.id}/enviar-emails/')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch('backend.services.email_service.enviar_html_evento')
-    def test_agendar_email_futuro_nao_envia_imediatamente(self, enviar_mock):
-        agendado_para = timezone.now() + timedelta(minutes=10)
-
-        resp = self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/', {
-            'modo_envio': 'agendado',
-            'agendado_para': agendado_para.isoformat(),
-        })
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        enviar_mock.assert_not_called()
-        self.evento.refresh_from_db()
-        self.assertEqual(self.evento.emails_envio_status, 'agendado')
-        self.assertIsNotNone(self.evento.emails_agendado_para)
-        self.assertIsNone(self.evento.emails_enviados_em)
-
-    def test_agendar_email_no_passado_retorna_400(self):
-        agendado_para = timezone.now() - timedelta(days=1)
-
-        resp = self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/', {
-            'modo_envio': 'agendado',
-            'agendado_para': agendado_para.isoformat(),
-        })
-
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.evento.refresh_from_db()
-        self.assertEqual(self.evento.emails_envio_status, 'nao_agendado')
-
-    @patch('backend.services.email_service.enviar_html_evento')
-    def test_comando_envia_email_de_evento_agendado_vencido(self, enviar_mock):
-        self.evento.emails_envio_status = 'agendado'
-        self.evento.emails_agendado_para = timezone.now() - timedelta(minutes=1)
-        self.evento.save(update_fields=['emails_envio_status', 'emails_agendado_para'])
-
-        call_command(
-            'enviar_emails_eventos_agendados',
-            stdout=StringIO(),
-            stderr=StringIO(),
-        )
-
-        enviar_mock.assert_called_once()
-        self.evento.refresh_from_db()
-        self.assertEqual(self.evento.emails_envio_status, 'enviado')
-        self.assertEqual(self.evento.emails_tentativas_envio, 1)
-        self.assertIsNone(self.evento.emails_agendado_para)
-        self.assertIsNotNone(self.evento.emails_enviados_em)
-
 
 # ---------------------------------------------------------------------------
 # Testes Admin — Dashboard
 # ---------------------------------------------------------------------------
-
-@override_settings(EMAIL_DESTINO_EVENTO='lista@aeb.gov.br')
-class AdminComunicadoAgendamentoTest(APITestCase):
-    def setUp(self):
-        self.admin = cria_admin('admin.comunicados@empresa.com.br')
-        self.client.force_authenticate(user=self.admin)
-
-    @patch('backend.services.email_service.enviar_para_lista_evento', return_value=2)
-    def test_agendar_comunicado_futuro_nao_envia_imediatamente(self, enviar_mock):
-        agendado_para = timezone.now() + timedelta(minutes=10)
-
-        resp = self.client.post('/api/admin/comunicados/', {
-            'assunto': 'Agenda de massagem',
-            'corpo_html': '<p>Escolha seu horario.</p>',
-            'modo_envio': 'agendado',
-            'agendado_para': agendado_para.isoformat(),
-        })
-
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        enviar_mock.assert_not_called()
-        comunicado = Comunicado.objects.get(id=resp.data['id'])
-        self.assertEqual(comunicado.status, Comunicado.Status.AGENDADO)
-        self.assertIsNone(comunicado.enviado_em)
-
-    def test_agendar_comunicado_no_passado_retorna_400(self):
-        agendado_para = timezone.now() - timedelta(days=1)
-
-        resp = self.client.post('/api/admin/comunicados/', {
-            'assunto': 'Agenda de massagem',
-            'corpo_html': '<p>Escolha seu horario.</p>',
-            'modo_envio': 'agendado',
-            'agendado_para': agendado_para.isoformat(),
-        })
-
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(Comunicado.objects.count(), 0)
-
-    @patch('backend.services.email_service.enviar_para_lista_evento', return_value=3)
-    def test_comando_envia_comunicado_agendado_vencido(self, enviar_mock):
-        comunicado = Comunicado.objects.create(
-            assunto='Agenda de massagem',
-            corpo_html='<p>Escolha seu horario.</p>',
-            enviado_por=self.admin,
-            status=Comunicado.Status.AGENDADO,
-            agendado_para=timezone.now() - timedelta(minutes=1),
-        )
-
-        call_command(
-            'enviar_comunicados_agendados',
-            stdout=StringIO(),
-            stderr=StringIO(),
-        )
-
-        enviar_mock.assert_called_once_with(comunicado.assunto, comunicado.corpo_html)
-        comunicado.refresh_from_db()
-        self.assertEqual(comunicado.status, Comunicado.Status.ENVIADO)
-        self.assertEqual(comunicado.total_destinatarios, 3)
-        self.assertEqual(comunicado.tentativas_envio, 1)
-        self.assertIsNotNone(comunicado.enviado_em)
-
-    def test_delete_de_comunicado_agendado_cancela_sem_excluir(self):
-        comunicado = Comunicado.objects.create(
-            assunto='Agenda de massagem',
-            corpo_html='<p>Escolha seu horario.</p>',
-            enviado_por=self.admin,
-            status=Comunicado.Status.AGENDADO,
-            agendado_para=timezone.now() + timedelta(hours=1),
-        )
-
-        resp = self.client.delete(f'/api/admin/comunicados/{comunicado.id}/')
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        comunicado.refresh_from_db()
-        self.assertEqual(comunicado.status, Comunicado.Status.CANCELADO)
-        self.assertIsNotNone(comunicado.cancelado_em)
-
 
 class AdminDashboardTest(APITestCase):
     def setUp(self):

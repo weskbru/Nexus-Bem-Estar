@@ -1,48 +1,61 @@
 # Python
-venv/
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
 
-# Env — NUNCA versionar arquivos com segredos reais
-.env
-# .env.example e .env.vm são templates (sem segredos) — vão para o repo normalmente
-
-# Django
-backend/staticfiles/
-db.sqlite3
+# Virtualenv
+venv/
+.venv/
 
 # Node
 node_modules/
 frontend/node_modules/
-
-# Build
 dist/
 build/
 frontend/dist/
 
-# OS
-.DS_Store
-Thumbs.db
+# Django/static generated
+backend/staticfiles/
 
-# Logs (inclui gunicorn)
+# Logs
 *.log
 gunicorn.log
 
-# Docker volumes locais
+# Env
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+
+# Temp
+*.tmp
+*.bak
+*.save
+*.swp
+.DS_Store
+
+# Local database/files generated during development
+db.sqlite3
+Thumbs.db
 postgres_data/
 
-# Testes de carga — não vai para o servidor
+# Testes de carga - nao vai para o servidor
 load_tests/
 
-# Documentação e arquivos que não precisam ir para a VM
+# Documentacao e arquivos que nao precisam ir para a VM
 README.md
 CHECKLIST_BACKEND.md
 FLUXO_EMAIL_TOKEN.md
 GUIA_CONFIRMACAO_EMAIL.md
 
-# Backups automáticos do nginx (gerados no servidor)
+# Backups automaticos do nginx (gerados no servidor)
 nginx.conf.save
 nginx.conf.save.1
 *.conf.save*

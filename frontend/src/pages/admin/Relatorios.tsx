@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Download, Award, FileText, PieChart, BarChart2, AlertCircle, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, Award, FileText, PieChart, BarChart2, AlertCircle, Clock } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { adminDashboardApi, adminEventosApi, type EventoDTO, type AgendamentoDTO } from '../../services/api';
 
@@ -90,9 +90,6 @@ const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov'
 const STATUS_SKELETON_KEYS = ['status-1', 'status-2', 'status-3'];
 const RANKING_SKELETON_KEYS = ['ranking-1', 'ranking-2', 'ranking-3', 'ranking-4', 'ranking-5'];
 const TABELA_SKELETON_KEYS = ['tabela-1', 'tabela-2', 'tabela-3', 'tabela-4'];
-const AGENDAMENTOS_PAGE_SIZE = 10;
-
-type StatusAgendamentoFiltro = 'todos' | 'confirmado' | 'cancelado';
 
 // Paleta Semântica Refinada
 const STATUS_EVENTO_ITENS = [
@@ -148,32 +145,17 @@ function Skeleton({ className }: SkeletonProps) {
 export default function Relatorios() {
   const [eventos, setEventos] = useState<EventoDTO[]>([]);
   const [agendamentos, setAgendamentos] = useState<AgendamentoDTO[]>([]);
-  const [statusFiltro, setStatusFiltro] = useState<StatusAgendamentoFiltro>('todos');
-  const [dataEventoFiltro, setDataEventoFiltro] = useState('');
-  const [paginaAgendamentos, setPaginaAgendamentos] = useState(1);
-  const [totalAgendamentos, setTotalAgendamentos] = useState(0);
-  const [totalPaginasAgendamentos, setTotalPaginasAgendamentos] = useState(1);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
     async function carregar() {
       try {
-        setLoading(true);
-        setErro('');
         const [dash, evts] = await Promise.all([
-          adminDashboardApi.obter({
-            status: statusFiltro === 'todos' ? undefined : statusFiltro,
-            evento_data: dataEventoFiltro || undefined,
-            page: paginaAgendamentos,
-            page_size: AGENDAMENTOS_PAGE_SIZE,
-          }),
+          adminDashboardApi.obter(),
           adminEventosApi.listar(),
         ]);
         setAgendamentos(dash.agendamentos_recentes ?? []);
-        setTotalAgendamentos(dash.agendamentos_paginacao?.total ?? dash.agendamentos_recentes?.length ?? 0);
-        setTotalPaginasAgendamentos(dash.agendamentos_paginacao?.total_pages ?? 1);
-        setPaginaAgendamentos(dash.agendamentos_paginacao?.page ?? paginaAgendamentos);
         setEventos(evts);
       } catch (err) {
         setErro(err instanceof Error ? err.message : 'Erro ao carregar os relatórios analíticos.');
@@ -182,17 +164,7 @@ export default function Relatorios() {
       }
     }
     carregar();
-  }, [statusFiltro, dataEventoFiltro, paginaAgendamentos]);
-
-  function alterarStatusFiltro(status: StatusAgendamentoFiltro) {
-    setStatusFiltro(status);
-    setPaginaAgendamentos(1);
-  }
-
-  function alterarDataEventoFiltro(data: string) {
-    setDataEventoFiltro(data);
-    setPaginaAgendamentos(1);
-  }
+  }, []);
 
   // ── Derivações Analíticas ──────────────────────────────────────────────────
 
@@ -216,8 +188,6 @@ export default function Relatorios() {
     acc[s] = (acc[s] ?? 0) + 1;
     return acc;
   }, {});
-  const inicioAgendamentos = totalAgendamentos === 0 ? 0 : ((paginaAgendamentos - 1) * AGENDAMENTOS_PAGE_SIZE) + 1;
-  const fimAgendamentos = Math.min(paginaAgendamentos * AGENDAMENTOS_PAGE_SIZE, totalAgendamentos);
 
   // ── Renderização dos Blocos ────────────────────────────────────────────────
 
@@ -353,10 +323,7 @@ export default function Relatorios() {
                 .split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
               
               return (
-                <tr
-                  key={ag.id}
-                  className="hover:bg-slate-50/60 transition-colors group bg-white"
-                >
+                <tr key={ag.id} className="hover:bg-slate-50/60 transition-colors group bg-white">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 text-blue-700 flex items-center justify-center text-xs font-extrabold shrink-0 shadow-sm group-hover:scale-105 transition-transform">
@@ -500,80 +467,7 @@ export default function Relatorios() {
             <p className="text-sm font-medium text-slate-500 mt-0.5">Últimas movimentações no sistema.</p>
           </div>
         </div>
-        <div className="px-6 md:px-8 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
-              {[
-                { value: 'todos', label: 'Todos' },
-                { value: 'confirmado', label: 'Confirmados' },
-                { value: 'cancelado', label: 'Cancelados' },
-              ].map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => alterarStatusFiltro(item.value as StatusAgendamentoFiltro)}
-                  className={`px-3 py-2 rounded-lg text-xs font-extrabold transition-colors ${
-                    statusFiltro === item.value
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            <label className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
-              <span className="text-[11px] font-extrabold uppercase text-slate-500 whitespace-nowrap">Dia do evento</span>
-              <input
-                type="date"
-                value={dataEventoFiltro}
-                onChange={(event) => alterarDataEventoFiltro(event.target.value)}
-                className="text-sm font-bold text-slate-700 outline-none bg-transparent min-w-[140px]"
-              />
-              {dataEventoFiltro && (
-                <button
-                  type="button"
-                  onClick={() => alterarDataEventoFiltro('')}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700"
-                >
-                  Limpar
-                </button>
-              )}
-            </label>
-          </div>
-        </div>
         {historicoAgendamentosContent}
-        {!loading && totalAgendamentos > 0 && (
-          <div className="px-6 md:px-8 py-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white">
-            <p className="text-xs font-bold text-slate-500">
-              Mostrando {inicioAgendamentos} a {fimAgendamentos} de {totalAgendamentos} registros
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPaginaAgendamentos((pagina) => Math.max(pagina - 1, 1))}
-                disabled={paginaAgendamentos <= 1}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Pagina anterior"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-extrabold text-slate-600">
-                {paginaAgendamentos} / {totalPaginasAgendamentos}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPaginaAgendamentos((pagina) => Math.min(pagina + 1, totalPaginasAgendamentos))}
-                disabled={paginaAgendamentos >= totalPaginasAgendamentos}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Proxima pagina"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
     </div>

@@ -3,7 +3,7 @@ import { Calendar, Clock, CheckCircle2, XCircle, AlertCircle, User, X, Loader2, 
 import { useAuth } from '../contexts/AuthContext';
 import { parseFetchError } from '../services/api';
 
-const API = import.meta.env.VITE_API_URL || '/api';
+const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 const CANCELAMENTO_MINUTOS_ANTECEDENCIA = 30;
 
 export interface AgendamentoDetalhes {
