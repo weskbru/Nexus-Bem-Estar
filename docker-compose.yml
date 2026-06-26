@@ -5,6 +5,11 @@ services:
     image: postgres:16-alpine
     container_name: sis_bem_estar_db
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: ${DB_NAME:-sis_bem_estar}
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -24,6 +29,11 @@ services:
     image: redis:7-alpine
     container_name: sis_bem_estar_redis
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "6379:6379"
 
@@ -31,9 +41,14 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: docker/backend/Dockerfile
     container_name: sis_bem_estar_backend
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     env_file:
       - .env
     environment:
@@ -57,9 +72,14 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: docker/frontend/Dockerfile
     container_name: sis_bem_estar_frontend
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "150"
