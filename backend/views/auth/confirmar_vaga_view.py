@@ -6,7 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from ...domain.exceptions import ListaEsperaError
 from ...models.models import Usuario
 from ...serializers.serializers import UsuarioSerializer
-from ...services.lista_espera_service import confirmar_vaga
+from ...services.lista_espera.service import confirmar_vaga
 
 
 class ConfirmarVagaListaEsperaView(APIView):

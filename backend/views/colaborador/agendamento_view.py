@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from ...models.models import Agendamento, ConviteEmail, Horario, ListaEspera, Penalidade
 from ...serializers.serializers import AgendamentoSerializer
 from ...services import email_service
-from ...services.lista_espera_service import notificar_proximo_na_fila
+from ...services.lista_espera.service import notificar_proximo_na_fila
 from ..permissions import encerrar_eventos_expirados, liberar_penalidades_expiradas
 from .otp_agendamento_view import cache_key_otp
 

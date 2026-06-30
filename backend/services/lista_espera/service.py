@@ -20,19 +20,19 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from ..domain.exceptions import (
+from ...domain.exceptions import (
     PrazoConfirmacaoExpiradoError,
     TokenInvalidoError,
     VagaIndisponivelError,
 )
-from ..domain.lista_espera import (
+from ...domain.lista_espera import (
     StatusAgendamento,
     StatusListaEspera,
     prazo_expirou,
     validar_estado_pre_confirmacao,
 )
-from ..models.models import Agendamento, Horario, ListaEspera
-from . import email_service
+from ...models.models import Agendamento, Horario, ListaEspera
+from .. import email_service
 
 
 @dataclass(frozen=True)

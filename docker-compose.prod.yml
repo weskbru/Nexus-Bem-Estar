@@ -61,6 +61,37 @@ services:
     command: sh -c "python manage.py migrate && python manage.py criar_admin && python manage.py collectstatic --noinput && gunicorn backend.core.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 1 --timeout 60 --max-requests 1000 --max-requests-jitter 100"
 
   # ─── Frontend (nginx servindo build estático) ────────────────────────────
+  comunicados_scheduler:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: sis_bem_estar_comunicados_scheduler
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      backend:
+        condition: service_started
+    command: >
+      sh -c "sleep 15;
+             while true; do
+               python manage.py enviar_comunicados_agendados || true;
+               python manage.py enviar_emails_eventos_agendados || true;
+               sleep 60;
+             done"
+
   frontend:
     build:
       context: .

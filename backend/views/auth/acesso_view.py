@@ -7,7 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from ...models.models import ConviteEmail, Evento, Usuario
 from ...serializers.serializers import UsuarioSerializer
-from ...services.ldap_service import email_existe_no_ad
+from ...services.ldap.service import email_existe_no_ad
 
 
 class AcessoViaTokenView(APIView):
