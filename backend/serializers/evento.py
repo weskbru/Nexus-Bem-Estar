@@ -178,6 +178,50 @@ class EventoAdminSerializer(serializers.ModelSerializer):
         return evento
 
 
+class EventoAdminListSerializer(serializers.ModelSerializer):
+    total_agendamentos = serializers.SerializerMethodField()
+    presenca_pendente = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Evento
+        fields = [
+            'id',
+            'titulo',
+            'tipo',
+            'data',
+            'hora_inicio',
+            'hora_fim',
+            'imagem_url',
+            'status',
+            'nome_profissional',
+            'emails_enviados_em',
+            'emails_envio_status',
+            'emails_agendado_para',
+            'total_agendamentos',
+            'presenca_pendente',
+        ]
+
+    def get_total_agendamentos(self, obj):
+        anotado = getattr(obj, 'total_agendamentos_calc', None)
+        if anotado is not None:
+            return anotado
+        return Agendamento.objects.filter(
+            horario__evento=obj, status='confirmado'
+        ).count()
+
+    def get_presenca_pendente(self, obj):
+        if obj.status != 'encerrado':
+            return False
+        anotado = getattr(obj, 'presenca_pendente_calc', None)
+        if anotado is not None:
+            return anotado
+        return Agendamento.objects.filter(
+            horario__evento=obj,
+            status='confirmado',
+            compareceu__isnull=True,
+        ).exists()
+
+
 # ---------------------------------------------------------------------------
 # Agendamento
 # ---------------------------------------------------------------------------

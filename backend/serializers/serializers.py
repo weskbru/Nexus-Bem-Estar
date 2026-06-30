@@ -4,7 +4,13 @@ from .agendamento import (
     ConviteEmailSerializer,
 )
 from .dashboard import AdminLoginSerializer, DashboardSerializer
-from .evento import EventoAdminSerializer, EventoDetailSerializer, EventoListSerializer, HorarioSerializer
+from .evento import (
+    EventoAdminListSerializer,
+    EventoAdminSerializer,
+    EventoDetailSerializer,
+    EventoListSerializer,
+    HorarioSerializer,
+)
 from .penalidade import PenalidadeSerializer
 from .usuario import UsuarioCreateSerializer, UsuarioSerializer
 
@@ -15,6 +21,7 @@ __all__ = [
     'EventoListSerializer',
     'EventoDetailSerializer',
     'EventoAdminSerializer',
+    'EventoAdminListSerializer',
     'AgendamentoSerializer',
     'ConviteEmailSerializer',
     'AgendamentoManualSerializer',

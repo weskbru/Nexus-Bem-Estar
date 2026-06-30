@@ -1,6 +1,7 @@
 import csv
 from datetime import timedelta
 
+from django.db.models import Count, Exists, OuterRef, Q
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -26,6 +27,7 @@ def _verificar_presencas_pendentes():
     )
 from ...serializers.serializers import (
     AgendamentoManualSerializer,
+    EventoAdminListSerializer,
     EventoAdminSerializer,
 )
 from ...services import email_service
@@ -82,13 +84,52 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     POST   /api/admin/eventos/<id>/enviar-emails/
     GET    /api/admin/eventos/<id>/exportar-csv/
     """
-    queryset = Evento.objects.all().prefetch_related('horarios__agendamentos')
+    queryset = Evento.objects.all()
     serializer_class = EventoAdminSerializer
     permission_classes = [IsAdminUsuario]
 
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return EventoAdminListSerializer
+        return EventoAdminSerializer
+
     def get_queryset(self):
         encerrar_eventos_expirados()
-        return super().get_queryset()
+        queryset = Evento.objects.all()
+
+        if self.action == 'list':
+            presencas_pendentes = Agendamento.objects.filter(
+                horario__evento=OuterRef('pk'),
+                status='confirmado',
+                compareceu__isnull=True,
+            )
+            return (
+                queryset
+                .only(
+                    'id',
+                    'titulo',
+                    'tipo',
+                    'data',
+                    'hora_inicio',
+                    'hora_fim',
+                    'imagem_url',
+                    'status',
+                    'nome_profissional',
+                    'emails_enviados_em',
+                    'emails_envio_status',
+                    'emails_agendado_para',
+                )
+                .annotate(
+                    total_agendamentos_calc=Count(
+                        'horarios__agendamentos',
+                        filter=Q(horarios__agendamentos__status='confirmado'),
+                        distinct=True,
+                    ),
+                    presenca_pendente_calc=Exists(presencas_pendentes),
+                )
+            )
+
+        return queryset.prefetch_related('horarios__agendamentos')
 
     def create(self, request, *args, **kwargs):
         pendente = _verificar_presencas_pendentes()
@@ -622,5 +663,4 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         nome_arquivo = evento.titulo.replace(' ', '_').replace('/', '-')
         response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}.csv"'
         return response
-
 
