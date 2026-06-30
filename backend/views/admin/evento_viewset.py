@@ -1,13 +1,15 @@
 import csv
+from datetime import timedelta
 
-from django.conf import settings
+from django.db.models import Count, Exists, OuterRef, Q
 from django.http import StreamingHttpResponse
 from django.utils import timezone
-
+from django.utils.dateparse import parse_datetime
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+from .agendamento_viewset import AdminAgendamentoViewSet
+from .penalidade_viewset import AdminPenalidadeViewSet
 from ...models.models import Agendamento, AgendamentoManual, Evento, Horario, ListaEspera, Penalidade
 
 
@@ -25,13 +27,47 @@ def _verificar_presencas_pendentes():
     )
 from ...serializers.serializers import (
     AgendamentoManualSerializer,
-    AgendamentoSerializer,
+    EventoAdminListSerializer,
     EventoAdminSerializer,
-    PenalidadeSerializer,
 )
 from ...services import email_service
-from ...services.lista_espera_service import notificar_proximo_na_fila
-from ..permissions import IsAdminUsuario, encerrar_eventos_expirados, liberar_penalidades_expiradas
+from ...services.evento.email_service import (
+    AGENDAMENTO_EMAIL_MINIMO_MINUTOS,
+    EMAIL_STATUS_AGENDADO,
+    EMAIL_STATUS_ENVIADO,
+    EMAIL_STATUS_FALHOU,
+    MODO_ENVIO_AGENDADO,
+    MODO_ENVIO_IMEDIATO,
+    enviar_emails_evento,
+    get_destinatarios_email_evento,
+)
+from ...services.lista_espera.service import notificar_proximo_na_fila
+from ..permissions import IsAdminUsuario, encerrar_eventos_expirados
+
+
+def validar_agendamento_email_evento(raw_agendado_para):
+    if not raw_agendado_para:
+        return None, Response(
+            {'erro': 'Informe a data e o horario do envio agendado.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    agendado_para = parse_datetime(raw_agendado_para)
+    if not agendado_para:
+        return None, Response(
+            {'erro': 'Data e horario de agendamento invalidos.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if timezone.is_naive(agendado_para):
+        agendado_para = timezone.make_aware(agendado_para, timezone.get_current_timezone())
+
+    minimo = timezone.now() + timedelta(minutes=AGENDAMENTO_EMAIL_MINIMO_MINUTOS)
+    if agendado_para < minimo:
+        return None, Response(
+            {'erro': f'Agende o envio para pelo menos {AGENDAMENTO_EMAIL_MINIMO_MINUTOS} minutos no futuro.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return agendado_para, None
 
 
 class AdminEventoViewSet(viewsets.ModelViewSet):
@@ -48,13 +84,52 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
     POST   /api/admin/eventos/<id>/enviar-emails/
     GET    /api/admin/eventos/<id>/exportar-csv/
     """
-    queryset = Evento.objects.all().prefetch_related('horarios__agendamentos')
+    queryset = Evento.objects.all()
     serializer_class = EventoAdminSerializer
     permission_classes = [IsAdminUsuario]
 
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return EventoAdminListSerializer
+        return EventoAdminSerializer
+
     def get_queryset(self):
         encerrar_eventos_expirados()
-        return super().get_queryset()
+        queryset = Evento.objects.all()
+
+        if self.action == 'list':
+            presencas_pendentes = Agendamento.objects.filter(
+                horario__evento=OuterRef('pk'),
+                status='confirmado',
+                compareceu__isnull=True,
+            )
+            return (
+                queryset
+                .only(
+                    'id',
+                    'titulo',
+                    'tipo',
+                    'data',
+                    'hora_inicio',
+                    'hora_fim',
+                    'imagem_url',
+                    'status',
+                    'nome_profissional',
+                    'emails_enviados_em',
+                    'emails_envio_status',
+                    'emails_agendado_para',
+                )
+                .annotate(
+                    total_agendamentos_calc=Count(
+                        'horarios__agendamentos',
+                        filter=Q(horarios__agendamentos__status='confirmado'),
+                        distinct=True,
+                    ),
+                    presenca_pendente_calc=Exists(presencas_pendentes),
+                )
+            )
+
+        return queryset.prefetch_related('horarios__agendamentos')
 
     def create(self, request, *args, **kwargs):
         pendente = _verificar_presencas_pendentes()
@@ -199,47 +274,63 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        destinatarios_raw = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
-        if not destinatarios_raw:
+        destinatario = get_destinatarios_email_evento()
+        if not destinatario:
             return Response(
                 {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        destinatario = [d.strip() for d in destinatarios_raw.split(',') if d.strip()]
 
-        corpo_html = evento.corpo_email or ''
-        link_acesso = f"{settings.FRONTEND_URL}/evento/{evento.id}/entrar"
 
-        if evento.palavra_chave:
-            corpo_html += (
-                f'<div style="margin-top:24px;padding:16px 20px;background:#fffbeb;'
-                f'border-left:4px solid #f59e0b;border-radius:6px;">'
-                f'<p style="margin:0 0 6px;font-size:13px;color:#92400e;font-weight:600;">'
-                f'🔑 PALAVRA-CHAVE DE ACESSO</p>'
-                f'<p style="margin:0;font-size:22px;font-weight:bold;letter-spacing:3px;color:#78350f;">'
-                f'{evento.palavra_chave}</p>'
-                f'<p style="margin:8px 0 0;font-size:12px;color:#92400e;">'
-                f'Você precisará informar esta palavra-chave ao clicar no link abaixo.</p>'
-                f'</div>'
+        modo_envio = request.data.get('modo_envio') or MODO_ENVIO_IMEDIATO
+        if modo_envio not in {MODO_ENVIO_IMEDIATO, MODO_ENVIO_AGENDADO}:
+            return Response(
+                {'erro': 'Modo de envio invalido.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        corpo_html += (
-            f'<p style="margin-top:24px;text-align:center;">'
-            f'<a href="{link_acesso}" style="display:inline-block;padding:12px 32px;'
-            f'background:#1d4ed8;color:#fff;font-size:15px;font-weight:bold;'
-            f'text-decoration:none;border-radius:6px;">Acessar e Agendar</a></p>'
-        )
+        if modo_envio == MODO_ENVIO_AGENDADO:
+            agendado_para, erro_response = validar_agendamento_email_evento(request.data.get('agendado_para'))
+            if erro_response:
+                return erro_response
+
+            evento.emails_envio_status = EMAIL_STATUS_AGENDADO
+            evento.emails_agendado_para = agendado_para
+            evento.emails_erro_envio = ''
+            evento.save(update_fields=[
+                'emails_envio_status',
+                'emails_agendado_para',
+                'emails_erro_envio',
+                'atualizado_em',
+            ])
+
+            return Response({
+                'mensagem': 'Envio de e-mails agendado com sucesso.',
+                'destinatario': destinatario,
+                'agendado_para': agendado_para,
+            }, status=status.HTTP_200_OK)
 
         try:
-            for dest in destinatario:
-                email_service.enviar_html_evento(evento.titulo, corpo_html, dest)
+            destinatario = enviar_emails_evento(evento)
             evento.emails_enviados_em = timezone.now()
-            evento.save(update_fields=['emails_enviados_em'])
+            evento.emails_envio_status = EMAIL_STATUS_ENVIADO
+            evento.emails_agendado_para = None
+            evento.emails_erro_envio = ''
+            evento.save(update_fields=[
+                'emails_enviados_em',
+                'emails_envio_status',
+                'emails_agendado_para',
+                'emails_erro_envio',
+                'atualizado_em',
+            ])
             return Response({
                 'mensagem': f'E-mail enviado com sucesso para {destinatario}.',
                 'destinatario': destinatario,
             }, status=status.HTTP_200_OK)
         except Exception as exc:
+            evento.emails_envio_status = EMAIL_STATUS_FALHOU
+            evento.emails_erro_envio = str(exc)[:1000]
+            evento.save(update_fields=['emails_envio_status', 'emails_erro_envio', 'atualizado_em'])
             return Response(
                 {'erro': f'Falha ao enviar e-mail: {exc}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -573,69 +664,3 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}.csv"'
         return response
 
-
-class AdminAgendamentoViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    GET /api/admin/agendamentos/            — lista todos os agendamentos
-    GET /api/admin/agendamentos/?evento_id= — filtra por evento
-    GET /api/admin/agendamentos/?status=    — filtra por status
-    GET /api/admin/agendamentos/<id>/       — detalhe
-    """
-    serializer_class = AgendamentoSerializer
-    permission_classes = [IsAdminUsuario]
-
-    def get_queryset(self):
-        qs = Agendamento.objects.all().select_related('usuario', 'horario__evento')
-        evento_id    = self.request.query_params.get('evento_id')
-        status_param = self.request.query_params.get('status')
-        if evento_id:
-            qs = qs.filter(horario__evento_id=evento_id)
-        if status_param:
-            qs = qs.filter(status=status_param)
-        return qs.order_by('-criado_em')
-
-
-class AdminPenalidadeViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    GET  /api/admin/penalidades/              — lista todas as penalidades
-    GET  /api/admin/penalidades/?ativa=true   — filtra por ativas
-    GET  /api/admin/penalidades/?usuario_id=  — filtra por usuário
-    POST /api/admin/penalidades/<id>/revogar/ — revoga penalidade manualmente
-    """
-    serializer_class = PenalidadeSerializer
-    permission_classes = [IsAdminUsuario]
-
-    def get_queryset(self):
-        encerrar_eventos_expirados()
-        liberar_penalidades_expiradas()
-        qs = Penalidade.objects.select_related(
-            'usuario', 'agendamento__horario__evento', 'evento_punicao', 'revogada_por'
-        )
-        ativa_param = self.request.query_params.get('ativa')
-        usuario_id  = self.request.query_params.get('usuario_id')
-        if ativa_param is not None:
-            qs = qs.filter(ativa=ativa_param.lower() == 'true')
-        if usuario_id:
-            qs = qs.filter(usuario_id=usuario_id)
-        return qs.order_by('-criada_em')
-
-    @action(detail=True, methods=['post'], url_path='revogar')
-    def revogar(self, request, pk=None):
-        """
-        POST /api/admin/penalidades/<id>/revogar/
-        Body: { motivo: "..." }
-        Revoga manualmente uma penalidade ativa (ex.: falta justificada).
-        """
-        penalidade = self.get_object()
-        if not penalidade.ativa:
-            return Response(
-                {'erro': 'Esta penalidade já está inativa.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        motivo = request.data.get('motivo', '').strip()
-        penalidade.ativa = False
-        penalidade.revogada_por = request.user
-        penalidade.revogada_em = timezone.now()
-        penalidade.motivo_revogacao = motivo
-        penalidade.save(update_fields=['ativa', 'revogada_por', 'revogada_em', 'motivo_revogacao'])
-        return Response(PenalidadeSerializer(penalidade).data)

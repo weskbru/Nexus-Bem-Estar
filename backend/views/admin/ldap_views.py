@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 
 from ...models.models import Usuario
 from ...serializers.serializers import UsuarioSerializer
-from ...services.ldap_service import buscar_usuarios as ldap_buscar
+from ...services.ldap.service import buscar_usuarios as ldap_buscar
 from ..permissions import IsSuperAdmin
 
 

@@ -183,6 +183,10 @@ export interface EventoDTO {
   horarios: HorarioDTO[];
   total_agendamentos?: number;
   emails_enviados_em?: string | null;
+  emails_envio_status?: string;
+  emails_agendado_para?: string | null;
+  emails_tentativas_envio?: number;
+  emails_erro_envio?: string;
   presenca_pendente?: boolean;
 }
 
@@ -209,8 +213,11 @@ export const adminEventosApi = {
     request<{ mensagem: string; horarios_gerados: number }>(`/admin/eventos/${id}/publicar/`, { method: 'POST' }),
   cancelar: (id: number) =>
     request<{ mensagem: string }>(`/admin/eventos/${id}/cancelar/`, { method: 'POST' }),
-  enviarEmails: (id: number) =>
-    request<{ mensagem: string; enviados: number; erros: unknown[] }>(`/admin/eventos/${id}/enviar-emails/`, { method: 'POST' }),
+  enviarEmails: (id: number, data?: { modo_envio?: 'imediato' | 'agendado'; agendado_para?: string }) =>
+    request<{ mensagem: string; destinatario?: string[]; agendado_para?: string }>(
+      `/admin/eventos/${id}/enviar-emails/`,
+      { method: 'POST', body: data ? JSON.stringify(data) : undefined }
+    ),
   registrarParticipanteManual: (id: number, dados: { horario_id: number; nome: string; departamento?: string; email_verificacao?: string }) =>
     request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string; aviso_penalidade?: { id: number; usuario_nome: string } }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
   adicionarParticipantePendente: (id: number, dados: { nome: string; matricula?: string; departamento?: string }) =>

@@ -2,7 +2,9 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from ..views.admin.usuario_viewset import AdminUsuarioViewSet
-from ..views.admin.evento_viewset import AdminEventoViewSet, AdminAgendamentoViewSet, AdminPenalidadeViewSet
+from ..views.admin.agendamento_viewset import AdminAgendamentoViewSet
+from ..views.admin.evento_viewset import AdminEventoViewSet
+from ..views.admin.penalidade_viewset import AdminPenalidadeViewSet
 from ..views.admin.dashboard_view import AdminDashboardView
 from ..views.admin.ldap_views import LdapSearchView, PromoverAdminView, RevogarAdminView, ListarAdminsView
 from ..views.admin.comunicado_view import AdminComunicadoView, AdminComunicadoDetailView

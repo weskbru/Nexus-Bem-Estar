@@ -5,6 +5,11 @@ services:
     image: postgres:16-alpine
     container_name: sis_bem_estar_db
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: ${DB_NAME:-sis_bem_estar}
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -23,15 +28,25 @@ services:
     image: redis:7-alpine
     container_name: sis_bem_estar_redis
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Porta NÃO exposta — acessível apenas internamente
 
   # ─── Backend (Django + Gunicorn) ──────────────────────────────────────────
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: docker/backend/Dockerfile
     container_name: sis_bem_estar_backend
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     env_file:
       - .env
     environment:
@@ -43,17 +58,53 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    command: sh -c "python manage.py migrate && python manage.py criar_admin && python manage.py collectstatic --noinput && gunicorn backend.core.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout 60"
+    command: sh -c "python manage.py migrate && python manage.py criar_admin && python manage.py collectstatic --noinput && gunicorn backend.core.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 1 --timeout 60 --max-requests 1000 --max-requests-jitter 100"
 
   # ─── Frontend (nginx servindo build estático) ────────────────────────────
+  comunicados_scheduler:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: sis_bem_estar_comunicados_scheduler
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      backend:
+        condition: service_started
+    command: >
+      sh -c "sleep 15;
+             while true; do
+               python manage.py enviar_comunicados_agendados || true;
+               python manage.py enviar_emails_eventos_agendados || true;
+               sleep 60;
+             done"
+
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend.prod
+      dockerfile: docker/frontend/Dockerfile.prod
       args:
         VITE_API_URL: ${VITE_API_URL}
     container_name: sis_bem_estar_frontend
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "3000:80"
     depends_on:
