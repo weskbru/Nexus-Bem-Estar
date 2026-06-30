@@ -10,7 +10,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--limit',
             type=int,
-            default=50,
+            default=10,
             help='Quantidade maxima de comunicados a processar nesta execucao.',
         )
 
@@ -20,6 +20,7 @@ class Command(BaseCommand):
         for mensagem in resultado.mensagens:
             self.stdout.write(mensagem)
 
-        self.stdout.write(
-            f'Processamento concluido. Enviados: {resultado.enviados}. Falhas: {resultado.falhas}.'
-        )
+        if resultado.enviados or resultado.falhas:
+            self.stdout.write(
+                f'Processamento concluido. Enviados: {resultado.enviados}. Falhas: {resultado.falhas}.'
+            )
