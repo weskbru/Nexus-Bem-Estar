@@ -20,6 +20,7 @@ class Command(BaseCommand):
         for mensagem in resultado.mensagens:
             self.stdout.write(mensagem)
 
-        self.stdout.write(
-            f'Processamento de eventos concluido. Enviados: {resultado.enviados}. Falhas: {resultado.falhas}.'
-        )
+        if resultado.enviados or resultado.falhas or options.get('verbosity', 1) > 1:
+            self.stdout.write(
+                f'Processamento de eventos concluido. Enviados: {resultado.enviados}. Falhas: {resultado.falhas}.'
+            )

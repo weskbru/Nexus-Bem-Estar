@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 MODO_ENVIO_IMEDIATO = 'imediato'
 MODO_ENVIO_AGENDADO = 'agendado'
 AGENDAMENTO_MINIMO_MINUTOS = 5
+LISTAGEM_COMUNICADOS_LIMITE_PADRAO = 50
+LISTAGEM_COMUNICADOS_LIMITE_MAXIMO = 100
 
 
 def _localtime_formatado(dt):
@@ -26,11 +28,10 @@ def _localtime_formatado(dt):
     return timezone.localtime(dt).strftime('%d/%m/%Y as %H:%M')
 
 
-def _serializar_comunicado(c: Comunicado) -> dict:
-    return {
+def _serializar_comunicado(c: Comunicado, incluir_corpo: bool = True) -> dict:
+    data = {
         'id': c.id,
         'assunto': c.assunto,
-        'corpo_html': c.corpo_html,
         'enviado_por': c.enviado_por.nome if c.enviado_por else '-',
         'status': c.status,
         'status_label': c.get_status_display(),
@@ -42,6 +43,17 @@ def _serializar_comunicado(c: Comunicado) -> dict:
         'tentativas_envio': c.tentativas_envio,
         'erro_envio': c.erro_envio,
     }
+    if incluir_corpo:
+        data['corpo_html'] = c.corpo_html
+    return data
+
+
+def _limite_listagem(request: Request) -> int:
+    try:
+        limite = int(request.query_params.get('limit', LISTAGEM_COMUNICADOS_LIMITE_PADRAO))
+    except (TypeError, ValueError):
+        return LISTAGEM_COMUNICADOS_LIMITE_PADRAO
+    return max(1, min(limite, LISTAGEM_COMUNICADOS_LIMITE_MAXIMO))
 
 
 def _validar_agendamento(raw_agendado_para: str | None):
@@ -97,8 +109,12 @@ class AdminComunicadoView(APIView):
     permission_classes = [IsAdminUsuario]
 
     def get(self, request: Request) -> Response:
-        comunicados = Comunicado.objects.select_related('enviado_por').all()
-        return Response([_serializar_comunicado(c) for c in comunicados])
+        comunicados = (
+            Comunicado.objects
+            .select_related('enviado_por')
+            .order_by('-criado_em')[:_limite_listagem(request)]
+        )
+        return Response([_serializar_comunicado(c, incluir_corpo=False) for c in comunicados])
 
     def post(self, request: Request) -> Response:
         assunto, corpo_html, erro = _validar_conteudo(request)
@@ -237,5 +253,7 @@ class AdminComunicadoDetailView(APIView):
             obj.save(update_fields=['status', 'cancelado_em', 'atualizado_em'])
             return Response(_serializar_comunicado(obj))
 
-        obj.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(
+            {'erro': 'Comunicados enviados, cancelados, com falha ou em envio nao podem ser excluidos fisicamente.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )

@@ -39,6 +39,9 @@ class Comunicado(models.Model):
         verbose_name = 'Comunicado'
         verbose_name_plural = 'Comunicados'
         ordering = ['-criado_em']
+        indexes = [
+            models.Index(fields=['status', 'agendado_para'], name='idx_comunicado_status_agenda'),
+        ]
 
     def __str__(self):
         referencia = self.enviado_em or self.agendado_para or self.criado_em
