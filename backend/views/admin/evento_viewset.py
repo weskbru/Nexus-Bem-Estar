@@ -1,8 +1,9 @@
 import csv
+from datetime import timedelta
 
-from django.conf import settings
 from django.http import StreamingHttpResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -30,8 +31,43 @@ from ...serializers.serializers import (
     PenalidadeSerializer,
 )
 from ...services import email_service
-from ...services.lista_espera_service import notificar_proximo_na_fila
+from ...services.evento.email_service import (
+    AGENDAMENTO_EMAIL_MINIMO_MINUTOS,
+    EMAIL_STATUS_AGENDADO,
+    EMAIL_STATUS_ENVIADO,
+    EMAIL_STATUS_FALHOU,
+    MODO_ENVIO_AGENDADO,
+    MODO_ENVIO_IMEDIATO,
+    enviar_emails_evento,
+    get_destinatarios_email_evento,
+)
+from ...services.lista_espera.service import notificar_proximo_na_fila
 from ..permissions import IsAdminUsuario, encerrar_eventos_expirados, liberar_penalidades_expiradas
+
+
+def validar_agendamento_email_evento(raw_agendado_para):
+    if not raw_agendado_para:
+        return None, Response(
+            {'erro': 'Informe a data e o horario do envio agendado.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    agendado_para = parse_datetime(raw_agendado_para)
+    if not agendado_para:
+        return None, Response(
+            {'erro': 'Data e horario de agendamento invalidos.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if timezone.is_naive(agendado_para):
+        agendado_para = timezone.make_aware(agendado_para, timezone.get_current_timezone())
+
+    minimo = timezone.now() + timedelta(minutes=AGENDAMENTO_EMAIL_MINIMO_MINUTOS)
+    if agendado_para < minimo:
+        return None, Response(
+            {'erro': f'Agende o envio para pelo menos {AGENDAMENTO_EMAIL_MINIMO_MINUTOS} minutos no futuro.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return agendado_para, None
 
 
 class AdminEventoViewSet(viewsets.ModelViewSet):
@@ -199,47 +235,63 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        destinatarios_raw = getattr(settings, 'EMAIL_DESTINO_EVENTO', '').strip()
-        if not destinatarios_raw:
+        destinatario = get_destinatarios_email_evento()
+        if not destinatario:
             return Response(
                 {'erro': 'Destinatário não configurado. Defina EMAIL_DESTINO_EVENTO no .env.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        destinatario = [d.strip() for d in destinatarios_raw.split(',') if d.strip()]
 
-        corpo_html = evento.corpo_email or ''
-        link_acesso = f"{settings.FRONTEND_URL}/evento/{evento.id}/entrar"
 
-        if evento.palavra_chave:
-            corpo_html += (
-                f'<div style="margin-top:24px;padding:16px 20px;background:#fffbeb;'
-                f'border-left:4px solid #f59e0b;border-radius:6px;">'
-                f'<p style="margin:0 0 6px;font-size:13px;color:#92400e;font-weight:600;">'
-                f'🔑 PALAVRA-CHAVE DE ACESSO</p>'
-                f'<p style="margin:0;font-size:22px;font-weight:bold;letter-spacing:3px;color:#78350f;">'
-                f'{evento.palavra_chave}</p>'
-                f'<p style="margin:8px 0 0;font-size:12px;color:#92400e;">'
-                f'Você precisará informar esta palavra-chave ao clicar no link abaixo.</p>'
-                f'</div>'
+        modo_envio = request.data.get('modo_envio') or MODO_ENVIO_IMEDIATO
+        if modo_envio not in {MODO_ENVIO_IMEDIATO, MODO_ENVIO_AGENDADO}:
+            return Response(
+                {'erro': 'Modo de envio invalido.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        corpo_html += (
-            f'<p style="margin-top:24px;text-align:center;">'
-            f'<a href="{link_acesso}" style="display:inline-block;padding:12px 32px;'
-            f'background:#1d4ed8;color:#fff;font-size:15px;font-weight:bold;'
-            f'text-decoration:none;border-radius:6px;">Acessar e Agendar</a></p>'
-        )
+        if modo_envio == MODO_ENVIO_AGENDADO:
+            agendado_para, erro_response = validar_agendamento_email_evento(request.data.get('agendado_para'))
+            if erro_response:
+                return erro_response
+
+            evento.emails_envio_status = EMAIL_STATUS_AGENDADO
+            evento.emails_agendado_para = agendado_para
+            evento.emails_erro_envio = ''
+            evento.save(update_fields=[
+                'emails_envio_status',
+                'emails_agendado_para',
+                'emails_erro_envio',
+                'atualizado_em',
+            ])
+
+            return Response({
+                'mensagem': 'Envio de e-mails agendado com sucesso.',
+                'destinatario': destinatario,
+                'agendado_para': agendado_para,
+            }, status=status.HTTP_200_OK)
 
         try:
-            for dest in destinatario:
-                email_service.enviar_html_evento(evento.titulo, corpo_html, dest)
+            destinatario = enviar_emails_evento(evento)
             evento.emails_enviados_em = timezone.now()
-            evento.save(update_fields=['emails_enviados_em'])
+            evento.emails_envio_status = EMAIL_STATUS_ENVIADO
+            evento.emails_agendado_para = None
+            evento.emails_erro_envio = ''
+            evento.save(update_fields=[
+                'emails_enviados_em',
+                'emails_envio_status',
+                'emails_agendado_para',
+                'emails_erro_envio',
+                'atualizado_em',
+            ])
             return Response({
                 'mensagem': f'E-mail enviado com sucesso para {destinatario}.',
                 'destinatario': destinatario,
             }, status=status.HTTP_200_OK)
         except Exception as exc:
+            evento.emails_envio_status = EMAIL_STATUS_FALHOU
+            evento.emails_erro_envio = str(exc)[:1000]
+            evento.save(update_fields=['emails_envio_status', 'emails_erro_envio', 'atualizado_em'])
             return Response(
                 {'erro': f'Falha ao enviar e-mail: {exc}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
