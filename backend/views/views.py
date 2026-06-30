@@ -15,7 +15,9 @@ from .auth.confirmar_vaga_view import ConfirmarVagaListaEsperaView
 
 # Admin
 from .admin.usuario_viewset import AdminUsuarioViewSet
-from .admin.evento_viewset import AdminEventoViewSet, AdminAgendamentoViewSet
+from .admin.agendamento_viewset import AdminAgendamentoViewSet
+from .admin.evento_viewset import AdminEventoViewSet
+from .admin.penalidade_viewset import AdminPenalidadeViewSet
 from .admin.dashboard_view import AdminDashboardView
 from .admin.ldap_views import LdapSearchView, PromoverAdminView, RevogarAdminView, ListarAdminsView
 
@@ -41,6 +43,7 @@ __all__ = [
     'AdminUsuarioViewSet',
     'AdminEventoViewSet',
     'AdminAgendamentoViewSet',
+    'AdminPenalidadeViewSet',
     'AdminDashboardView',
     'LdapSearchView',
     'PromoverAdminView',
