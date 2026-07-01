@@ -78,8 +78,8 @@ export default function ModalDetalhesAgendamento({
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
-  function iniciarContagem() {
-    setSegundosRestantes(300);
+  function iniciarContagem(segundos = 300) {
+    setSegundosRestantes(segundos);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setSegundosRestantes(s => {
@@ -117,20 +117,21 @@ export default function ModalDetalhesAgendamento({
     minute: '2-digit',
   });
 
-  async function handleSolicitarOtp() {
+  async function handleSolicitarOtp(reenviar = false) {
     if (!horarioId) return;
     setEnviandoOtp(true);
     setErro('');
     try {
       const res = await fetch(`${API}/colaborador/horarios/${horarioId}/solicitar-otp/`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reenviar }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro ?? 'Erro ao enviar código.');
       setOtp(['', '', '', '']);
       setEtapa('otp');
-      iniciarContagem();
+      iniciarContagem(data.segundos_restantes ?? 300);
       setTimeout(() => inputsRef.current[0]?.focus(), 100);
     } catch (err) {
       setErro(parseFetchError(err, 'Não foi possível enviar o código. Tente novamente.'));
@@ -337,7 +338,7 @@ export default function ModalDetalhesAgendamento({
                   Voltar
                 </button>
                 <button
-                  onClick={handleSolicitarOtp}
+                  onClick={() => handleSolicitarOtp(false)}
                   disabled={enviandoOtp}
                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 shadow-sm hover:shadow-md hover:shadow-blue-500/20 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                 >
@@ -383,11 +384,11 @@ export default function ModalDetalhesAgendamento({
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => { setEtapa('confirmar'); setOtp(['', '', '', '']); setErro(''); }}
-                    disabled={confirmandoReserva}
+                    onClick={() => handleSolicitarOtp(true)}
+                    disabled={confirmandoReserva || enviandoOtp}
                     className="flex-1 py-3 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-all disabled:opacity-50"
                   >
-                    Reenviar código
+                    {enviandoOtp ? 'Reenviando...' : 'Reenviar código'}
                   </button>
                   <button
                     onClick={handleConfirmarComOtp}

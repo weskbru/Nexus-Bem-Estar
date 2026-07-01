@@ -13,6 +13,7 @@ from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.core import mail
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -386,6 +387,29 @@ class ColaboradorEventoTest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn('horarios', resp.data)
         self.assertEqual(len(resp.data['horarios']), self.evento.horarios.count())
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_solicitar_otp_reutiliza_codigo_ainda_valido(self):
+        cache.clear()
+
+        resp1 = self.client.post(f'/api/colaborador/horarios/{self.horario.id}/solicitar-otp/')
+        self.assertEqual(resp1.status_code, status.HTTP_200_OK)
+        self.assertFalse(resp1.data['reutilizado'])
+        self.assertEqual(len(mail.outbox), 1)
+
+        resp2 = self.client.post(f'/api/colaborador/horarios/{self.horario.id}/solicitar-otp/')
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp2.data['reutilizado'])
+        self.assertEqual(len(mail.outbox), 1)
+
+        resp3 = self.client.post(
+            f'/api/colaborador/horarios/{self.horario.id}/solicitar-otp/',
+            {'reenviar': True},
+            format='json',
+        )
+        self.assertEqual(resp3.status_code, status.HTTP_200_OK)
+        self.assertFalse(resp3.data['reutilizado'])
+        self.assertEqual(len(mail.outbox), 2)
 
     def test_reservar_horario_disponivel(self):
         resp = self.client.post(

@@ -1,6 +1,7 @@
 import logging
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import status
@@ -18,8 +19,9 @@ logger = logging.getLogger(__name__)
 MODO_ENVIO_IMEDIATO = 'imediato'
 MODO_ENVIO_AGENDADO = 'agendado'
 AGENDAMENTO_MINIMO_MINUTOS = 5
-LISTAGEM_COMUNICADOS_LIMITE_PADRAO = 50
-LISTAGEM_COMUNICADOS_LIMITE_MAXIMO = 100
+LISTAGEM_COMUNICADOS_PAGINA_PADRAO = 1
+LISTAGEM_COMUNICADOS_TAMANHO_PADRAO = 10
+LISTAGEM_COMUNICADOS_TAMANHO_MAXIMO = 50
 
 
 def _localtime_formatado(dt):
@@ -48,12 +50,48 @@ def _serializar_comunicado(c: Comunicado, incluir_corpo: bool = True) -> dict:
     return data
 
 
-def _limite_listagem(request: Request) -> int:
+def _parametro_inteiro(request: Request, nome: str, padrao: int, minimo: int, maximo: int | None = None) -> int:
     try:
-        limite = int(request.query_params.get('limit', LISTAGEM_COMUNICADOS_LIMITE_PADRAO))
+        valor = int(request.query_params.get(nome, padrao))
     except (TypeError, ValueError):
-        return LISTAGEM_COMUNICADOS_LIMITE_PADRAO
-    return max(1, min(limite, LISTAGEM_COMUNICADOS_LIMITE_MAXIMO))
+        return padrao
+    valor = max(minimo, valor)
+    if maximo is not None:
+        valor = min(valor, maximo)
+    return valor
+
+
+def _queryset_comunicados_listagem(request: Request):
+    queryset = (
+        Comunicado.objects
+        .select_related('enviado_por')
+        .only(
+            'id',
+            'assunto',
+            'status',
+            'agendado_para',
+            'enviado_em',
+            'cancelado_em',
+            'total_destinatarios',
+            'tentativas_envio',
+            'erro_envio',
+            'criado_em',
+            'enviado_por__nome',
+        )
+    )
+
+    busca = (request.query_params.get('q') or '').strip()
+    if len(busca) >= 2:
+        queryset = queryset.filter(
+            Q(assunto__icontains=busca)
+            | Q(enviado_por__nome__icontains=busca)
+        )
+
+    status_param = (request.query_params.get('status') or '').strip()
+    if status_param and status_param in Comunicado.Status.values:
+        queryset = queryset.filter(status=status_param)
+
+    return queryset.order_by('-criado_em')
 
 
 def _validar_agendamento(raw_agendado_para: str | None):
@@ -109,12 +147,32 @@ class AdminComunicadoView(APIView):
     permission_classes = [IsAdminUsuario]
 
     def get(self, request: Request) -> Response:
-        comunicados = (
-            Comunicado.objects
-            .select_related('enviado_por')
-            .order_by('-criado_em')[:_limite_listagem(request)]
+        page = _parametro_inteiro(
+            request,
+            'page',
+            LISTAGEM_COMUNICADOS_PAGINA_PADRAO,
+            minimo=1,
         )
-        return Response([_serializar_comunicado(c, incluir_corpo=False) for c in comunicados])
+        page_size = _parametro_inteiro(
+            request,
+            'page_size',
+            LISTAGEM_COMUNICADOS_TAMANHO_PADRAO,
+            minimo=1,
+            maximo=LISTAGEM_COMUNICADOS_TAMANHO_MAXIMO,
+        )
+        offset = (page - 1) * page_size
+
+        queryset = _queryset_comunicados_listagem(request)
+        total = queryset.count()
+        comunicados = queryset[offset:offset + page_size]
+
+        return Response({
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': max(1, (total + page_size - 1) // page_size),
+            'results': [_serializar_comunicado(c, incluir_corpo=False) for c in comunicados],
+        })
 
     def post(self, request: Request) -> Response:
         assunto, corpo_html, erro = _validar_conteudo(request)

@@ -41,6 +41,8 @@ class Comunicado(models.Model):
         ordering = ['-criado_em']
         indexes = [
             models.Index(fields=['status', 'agendado_para'], name='idx_comunicado_status_agenda'),
+            models.Index(fields=['-criado_em'], name='idx_comunicado_criado_desc'),
+            models.Index(fields=['status', '-criado_em'], name='idx_com_status_criado_desc'),
         ]
 
     def __str__(self):

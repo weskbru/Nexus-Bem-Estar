@@ -1,7 +1,7 @@
 import csv
 from datetime import timedelta
 
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -43,6 +43,7 @@ from ...services.evento.email_service import (
 )
 from ...services.lista_espera.service import notificar_proximo_na_fila
 from ..permissions import IsAdminUsuario, encerrar_eventos_expirados
+from ..querysets import horarios_com_disponibilidade
 
 
 def validar_agendamento_email_evento(raw_agendado_para):
@@ -129,7 +130,9 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
                 )
             )
 
-        return queryset.prefetch_related('horarios__agendamentos')
+        return queryset.prefetch_related(
+            Prefetch('horarios', queryset=horarios_com_disponibilidade())
+        )
 
     def create(self, request, *args, **kwargs):
         pendente = _verificar_presencas_pendentes()
@@ -238,7 +241,10 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
             .filter(horario__evento=evento, status='confirmado')
             .select_related('usuario', 'horario')
         )
-        email_service.enviar_cancelamento_evento(evento, agendamentos_confirmados)
+        email_service.enviar_cancelamento_evento(
+            evento,
+            agendamentos_confirmados.iterator(chunk_size=200),
+        )
 
         return Response({'mensagem': 'Evento cancelado com sucesso.'})
 
@@ -441,7 +447,11 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         """
         evento = self.get_object()
         horarios = evento.horarios.order_by('hora_inicio').prefetch_related(
-            'agendamentos__usuario',
+            Prefetch(
+                'agendamentos',
+                queryset=Agendamento.objects.filter(status='confirmado').select_related('usuario'),
+                to_attr='agendamentos_confirmados',
+            ),
             'participantes_manuais',
         )
 
@@ -449,7 +459,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         total = 0
         for horario in horarios:
             participantes = []
-            for ag in horario.agendamentos.filter(status='confirmado'):
+            for ag in horario.agendamentos_confirmados:
                 participantes.append({
                     'agendamento_id': ag.id,
                     'nome':        ag.usuario.nome,
@@ -648,7 +658,7 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
 
         def gerar_linhas():
             yield 'Nome,E-mail,Matrícula,Departamento,Horário Início,Horário Fim,Status\n'
-            for ag in agendamentos:
+            for ag in agendamentos.iterator(chunk_size=1000):
                 yield (
                     f'"{ag.usuario.nome}",'
                     f'"{ag.usuario.email}",'
@@ -663,4 +673,3 @@ class AdminEventoViewSet(viewsets.ModelViewSet):
         nome_arquivo = evento.titulo.replace(' ', '_').replace('/', '-')
         response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}.csv"'
         return response
-

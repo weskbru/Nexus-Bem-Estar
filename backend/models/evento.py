@@ -173,6 +173,9 @@ class Horario(models.Model):
 
     @property
     def vagas_ocupadas(self):
+        anotado = getattr(self, 'vagas_ocupadas_calc', None)
+        if anotado is not None:
+            return anotado
         confirmados = self.agendamentos.filter(status='confirmado').count()
         manuais = self.participantes_manuais.count()
         return confirmados + manuais
