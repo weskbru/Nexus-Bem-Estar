@@ -1,10 +1,24 @@
 import { useEffect, useState } from 'react';
-import { Send, Clock, Users, Plus, X, Pencil, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import {
+  Send,
+  Clock,
+  Users,
+  Plus,
+  X,
+  Pencil,
+  Trash2,
+  RefreshCw,
+  AlertCircle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import EditorComunicado from '../../components/EditorComunicado';
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 const AGENDAMENTO_MINIMO_MINUTOS = 5;
+const PAGE_SIZE = 10;
 
 interface ComunicadoItem {
   id: number;
@@ -24,6 +38,15 @@ interface ComunicadoItem {
 
 type Modo = 'novo' | 'editar';
 type ModoEnvio = 'imediato' | 'agendado';
+type FiltroStatus = 'todos' | ComunicadoItem['status'];
+
+interface ComunicadosPage {
+  count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  results: ComunicadoItem[];
+}
 
 const statusClasses: Record<ComunicadoItem['status'], string> = {
   agendado: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -38,6 +61,11 @@ export default function Comunicados() {
 
   const [historico, setHistorico] = useState<ComunicadoItem[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+  const [busca, setBusca] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos');
 
   const [modo, setModo] = useState<Modo>('novo');
   const [editandoId, setEditandoId] = useState<number | null>(null);
@@ -56,17 +84,46 @@ export default function Comunicados() {
   const [excluindoId, setExcluindoId] = useState<number | null>(null);
   const [confirmExcluir, setConfirmExcluir] = useState<number | null>(null);
 
-  useEffect(() => { carregarHistorico(); }, []); // eslint-disable-line
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      carregarHistorico(paginaAtual, controller.signal);
+    }, 350);
 
-  async function carregarHistorico() {
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [paginaAtual, busca, filtroStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function carregarHistorico(page = paginaAtual, signal?: AbortSignal) {
     setCarregando(true);
+    setErro(null);
     try {
-      const res = await fetch(`${API}/admin/comunicados/`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(PAGE_SIZE),
       });
-      if (res.ok) setHistorico(await res.json());
+      const termo = busca.trim();
+      if (termo.length >= 2) params.set('q', termo);
+      if (filtroStatus !== 'todos') params.set('status', filtroStatus);
+
+      const res = await fetch(`${API}/admin/comunicados/?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      });
+      if (!res.ok) throw new Error('Nao foi possivel carregar o historico.');
+
+      const data: ComunicadosPage = await res.json();
+      setHistorico(data.results);
+      setTotalRegistros(data.count);
+      setTotalPaginas(data.total_pages);
+      setPaginaAtual(data.page);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setErro(err instanceof Error ? err.message : 'Erro ao carregar comunicados.');
     } finally {
-      setCarregando(false);
+      if (!signal?.aborted) setCarregando(false);
     }
   }
 
@@ -209,7 +266,8 @@ export default function Comunicados() {
       }
 
       fecharForm();
-      await carregarHistorico();
+      setPaginaAtual(1);
+      await carregarHistorico(1);
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Erro ao salvar comunicado.');
     } finally {
@@ -228,7 +286,11 @@ export default function Comunicados() {
       const cancelado = res.status !== 204;
       setSucesso(cancelado ? 'Agendamento cancelado.' : 'Comunicado excluido.');
       setConfirmExcluir(null);
-      await carregarHistorico();
+      if (historico.length === 1 && paginaAtual > 1) {
+        setPaginaAtual(paginaAtual - 1);
+      } else {
+        await carregarHistorico(paginaAtual);
+      }
     } catch {
       setErro('Nao foi possivel concluir a acao.');
     } finally {
@@ -243,8 +305,7 @@ export default function Comunicados() {
   }
 
   function textoConfirmacaoExclusao(c: ComunicadoItem) {
-    if (c.status === 'agendado') return `Cancelar o agendamento de "${c.assunto}"?`;
-    return `Excluir "${c.assunto}"? Esta acao nao pode ser desfeita.`;
+    return `Cancelar o agendamento de "${c.assunto}"?`;
   }
 
   return (
@@ -330,86 +391,152 @@ export default function Comunicados() {
       )}
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="text-base font-bold text-slate-900">Historico de Comunicados</h2>
+        <div className="px-6 py-4 border-b border-slate-100 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Historico de Comunicados</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {totalRegistros} {totalRegistros === 1 ? 'registro encontrado' : 'registros encontrados'}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="search"
+                value={busca}
+                onChange={e => {
+                  setBusca(e.target.value);
+                  setPaginaAtual(1);
+                }}
+                placeholder="Buscar por assunto ou responsavel..."
+                className="w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <select
+              value={filtroStatus}
+              onChange={e => {
+                setFiltroStatus(e.target.value as FiltroStatus);
+                setPaginaAtual(1);
+              }}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="todos">Todos os status</option>
+              <option value="agendado">Agendados</option>
+              <option value="enviando">Enviando</option>
+              <option value="enviado">Enviados</option>
+              <option value="falhou">Com falha</option>
+              <option value="cancelado">Cancelados</option>
+            </select>
+          </div>
         </div>
 
         {carregando ? (
           <div className="px-6 py-12 text-center text-slate-400 text-sm">Carregando...</div>
         ) : historico.length === 0 ? (
           <div className="px-6 py-12 text-center text-slate-400 text-sm">
-            Nenhum comunicado criado ainda.
+            Nenhum comunicado encontrado.
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {historico.map(c => (
-              <li key={c.id}>
-                {confirmExcluir === c.id && (
-                  <div className="mx-6 my-3 bg-red-50 border border-red-200 rounded-xl px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-sm text-red-800 font-medium">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{textoConfirmacaoExclusao(c)}</span>
+          <>
+            <ul className="divide-y divide-slate-100">
+              {historico.map(c => (
+                <li key={c.id}>
+                  {confirmExcluir === c.id && (
+                    <div className="mx-6 my-3 bg-red-50 border border-red-200 rounded-xl px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-sm text-red-800 font-medium">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{textoConfirmacaoExclusao(c)}</span>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => setConfirmExcluir(null)}
+                          className="px-4 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-bold"
+                        >
+                          Voltar
+                        </button>
+                        <button
+                          onClick={() => handleExcluir(c.id)}
+                          disabled={excluindoId === c.id}
+                          className="px-4 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-lg text-sm font-bold"
+                        >
+                          {excluindoId === c.id ? 'Processando...' : 'Confirmar'}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        onClick={() => setConfirmExcluir(null)}
-                        className="px-4 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-bold"
-                      >
-                        Voltar
-                      </button>
-                      <button
-                        onClick={() => handleExcluir(c.id)}
-                        disabled={excluindoId === c.id}
-                        className="px-4 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-lg text-sm font-bold"
-                      >
-                        {excluindoId === c.id ? 'Processando...' : 'Confirmar'}
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                <div className="flex items-center justify-between px-6 py-4">
-                  <div className="flex-1 min-w-0 pr-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-slate-900 truncate">{c.assunto}</p>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-bold uppercase ${statusClasses[c.status]}`}>
-                        {c.status_label}
-                      </span>
+                  <div className="flex items-center justify-between px-6 py-4">
+                    <div className="flex-1 min-w-0 pr-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-slate-900 truncate">{c.assunto}</p>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-bold uppercase ${statusClasses[c.status]}`}>
+                          {c.status_label}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 mt-1">
+                        <span className="flex items-center gap-1 text-xs text-slate-500">
+                          <Clock className="w-3.5 h-3.5" /> {referenciaData(c)}
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-slate-500">
+                          <Users className="w-3.5 h-3.5" /> {c.total_destinatarios} destinatario{c.total_destinatarios !== 1 ? 's' : ''}
+                        </span>
+                        <span className="text-xs text-slate-400">Por: {c.enviado_por}</span>
+                      </div>
+                      {c.status === 'falhou' && c.erro_envio && (
+                        <p className="text-xs text-red-600 mt-1 truncate">{c.erro_envio}</p>
+                      )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 mt-1">
-                      <span className="flex items-center gap-1 text-xs text-slate-500">
-                        <Clock className="w-3.5 h-3.5" /> {referenciaData(c)}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-slate-500">
-                        <Users className="w-3.5 h-3.5" /> {c.total_destinatarios} destinatario{c.total_destinatarios !== 1 ? 's' : ''}
-                      </span>
-                      <span className="text-xs text-slate-400">Por: {c.enviado_por}</span>
-                    </div>
-                    {c.status === 'falhou' && c.erro_envio && (
-                      <p className="text-xs text-red-600 mt-1 truncate">{c.erro_envio}</p>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => abrirEditar(c.id)}
-                      title={c.status === 'enviado' ? 'Usar como base' : 'Editar'}
-                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    >
-                      {c.status === 'enviado' ? <RefreshCw className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
-                    </button>
-                    <button
-                      onClick={() => setConfirmExcluir(confirmExcluir === c.id ? null : c.id)}
-                      title={c.status === 'agendado' ? 'Cancelar agendamento' : 'Excluir'}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => abrirEditar(c.id)}
+                        title={c.status === 'enviado' ? 'Usar como base' : 'Editar'}
+                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      >
+                        {c.status === 'enviado' ? <RefreshCw className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+                      </button>
+                      {c.status === 'agendado' && (
+                        <button
+                          onClick={() => setConfirmExcluir(confirmExcluir === c.id ? null : c.id)}
+                          title="Cancelar agendamento"
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+              <span className="text-xs text-slate-500">
+                Pagina {paginaAtual} de {totalPaginas}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+                  disabled={paginaAtual <= 1 || carregando}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white text-slate-700 rounded-lg text-sm font-bold"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Anterior
+                </button>
+                <button
+                  onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+                  disabled={paginaAtual >= totalPaginas || carregando}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white text-slate-700 rounded-lg text-sm font-bold"
+                >
+                  Proxima
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 

@@ -1,4 +1,5 @@
 from django.utils.decorators import method_decorator
+from django.db.models import Prefetch
 from django.views.decorators.cache import cache_page
 
 from rest_framework import generics, permissions
@@ -6,6 +7,7 @@ from rest_framework import generics, permissions
 from ...models.models import Evento
 from ...serializers.serializers import EventoDetailSerializer, EventoListSerializer
 from ..permissions import encerrar_eventos_expirados
+from ..querysets import horarios_com_disponibilidade
 
 
 class EventoListView(generics.ListAPIView):
@@ -21,7 +23,7 @@ class EventoListView(generics.ListAPIView):
         return (
             Evento.objects
             .filter(status='publicado')
-            .prefetch_related('horarios__agendamentos')
+            .prefetch_related(Prefetch('horarios', queryset=horarios_com_disponibilidade()))
         )
 
 
@@ -39,7 +41,7 @@ class EventoDetailView(generics.RetrieveAPIView):
         return (
             Evento.objects
             .filter(status='publicado')
-            .prefetch_related('horarios__agendamentos')
+            .prefetch_related(Prefetch('horarios', queryset=horarios_com_disponibilidade()))
         )
 
     @method_decorator(cache_page(3))

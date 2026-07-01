@@ -1,4 +1,5 @@
-from rest_framework import status
+from django.db.models import Sum
+
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,8 +17,7 @@ class AdminDashboardView(APIView):
 
     def get(self, request):
         encerrar_eventos_expirados()
-        horarios = Horario.objects.all()
-        total_vagas = sum(h.vagas_disponiveis for h in horarios)
+        total_vagas = Horario.objects.aggregate(total=Sum('vagas_disponiveis'))['total'] or 0
         vagas_ocupadas = Agendamento.objects.filter(status='confirmado').count()
         taxa = round((vagas_ocupadas / total_vagas * 100), 1) if total_vagas > 0 else 0.0
 
