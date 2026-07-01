@@ -9,6 +9,7 @@ O código é depois validado dentro de ReservarHorarioView (campo otp no body),
 garantindo que só o dono do e-mail consegue completar o agendamento.
 """
 import random
+import time
 
 from django.conf import settings
 from django.core.cache import cache
@@ -20,9 +21,20 @@ from rest_framework.views import APIView
 
 from ...models.models import Horario
 
+OTP_AGENDAMENTO_TIMEOUT_SEGUNDOS = 300
+
 
 def cache_key_otp(usuario_id: int, horario_id: int) -> str:
     return f'otp_agendamento:{usuario_id}:{horario_id}'
+
+
+def segundos_restantes_otp(dados_otp: dict | None) -> int:
+    if not dados_otp:
+        return 0
+    expira_em = dados_otp.get('expira_em')
+    if not expira_em:
+        return OTP_AGENDAMENTO_TIMEOUT_SEGUNDOS
+    return max(0, int(expira_em - time.time()))
 
 
 class SolicitarOTPAgendamentoView(APIView):
@@ -45,9 +57,33 @@ class SolicitarOTPAgendamentoView(APIView):
             )
 
         usuario = request.user
-        codigo = f'{random.randint(0, 9999):04d}'
         key = cache_key_otp(usuario.id, horario_id)
-        cache.set(key, {'codigo': codigo, 'tentativas': 0}, timeout=300)  # 5 minutos
+        reenviar = request.data.get('reenviar') is True
+        dados_existentes = cache.get(key)
+        segundos_restantes = segundos_restantes_otp(dados_existentes)
+
+        if (
+            dados_existentes
+            and segundos_restantes > 0
+            and dados_existentes.get('tentativas', 0) < 3
+            and not reenviar
+        ):
+            return Response({
+                'mensagem': f'Código já enviado para {usuario.email}. Verifique sua caixa de entrada.',
+                'reutilizado': True,
+                'segundos_restantes': segundos_restantes,
+            })
+
+        codigo = f'{random.randint(0, 9999):04d}'
+        cache.set(
+            key,
+            {
+                'codigo': codigo,
+                'tentativas': 0,
+                'expira_em': time.time() + OTP_AGENDAMENTO_TIMEOUT_SEGUNDOS,
+            },
+            timeout=OTP_AGENDAMENTO_TIMEOUT_SEGUNDOS,
+        )
 
         evento = horario.evento
         html = f"""
@@ -82,10 +118,17 @@ class SolicitarOTPAgendamentoView(APIView):
                 fail_silently=False,
             )
         except Exception:
-            cache.delete(key)
+            if dados_existentes and segundos_restantes > 0:
+                cache.set(key, dados_existentes, timeout=segundos_restantes)
+            else:
+                cache.delete(key)
             return Response(
                 {'erro': 'Não foi possível enviar o código. Tente novamente.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        return Response({'mensagem': f'Código enviado para {usuario.email}.'})
+        return Response({
+            'mensagem': f'Código enviado para {usuario.email}.',
+            'reutilizado': False,
+            'segundos_restantes': OTP_AGENDAMENTO_TIMEOUT_SEGUNDOS,
+        })

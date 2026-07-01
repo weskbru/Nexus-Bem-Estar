@@ -39,6 +39,9 @@ class HorarioSerializer(serializers.ModelSerializer):
 
     def get_reservado_para_fila(self, obj) -> bool:
         """True quando há alguém com status 'notificado' aguardando confirmação neste slot."""
+        anotado = getattr(obj, 'reservado_para_fila_calc', None)
+        if anotado is not None:
+            return anotado
         return ListaEspera.objects.filter(
             horario=obj,
             status='notificado',

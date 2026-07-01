@@ -13,7 +13,7 @@ from ...serializers.serializers import AgendamentoSerializer
 from ...services import email_service
 from ...services.lista_espera.service import notificar_proximo_na_fila
 from ..permissions import encerrar_eventos_expirados, liberar_penalidades_expiradas
-from .otp_agendamento_view import cache_key_otp
+from .otp_agendamento_view import cache_key_otp, segundos_restantes_otp
 
 
 CANCELAMENTO_MINUTOS_ANTECEDENCIA = 30
@@ -52,6 +52,14 @@ class ReservarHorarioView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        segundos_restantes = segundos_restantes_otp(dados_otp)
+        if segundos_restantes <= 0:
+            cache.delete(key)
+            return Response(
+                {'erro': 'Código expirado. Solicite um novo código e tente novamente.', 'otp_expirado': True},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if dados_otp['tentativas'] >= 3:
             cache.delete(key)
             return Response(
@@ -61,7 +69,7 @@ class ReservarHorarioView(APIView):
 
         if otp_informado != dados_otp['codigo']:
             dados_otp['tentativas'] += 1
-            cache.set(key, dados_otp, timeout=300)
+            cache.set(key, dados_otp, timeout=segundos_restantes)
             restantes = 3 - dados_otp['tentativas']
             return Response(
                 {
