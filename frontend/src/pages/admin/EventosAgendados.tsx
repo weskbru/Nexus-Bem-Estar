@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Calendar, AlertTriangle, X, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Plus, Calendar, AlertTriangle, X, CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
 import { adminEventosApi, type EventoDTO, type ApiError } from '../../services/api';
 import {
   EventCard,
@@ -27,6 +27,7 @@ export default function AdminEventos() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [filtro, setFiltro] = useState<'todos' | 'ATIVO' | 'CANCELADO' | 'ENCERRADO'>('todos');
   const [registrarTarget, setRegistrarTarget] = useState<EventoDTO | null>(null);
+  const [registrarLoadingId, setRegistrarLoadingId] = useState<number | null>(null);
   const [listaPresencaId, setListaPresencaId] = useState<number | null>(null);
   const [filaHistoricoId, setFilaHistoricoId] = useState<number | null>(null);
   const [actionTarget, setActionTarget] = useState<EventoDTO | null>(null);
@@ -42,11 +43,34 @@ export default function AdminEventos() {
     try {
       const lista = await adminEventosApi.listar();
       setEventos(lista);
-      setRegistrarTarget(prev => prev ? (lista.find(e => e.id === prev.id) ?? null) : null);
     } catch {
       setErro('Não foi possível carregar os eventos. Tente novamente.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function abrirRegistroManual(evento: EventoDTO) {
+    setActionTarget(null);
+    setRegistrarLoadingId(evento.id);
+    try {
+      const detalhe = await adminEventosApi.obter(evento.id);
+      setRegistrarTarget(detalhe);
+    } catch (err) {
+      mostrarToast('erro', err instanceof Error ? err.message : 'Nao foi possivel carregar os horarios do evento.');
+    } finally {
+      setRegistrarLoadingId(null);
+    }
+  }
+
+  async function atualizarAposRegistroManual(eventoId: number) {
+    await carregarEventos();
+    try {
+      const detalhe = await adminEventosApi.obter(eventoId);
+      setRegistrarTarget(detalhe);
+    } catch {
+      setRegistrarTarget(null);
+      mostrarToast('erro', 'Inscricao criada, mas nao foi possivel recarregar os horarios do evento.');
     }
   }
 
@@ -272,6 +296,15 @@ export default function AdminEventos() {
       )}
 
       {/* Modais */}
+      {registrarLoadingId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl px-6 py-5 flex items-center gap-3 text-sm font-bold text-slate-700">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+            Carregando horarios do evento...
+          </div>
+        </div>
+      )}
+
       {actionTarget && (
         <EventActionsModal
           evento={actionTarget}
@@ -280,7 +313,7 @@ export default function AdminEventos() {
           onCancelar={() => { setConfirmAction({ evento: actionTarget, tipo: 'cancelar' }); setActionTarget(null); }}
           onDelete={() => { setDeleteTarget(actionTarget); setActionTarget(null); }}
           onEnviarEmails={() => { setConfirmAction({ evento: actionTarget, tipo: 'emails' }); setActionTarget(null); }}
-          onRegistrar={() => { setRegistrarTarget(actionTarget); setActionTarget(null); }}
+          onRegistrar={() => abrirRegistroManual(actionTarget)}
           onListaPresenca={() => { setListaPresencaId(actionTarget.id); setActionTarget(null); }}
           onFilaHistorico={() => { setFilaHistoricoId(actionTarget.id); setActionTarget(null); }}
           onClose={() => setActionTarget(null)}
@@ -321,7 +354,7 @@ export default function AdminEventos() {
         <RegistrarParticipanteModal
           evento={registrarTarget}
           onClose={() => setRegistrarTarget(null)}
-          onSuccess={carregarEventos}
+          onSuccess={() => atualizarAposRegistroManual(registrarTarget.id)}
         />
       )}
 
