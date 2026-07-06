@@ -52,7 +52,7 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: db
+      DB_HOST: ${DB_HOST:-db}
       REDIS_URL: redis://redis:6379/1
     volumes:
       - .:/app
@@ -83,7 +83,7 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: db
+      DB_HOST: ${DB_HOST:-db}
       REDIS_URL: redis://redis:6379/1
     volumes:
       - .:/app
