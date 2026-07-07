@@ -34,6 +34,9 @@ gunicorn.log
 !.env.example
 !frontend/.env.example
 
+# Docker compose local
+docker-compose.yml
+
 # Temp
 *.tmp
 *.bak
