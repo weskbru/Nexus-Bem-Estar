@@ -4,8 +4,17 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import extend_schema
 
 from ...models.models import ConviteEmail, Evento, Usuario
+from ...serializers.api_docs import (
+    AcessarEventoRequestSerializer,
+    AcessoPalavraChaveRequestSerializer,
+    AcessoPreviewSerializer,
+    ErroSerializer,
+    EventoPublicoSerializer,
+    TokenResponseSerializer,
+)
 from ...serializers.serializers import UsuarioSerializer
 from ...services.ldap.service import email_existe_no_ad
 
@@ -21,6 +30,7 @@ class AcessoViaTokenView(APIView):
     Valida a palavra-chave e, se correta, retorna o JWT.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'auth_public'
 
     def _get_convite(self, token):
         try:
@@ -41,6 +51,11 @@ class AcessoViaTokenView(APIView):
             'chave_mensagem': convite.chave_mensagem,
         }
 
+    @extend_schema(
+        responses={200: TokenResponseSerializer, 404: ErroSerializer},
+        summary='Acessa evento via link magico',
+        description='Quando o evento exige palavra-chave, a resposta contem os dados de preview e requer_palavra_chave=true.',
+    )
     def get(self, request, token):
         convite = self._get_convite(token)
         if convite is None:
@@ -60,6 +75,11 @@ class AcessoViaTokenView(APIView):
 
         return Response(self._emitir_jwt(convite))
 
+    @extend_schema(
+        request=AcessoPalavraChaveRequestSerializer,
+        responses={200: TokenResponseSerializer, 400: ErroSerializer, 401: ErroSerializer, 404: ErroSerializer},
+        summary='Valida palavra-chave do link magico',
+    )
     def post(self, request, token):
         convite = self._get_convite(token)
         if convite is None:
@@ -91,7 +111,12 @@ class EventoPublicoView(APIView):
     Retorna dados públicos do evento para exibir na página de acesso (sem autenticação).
     """
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'public_read'
 
+    @extend_schema(
+        responses={200: EventoPublicoSerializer, 404: ErroSerializer, 410: ErroSerializer},
+        summary='Consulta dados publicos de um evento',
+    )
     def get(self, _request, evento_id):
         try:
             evento = Evento.objects.get(id=evento_id)
@@ -144,7 +169,13 @@ class AcessarEventoView(APIView):
     POST /api/auth/acessar-evento/  (mantido para compatibilidade)
     """
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'auth_public'
 
+    @extend_schema(
+        request=AcessarEventoRequestSerializer,
+        responses={200: TokenResponseSerializer, 400: ErroSerializer, 401: ErroSerializer, 404: ErroSerializer},
+        summary='Acessa evento por e-mail e palavra-chave',
+    )
     def post(self, request):
         evento_id     = request.data.get('evento_id')
         email         = (request.data.get('email') or '').strip().lower()

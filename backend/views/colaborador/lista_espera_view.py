@@ -1,8 +1,10 @@
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from ...models.models import Agendamento, Horario, ListaEspera
+from ...serializers.api_docs import ErroSerializer, ListaEsperaResponseSerializer, MensagemSerializer, MinhaListaEsperaSerializer
 
 
 class EntrarListaEsperaView(APIView):
@@ -15,6 +17,11 @@ class EntrarListaEsperaView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=None,
+        responses={200: MensagemSerializer, 404: ErroSerializer},
+        summary='Sai da lista de espera de um horario',
+    )
     def delete(self, request, horario_id):
         atualizado = ListaEspera.objects.filter(
             usuario=request.user,
@@ -30,6 +37,11 @@ class EntrarListaEsperaView(APIView):
 
         return Response({'mensagem': 'Você saiu da fila de espera com sucesso.'})
 
+    @extend_schema(
+        request=None,
+        responses={200: ListaEsperaResponseSerializer, 201: ListaEsperaResponseSerializer, 400: ErroSerializer, 404: ErroSerializer, 409: ErroSerializer},
+        summary='Entra na lista de espera de um horario',
+    )
     def post(self, request, horario_id):
         try:
             horario = Horario.objects.select_related('evento').get(
@@ -105,6 +117,11 @@ class MinhaListaEsperaView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        parameters=[OpenApiParameter(name='evento_id', type=int, required=False)],
+        responses={200: MinhaListaEsperaSerializer(many=True)},
+        summary='Lista minhas entradas ativas na lista de espera',
+    )
     def get(self, request):
         evento_id = request.query_params.get('evento_id')
         qs = ListaEspera.objects.filter(
