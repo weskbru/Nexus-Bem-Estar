@@ -7,8 +7,10 @@ from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from ...models.models import Agendamento, ConviteEmail, Horario, ListaEspera, Penalidade
+from ...serializers.api_docs import ErroSerializer, MensagemSerializer, ReservarHorarioRequestSerializer
 from ...serializers.serializers import AgendamentoSerializer
 from ...services import email_service
 from ...services.lista_espera.service import notificar_proximo_na_fila
@@ -33,6 +35,19 @@ class ReservarHorarioView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=ReservarHorarioRequestSerializer,
+        responses={
+            201: AgendamentoSerializer,
+            400: ErroSerializer,
+            401: ErroSerializer,
+            403: ErroSerializer,
+            404: ErroSerializer,
+            409: ErroSerializer,
+            429: ErroSerializer,
+        },
+        summary='Reserva horario de evento',
+    )
     @transaction.atomic
     def post(self, request, evento_id, horario_id):
         # Validar OTP antes de qualquer operação no banco
@@ -227,6 +242,11 @@ class CancelarAgendamentoView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=None,
+        responses={200: MensagemSerializer, 400: ErroSerializer, 404: ErroSerializer},
+        summary='Cancela agendamento do colaborador',
+    )
     def post(self, request, agendamento_id):
         try:
             agendamento = (
@@ -276,6 +296,14 @@ class MeusAgendamentosView(generics.ListAPIView):
     """
     serializer_class = AgendamentoSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        parameters=[OpenApiParameter(name='evento_id', type=int, required=False)],
+        responses={200: AgendamentoSerializer(many=True)},
+        summary='Lista meus agendamentos',
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
         qs = (

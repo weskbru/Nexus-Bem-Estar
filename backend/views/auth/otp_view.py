@@ -8,8 +8,16 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import extend_schema
 
 from ...models.models import Evento, Usuario
+from ...serializers.api_docs import (
+    ErroSerializer,
+    MensagemSerializer,
+    SolicitarAcessoRequestSerializer,
+    TokenResponseSerializer,
+    VerificarCodigoRequestSerializer,
+)
 from ...serializers.serializers import UsuarioSerializer
 from ...services.ldap.service import email_existe_no_ad
 
@@ -21,7 +29,19 @@ class SolicitarAcessoView(APIView):
     Body: { evento_id, email, palavra_chave? }
     """
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'auth_public'
 
+    @extend_schema(
+        request=SolicitarAcessoRequestSerializer,
+        responses={
+            200: MensagemSerializer,
+            400: ErroSerializer,
+            401: ErroSerializer,
+            404: ErroSerializer,
+            503: ErroSerializer,
+        },
+        summary='Solicita codigo OTP para acesso ao evento',
+    )
     def post(self, request):
         evento_id     = request.data.get('evento_id')
         email         = (request.data.get('email') or '').strip().lower()
@@ -97,7 +117,19 @@ class VerificarCodigoView(APIView):
     Body: { evento_id, email, codigo }
     """
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'auth_public'
 
+    @extend_schema(
+        request=VerificarCodigoRequestSerializer,
+        responses={
+            200: TokenResponseSerializer,
+            400: ErroSerializer,
+            401: ErroSerializer,
+            404: ErroSerializer,
+            429: ErroSerializer,
+        },
+        summary='Valida codigo OTP e emite JWT',
+    )
     def post(self, request):
         evento_id = request.data.get('evento_id')
         email     = (request.data.get('email') or '').strip().lower()

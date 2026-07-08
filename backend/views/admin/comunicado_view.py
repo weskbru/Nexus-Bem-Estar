@@ -8,9 +8,16 @@ from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from ...domain.exceptions import ComunicadoEnvioError
 from ...models.models import Comunicado
+from ...serializers.api_docs import (
+    ComunicadoRequestSerializer,
+    ComunicadoSerializer,
+    ComunicadosPaginadosSerializer,
+    ErroSerializer,
+)
 from ...services.comunicado import email_service
 from ..permissions import IsAdminUsuario
 
@@ -146,6 +153,17 @@ class AdminComunicadoView(APIView):
     """
     permission_classes = [IsAdminUsuario]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(name='page', type=int, required=False),
+            OpenApiParameter(name='page_size', type=int, required=False),
+            OpenApiParameter(name='q', type=str, required=False),
+            OpenApiParameter(name='status', type=str, required=False),
+        ],
+        responses={200: ComunicadosPaginadosSerializer},
+        summary='Lista comunicados administrativos',
+        operation_id='admin_comunicados_list',
+    )
     def get(self, request: Request) -> Response:
         page = _parametro_inteiro(
             request,
@@ -174,6 +192,12 @@ class AdminComunicadoView(APIView):
             'results': [_serializar_comunicado(c, incluir_corpo=False) for c in comunicados],
         })
 
+    @extend_schema(
+        request=ComunicadoRequestSerializer,
+        responses={201: ComunicadoSerializer, 400: ErroSerializer, 500: ErroSerializer},
+        summary='Envia ou agenda comunicado',
+        operation_id='admin_comunicados_create',
+    )
     def post(self, request: Request) -> Response:
         assunto, corpo_html, erro = _validar_conteudo(request)
         if erro:
@@ -236,12 +260,23 @@ class AdminComunicadoDetailView(APIView):
         except Comunicado.DoesNotExist:
             return None
 
+    @extend_schema(
+        responses={200: ComunicadoSerializer, 404: ErroSerializer},
+        summary='Consulta comunicado',
+        operation_id='admin_comunicados_retrieve',
+    )
     def get(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:
             return Response({'erro': 'Comunicado nao encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(_serializar_comunicado(obj))
 
+    @extend_schema(
+        request=ComunicadoRequestSerializer,
+        responses={200: ComunicadoSerializer, 400: ErroSerializer, 404: ErroSerializer, 500: ErroSerializer},
+        summary='Atualiza comunicado ainda nao enviado',
+        operation_id='admin_comunicados_update',
+    )
     def put(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:
@@ -300,6 +335,12 @@ class AdminComunicadoDetailView(APIView):
         data['total_enviado'] = obj.total_destinatarios
         return Response(data)
 
+    @extend_schema(
+        request=None,
+        responses={200: ComunicadoSerializer, 400: ErroSerializer, 404: ErroSerializer},
+        summary='Cancela comunicado agendado',
+        operation_id='admin_comunicados_destroy',
+    )
     def delete(self, request: Request, pk: int) -> Response:
         obj = self._get_objeto(pk)
         if not obj:

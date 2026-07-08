@@ -16,6 +16,7 @@ class AdminPenalidadeViewSet(viewsets.ReadOnlyModelViewSet):
     GET  /api/admin/penalidades/?usuario_id=  — filtra por usuário
     POST /api/admin/penalidades/<id>/revogar/ — revoga penalidade manualmente
     """
+    queryset = Penalidade.objects.all()
     serializer_class = PenalidadeSerializer
     permission_classes = [IsAdminUsuario]
 

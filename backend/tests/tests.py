@@ -9,6 +9,7 @@ Cobertura:
   - Regras de negócio: vaga esgotada, duplicata de agendamento, concorrência
 """
 import uuid
+import time as time_module
 from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
@@ -23,6 +24,7 @@ from rest_framework.test import APITestCase
 
 from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade
 from ..views.permissions import liberar_penalidades_expiradas
+from ..views.colaborador.otp_agendamento_view import cache_key_otp
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +43,7 @@ def cria_evento(status_evento='publicado', **kwargs):
     defaults = {
         'titulo': 'Massagem – Março 2026',
         'tipo': 'massagem',
-        'data': date(2026, 3, 15),
+        'data': timezone.localdate() + timedelta(days=30),
         'hora_inicio': time(9, 0),
         'hora_fim': time(11, 0),
         'duracao_sessao': 30,
@@ -50,6 +52,19 @@ def cria_evento(status_evento='publicado', **kwargs):
     }
     defaults.update(kwargs)
     return Evento.objects.create(**defaults)
+
+
+def autoriza_otp_agendamento(usuario, horario, codigo='1234'):
+    cache.set(
+        cache_key_otp(usuario.id, horario.id),
+        {
+            'codigo': codigo,
+            'tentativas': 0,
+            'expira_em': time_module.time() + 300,
+        },
+        timeout=300,
+    )
+    return codigo
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +211,7 @@ class AdminEventoTest(APITestCase):
         resp = self.client.post('/api/admin/eventos/', {
             'titulo': 'Yoga – Abril 2026',
             'tipo': 'yoga',
-            'data': '2026-04-10',
+            'data': (timezone.localdate() + timedelta(days=30)).isoformat(),
             'hora_inicio': '07:00:00',
             'hora_fim': '09:00:00',
             'duracao_sessao': 60,
@@ -242,7 +257,7 @@ class AdminEventoTest(APITestCase):
         resp = self.client.post('/api/admin/eventos/', {
             'titulo': 'Erro',
             'tipo': 'outro',
-            'data': '2026-04-10',
+            'data': (timezone.localdate() + timedelta(days=30)).isoformat(),
             'hora_inicio': '17:00:00',
             'hora_fim': '08:00:00',
             'duracao_sessao': 30,
@@ -254,7 +269,7 @@ class AdminEventoTest(APITestCase):
         resp = self.client.post('/api/admin/eventos/', {
             'titulo': 'Erro',
             'tipo': 'outro',
-            'data': '2026-04-10',
+            'data': (timezone.localdate() + timedelta(days=30)).isoformat(),
             'hora_inicio': '09:00:00',
             'hora_fim': '11:00:00',
             'duracao_sessao': 0,
@@ -291,7 +306,10 @@ class AdminEventoTest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
 
-@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    EMAIL_DESTINO_EVENTO='ld-bem-estar@aeb.gov.br',
+)
 class EnviarEmailsTest(APITestCase):
     def setUp(self):
         self.admin = cria_admin()
@@ -299,24 +317,19 @@ class EnviarEmailsTest(APITestCase):
         self.evento = cria_evento(status_evento='publicado')
         self.evento.gerar_horarios()
 
-    def test_envia_email_para_cada_colaborador(self):
-        cria_colaborador('ana@empresa.com.br', 'Ana')
-        cria_colaborador('pedro@empresa.com.br', 'Pedro')
-
+    def test_envia_email_para_destinatario_configurado(self):
         resp = self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data['enviados'], 2)
-        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(resp.data['destinatario'], ['ld-bem-estar@aeb.gov.br'])
+        self.assertEqual(len(mail.outbox), 1)
 
-    def test_email_contem_link_e_chave(self):
-        colaborador = cria_colaborador()
+    def test_email_contem_link_do_evento(self):
         resp = self.client.post(f'/api/admin/eventos/{self.evento.id}/enviar-emails/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
-        convite = ConviteEmail.objects.get(usuario=colaborador, evento=self.evento)
         email_enviado = mail.outbox[0]
-        self.assertIn(str(convite.token), email_enviado.body)
-        self.assertIn(convite.chave_mensagem, email_enviado.body)
+        html = email_enviado.alternatives[0][0]
+        self.assertIn(f'/evento/{self.evento.id}/entrar', html)
 
     def test_reenvio_usa_mesmo_convite(self):
         cria_colaborador()
@@ -412,8 +425,11 @@ class ColaboradorEventoTest(APITestCase):
         self.assertEqual(len(mail.outbox), 2)
 
     def test_reservar_horario_disponivel(self):
+        otp = autoriza_otp_agendamento(self.colaborador, self.horario)
         resp = self.client.post(
-            f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/'
+            f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/',
+            {'otp': otp},
+            format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data['status'], 'confirmado')
@@ -423,28 +439,40 @@ class ColaboradorEventoTest(APITestCase):
         outro_col = cria_colaborador('maria@empresa.com.br', 'Maria')
         Agendamento.objects.create(usuario=outro_col, horario=self.horario, status='confirmado')
 
+        otp = autoriza_otp_agendamento(self.colaborador, self.horario)
         resp = self.client.post(
-            f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/'
+            f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/',
+            {'otp': otp},
+            format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_usuario_nao_pode_reservar_dois_horarios_no_mesmo_evento(self):
         # Reserva o primeiro slot
+        otp = autoriza_otp_agendamento(self.colaborador, self.horario)
         self.client.post(
-            f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/'
+            f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/',
+            {'otp': otp},
+            format='json',
         )
         # Tenta reservar outro slot do mesmo evento
         horario2 = self.evento.horarios.all()[1]
+        otp2 = autoriza_otp_agendamento(self.colaborador, horario2)
         resp = self.client.post(
-            f'/api/colaborador/eventos/{self.evento.id}/horarios/{horario2.id}/reservar/'
+            f'/api/colaborador/eventos/{self.evento.id}/horarios/{horario2.id}/reservar/',
+            {'otp': otp2},
+            format='json',
         )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT)
 
     def test_reservar_evento_encerrado_retorna_404(self):
         self.evento.status = 'encerrado'
         self.evento.save()
+        otp = autoriza_otp_agendamento(self.colaborador, self.horario)
         resp = self.client.post(
-            f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/'
+            f'/api/colaborador/eventos/{self.evento.id}/horarios/{self.horario.id}/reservar/',
+            {'otp': otp},
+            format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -623,16 +651,15 @@ class AgendamentoManualTest(APITestCase):
         self.admin = cria_admin()
         self.client.force_authenticate(user=self.admin)
 
-    def test_registrar_participante_rascunho_sem_horario(self):
+    def test_registrar_participante_sem_horario_retorna_400(self):
         """Rascunho: horario_id não é necessário → participante fica pendente (horario=null)."""
-        evento = cria_evento()  # rascunho
+        evento = cria_evento(status_evento='publicado')
         resp = self.client.post(
             f'/api/admin/eventos/{evento.id}/registrar-participante/',
             {'nome': 'Carlos Sem E-mail'},
         )
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        participante = AgendamentoManual.objects.get(evento=evento)
-        self.assertIsNone(participante.horario)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(AgendamentoManual.objects.filter(evento=evento).exists())
 
     def test_registrar_participante_publicado_sem_horario_retorna_400(self):
         """Publicado: horario_id obrigatório → 400."""
@@ -673,6 +700,7 @@ class AgendamentoManualTest(APITestCase):
         horario[1] recebe índice 1 (1%2=1).
         """
         evento = cria_evento(
+            status_evento='cancelado',
             hora_inicio=time(9, 0),
             hora_fim=time(10, 0),
             duracao_sessao=30,

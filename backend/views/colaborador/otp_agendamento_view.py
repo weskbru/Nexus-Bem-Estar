@@ -18,8 +18,10 @@ from django.core.mail import send_mail
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from ...models.models import Horario
+from ...serializers.api_docs import ErroSerializer, OtpAgendamentoResponseSerializer, SolicitarOtpAgendamentoRequestSerializer
 
 OTP_AGENDAMENTO_TIMEOUT_SEGUNDOS = 300
 
@@ -44,7 +46,13 @@ class SolicitarOTPAgendamentoView(APIView):
     Expira em 5 minutos. Bloqueia após 3 tentativas erradas na validação.
     """
     permission_classes = [permissions.IsAuthenticated]
+    throttle_scope = 'auth_public'
 
+    @extend_schema(
+        request=SolicitarOtpAgendamentoRequestSerializer,
+        responses={200: OtpAgendamentoResponseSerializer, 404: ErroSerializer, 503: ErroSerializer},
+        summary='Solicita OTP para confirmar agendamento',
+    )
     def post(self, request, horario_id):
         try:
             horario = Horario.objects.select_related('evento').get(
