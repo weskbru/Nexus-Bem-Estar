@@ -24,9 +24,9 @@ def _days_in_month(year: int, month: int) -> int:
     return 31
 
 class HorarioSerializer(serializers.ModelSerializer):
-    vagas_ocupadas = serializers.ReadOnlyField()
-    vagas_livres = serializers.ReadOnlyField()
-    disponivel = serializers.ReadOnlyField()
+    vagas_ocupadas = serializers.IntegerField(read_only=True)
+    vagas_livres = serializers.IntegerField(read_only=True)
+    disponivel = serializers.BooleanField(read_only=True)
     reservado_para_fila = serializers.SerializerMethodField()
 
     class Meta:
@@ -66,13 +66,13 @@ class EventoListSerializer(serializers.ModelSerializer):
             'total_horarios', 'horarios_disponiveis', 'esgotado',
         ]
 
-    def get_total_horarios(self, obj):
+    def get_total_horarios(self, obj) -> int:
         return obj.horarios.count()
 
-    def get_horarios_disponiveis(self, obj):
+    def get_horarios_disponiveis(self, obj) -> int:
         return sum(1 for h in obj.horarios.all() if h.disponivel)
 
-    def get_esgotado(self, obj):
+    def get_esgotado(self, obj) -> bool:
         return not any(h.disponivel for h in obj.horarios.all())
 
 
@@ -102,12 +102,12 @@ class EventoAdminSerializer(serializers.ModelSerializer):
         model = Evento
         fields = '__all__'
 
-    def get_total_agendamentos(self, obj):
+    def get_total_agendamentos(self, obj) -> int:
         return Agendamento.objects.filter(
             horario__evento=obj, status='confirmado'
         ).count()
 
-    def get_presenca_pendente(self, obj):
+    def get_presenca_pendente(self, obj) -> bool:
         if obj.status != 'encerrado':
             return False
         return Agendamento.objects.filter(
@@ -204,7 +204,7 @@ class EventoAdminListSerializer(serializers.ModelSerializer):
             'presenca_pendente',
         ]
 
-    def get_total_agendamentos(self, obj):
+    def get_total_agendamentos(self, obj) -> int:
         anotado = getattr(obj, 'total_agendamentos_calc', None)
         if anotado is not None:
             return anotado
@@ -212,7 +212,7 @@ class EventoAdminListSerializer(serializers.ModelSerializer):
             horario__evento=obj, status='confirmado'
         ).count()
 
-    def get_presenca_pendente(self, obj):
+    def get_presenca_pendente(self, obj) -> bool:
         if obj.status != 'encerrado':
             return False
         anotado = getattr(obj, 'presenca_pendente_calc', None)

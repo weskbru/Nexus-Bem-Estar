@@ -9,6 +9,41 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+MOCK_USUARIOS = [
+    {
+        'nome': 'Jonas Silva',
+        'email': 'jonas.silva@aeb.gov.br',
+        'matricula': '100001',
+        'departamento': 'TI',
+    },
+    {
+        'nome': 'Maria Oliveira',
+        'email': 'maria.oliveira@aeb.gov.br',
+        'matricula': '100002',
+        'departamento': 'Gestao de Pessoas',
+    },
+    {
+        'nome': 'Ana Costa',
+        'email': 'ana.costa@aeb.gov.br',
+        'matricula': '100003',
+        'departamento': 'Administrativo',
+    },
+]
+
+
+def _usar_mock() -> bool:
+    return getattr(settings, 'USUARIO_BUSCA_BACKEND', 'mock').lower() == 'mock'
+
+
+def _buscar_usuarios_mock(query: str) -> list[dict]:
+    termo = query.strip().lower()
+    return [
+        usuario.copy()
+        for usuario in MOCK_USUARIOS
+        if any(termo in str(valor).lower() for valor in usuario.values())
+    ]
+
+
 def _get_connection(user_dn: str = None, password: str = None):
     from ldap3 import Server, Connection, AUTO_BIND_NO_TLS
     host    = getattr(settings, 'LDAP_HOST', 'ldap.aeb.gov.br')
@@ -35,6 +70,8 @@ def _map(attrs: dict) -> dict:
 def buscar_usuarios(query: str) -> list[dict]:
     if not query or len(query.strip()) < 2:
         return []
+    if _usar_mock():
+        return _buscar_usuarios_mock(query)
     from ldap3 import SUBTREE
     base_dn = getattr(settings, 'LDAP_BASE_DN', 'OU=USUARIOS,OU=AEB,DC=aeb,DC=gov,DC=br')
     try:
@@ -61,6 +98,9 @@ def buscar_usuarios(query: str) -> list[dict]:
 def email_existe_no_ad(email: str) -> bool:
     if getattr(settings, 'LDAP_SKIP_AD_CHECK', False):
         return True
+    if _usar_mock():
+        email_normalizado = email.strip().lower()
+        return any(usuario['email'].lower() == email_normalizado for usuario in MOCK_USUARIOS)
     from ldap3 import SUBTREE
     base_dn = getattr(settings, 'LDAP_BASE_DN', 'OU=USUARIOS,OU=AEB,DC=aeb,DC=gov,DC=br')
     try:

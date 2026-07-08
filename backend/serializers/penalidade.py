@@ -19,15 +19,15 @@ class PenalidadeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'criada_em']
 
-    def get_evento_origem_titulo(self, obj):
+    def get_evento_origem_titulo(self, obj) -> str | None:
         if obj.agendamento:
             return obj.agendamento.horario.evento.titulo
         return None
 
-    def get_evento_punicao_titulo(self, obj):
+    def get_evento_punicao_titulo(self, obj) -> str | None:
         return obj.evento_punicao.titulo if obj.evento_punicao else None
 
-    def get_evento_punicao_status(self, obj):
+    def get_evento_punicao_status(self, obj) -> str | None:
         return obj.evento_punicao.status if obj.evento_punicao else None
 
 

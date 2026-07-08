@@ -8,6 +8,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-dev-key-change-in-production')
 DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+API_DOCS_ENABLED = config('API_DOCS_ENABLED', default=DEBUG, cast=bool)
+PUBLIC_AUTH_THROTTLE_RATE = config('PUBLIC_AUTH_THROTTLE_RATE', default='20/minute')
+PUBLIC_READ_THROTTLE_RATE = config('PUBLIC_READ_THROTTLE_RATE', default='60/minute')
 
 # Lê o host real quando o Django está atrás do nginx (proxy reverso)
 USE_X_FORWARDED_HOST = True
@@ -22,6 +25,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'drf_spectacular',
+    'drf_spectacular_sidecar',
     'corsheaders',
     'backend',
 ]
@@ -98,6 +103,57 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_public': PUBLIC_AUTH_THROTTLE_RATE,
+        'public_read': PUBLIC_READ_THROTTLE_RATE,
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'SIS Bem-Estar API',
+    'DESCRIPTION': 'Documentacao da API do Sistema de Bem-Estar.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'SWAGGER_UI_DIST': 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest',
+    'SWAGGER_UI_FAVICON_HREF': 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest/favicon-32x32.png',
+    'REDOC_DIST': 'https://cdn.jsdelivr.net/npm/redoc@latest',
+    'ENUM_NAME_OVERRIDES': {
+        'EventoStatusEnum': [
+            ('publicado', 'Publicado'),
+            ('cancelado', 'Cancelado'),
+            ('encerrado', 'Encerrado'),
+        ],
+        'EventoEmailStatusEnum': [
+            ('nao_agendado', 'Nao agendado'),
+            ('agendado', 'Agendado'),
+            ('enviando', 'Enviando'),
+            ('enviado', 'Enviado'),
+            ('falhou', 'Falhou'),
+            ('cancelado', 'Cancelado'),
+        ],
+        'AgendamentoStatusEnum': [
+            ('confirmado', 'Confirmado'),
+            ('cancelado', 'Cancelado'),
+        ],
+        'ListaEsperaStatusEnum': [
+            ('aguardando', 'Aguardando'),
+            ('notificado', 'Notificado'),
+            ('confirmado', 'Confirmado'),
+            ('expirado', 'Expirado'),
+        ],
+        'ComunicadoStatusEnum': [
+            ('agendado', 'Agendado'),
+            ('enviando', 'Enviando'),
+            ('enviado', 'Enviado'),
+            ('falhou', 'Falhou'),
+            ('cancelado', 'Cancelado'),
+        ],
+    },
 }
 
 # JWT — token de acesso válido por 8h (duração de um dia de trabalho)

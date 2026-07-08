@@ -2,8 +2,10 @@ from django.db.models import Sum
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from ...models.models import Agendamento, Evento, Horario
+from ...serializers.api_docs import DashboardSerializer
 from ...serializers.serializers import AgendamentoSerializer
 from ..permissions import IsAdminUsuario, encerrar_eventos_expirados
 
@@ -15,6 +17,10 @@ class AdminDashboardView(APIView):
     """
     permission_classes = [IsAdminUsuario]
 
+    @extend_schema(
+        responses={200: DashboardSerializer},
+        summary='Consulta metricas do dashboard administrativo',
+    )
     def get(self, request):
         encerrar_eventos_expirados()
         total_vagas = Horario.objects.aggregate(total=Sum('vagas_disponiveis'))['total'] or 0

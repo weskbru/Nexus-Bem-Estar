@@ -1,3 +1,5 @@
+from datetime import date
+
 from rest_framework import serializers
 
 from ..models.models import Agendamento, AgendamentoManual, ConviteEmail
@@ -22,16 +24,16 @@ class AgendamentoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'criado_em', 'atualizado_em']
 
-    def get_evento_id(self, obj):
+    def get_evento_id(self, obj) -> int:
         return obj.horario.evento_id
 
-    def get_evento_titulo(self, obj):
+    def get_evento_titulo(self, obj) -> str:
         return obj.horario.evento.titulo
 
-    def get_evento_data(self, obj):
+    def get_evento_data(self, obj) -> date:
         return obj.horario.evento.data
 
-    def get_nome_profissional(self, obj):
+    def get_nome_profissional(self, obj) -> str:
         return obj.horario.evento.nome_profissional
 
 
