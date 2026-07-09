@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage && node scripts/prefix-lcov-paths.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.17.0",
