@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authApi, parseFetchError, adminEventosApi } from './api';
+import {
+  adminDashboardApi,
+  adminEventosApi,
+  adminPenalidadesApi,
+  authApi,
+  colaboradorApi,
+  ldapApi,
+  parseFetchError,
+} from './api';
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
@@ -155,5 +163,83 @@ describe('api service', () => {
         data: '2026-07-09',
       },
     });
+  });
+
+  it('chama endpoints administrativos restantes com metodo correto', async () => {
+    storage.setItem('access_token', 'token-admin');
+    fetchMock.mockResolvedValue(jsonResponse({ mensagem: 'ok' }));
+
+    await adminEventosApi.atualizar(1, { titulo: 'Novo titulo' });
+    await adminEventosApi.publicar(1);
+    await adminEventosApi.enviarEmails(1, { modo_envio: 'agendado', agendado_para: '2026-07-10T10:00:00' });
+    await adminEventosApi.registrarParticipanteManual(1, { horario_id: 2, nome: 'Maria' });
+    await adminEventosApi.adicionarParticipantePendente(1, { nome: 'Joao' });
+    await adminEventosApi.listaPresenca(1);
+    await adminEventosApi.filaHistorico(1);
+    await adminEventosApi.removerParticipante(1, 9);
+    await adminEventosApi.marcarPresenca(1, {
+      presentes: [1],
+      ausentes: [2],
+      presentes_manuais: [3],
+      ausentes_manuais: [4],
+    });
+    await adminDashboardApi.obter();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/admin/eventos/1/',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/admin/eventos/1/publicar/',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/admin/eventos/1/remover-participante/9/',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/admin/dashboard/',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+  });
+
+  it('chama endpoints de penalidades, LDAP e colaborador', async () => {
+    storage.setItem('access_token', 'token-admin');
+    fetchMock.mockResolvedValue(jsonResponse([]));
+
+    await adminPenalidadesApi.listar({ ativa: true });
+    await adminPenalidadesApi.listar();
+    await adminPenalidadesApi.revogar(3, 'Justificativa');
+    await ldapApi.buscar('maria silva');
+    await ldapApi.promover({
+      email: 'maria@aeb.gov.br',
+      nome: 'Maria',
+      matricula: '123',
+      departamento: 'CTI',
+    });
+    await ldapApi.revogar(7);
+    await ldapApi.listarAdmins();
+    await colaboradorApi.listarEventos();
+    await colaboradorApi.detalheEvento(5);
+    await colaboradorApi.reservar(5, 8);
+    await colaboradorApi.meusAgendamentos();
+    await colaboradorApi.cancelar(12);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/admin/penalidades/?ativa=true',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/admin/ldap/buscar/?q=maria%20silva',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/colaborador/eventos/5/horarios/8/reservar/',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/colaborador/agendamentos/12/cancelar/',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 });
