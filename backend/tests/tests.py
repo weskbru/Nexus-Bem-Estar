@@ -22,7 +22,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade, Comunicado
 from ..views.permissions import liberar_penalidades_expiradas
 from ..views.colaborador.otp_agendamento_view import cache_key_otp
 
@@ -344,6 +344,196 @@ class EnviarEmailsTest(APITestCase):
         evento_cancelado = cria_evento(status_evento='cancelado')
         resp = self.client.post(f'/api/admin/eventos/{evento_cancelado.id}/enviar-emails/')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# Testes Admin — Comunicados
+# ---------------------------------------------------------------------------
+
+class AdminComunicadoTest(APITestCase):
+    def setUp(self):
+        self.admin = cria_admin()
+        self.client.force_authenticate(user=self.admin)
+
+    def cria_comunicado(self, **kwargs):
+        defaults = {
+            'assunto': 'Campanha de bem-estar',
+            'corpo_html': '<p>Participe das atividades.</p>',
+            'enviado_por': self.admin,
+            'status': Comunicado.Status.AGENDADO,
+            'agendado_para': timezone.now() + timedelta(hours=2),
+        }
+        defaults.update(kwargs)
+        return Comunicado.objects.create(**defaults)
+
+    def test_lista_comunicados_com_filtro_paginacao_e_limite_page_size(self):
+        self.cria_comunicado(assunto='Campanha de yoga', status=Comunicado.Status.AGENDADO)
+        self.cria_comunicado(assunto='Aviso enviado', status=Comunicado.Status.ENVIADO, enviado_em=timezone.now())
+        self.cria_comunicado(assunto='Campanha de pilates', status=Comunicado.Status.AGENDADO)
+
+        resp = self.client.get('/api/admin/comunicados/?q=campanha&status=agendado&page=1&page_size=1')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['count'], 2)
+        self.assertEqual(resp.data['page'], 1)
+        self.assertEqual(resp.data['page_size'], 1)
+        self.assertEqual(resp.data['total_pages'], 2)
+        self.assertNotIn('corpo_html', resp.data['results'][0])
+
+        resp_limite = self.client.get('/api/admin/comunicados/?page=0&page_size=999')
+        self.assertEqual(resp_limite.data['page'], 1)
+        self.assertEqual(resp_limite.data['page_size'], 50)
+
+    def test_valida_conteudo_e_modo_de_envio(self):
+        resp_sem_assunto = self.client.post('/api/admin/comunicados/', {
+            'assunto': '',
+            'corpo_html': '<p>Texto</p>',
+        })
+        self.assertEqual(resp_sem_assunto.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp_sem_corpo = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Aviso',
+            'corpo_html': '',
+        })
+        self.assertEqual(resp_sem_corpo.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp_modo = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Aviso',
+            'corpo_html': '<p>Texto</p>',
+            'modo_envio': 'fax',
+        })
+        self.assertEqual(resp_modo.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_agenda_comunicado_e_valida_data(self):
+        resp_sem_data = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Aviso',
+            'corpo_html': '<p>Texto</p>',
+            'modo_envio': 'agendado',
+        })
+        self.assertEqual(resp_sem_data.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp_data_invalida = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Aviso',
+            'corpo_html': '<p>Texto</p>',
+            'modo_envio': 'agendado',
+            'agendado_para': 'ontem',
+        })
+        self.assertEqual(resp_data_invalida.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp_data_passada = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Aviso',
+            'corpo_html': '<p>Texto</p>',
+            'modo_envio': 'agendado',
+            'agendado_para': (timezone.now() + timedelta(minutes=1)).isoformat(),
+        })
+        self.assertEqual(resp_data_passada.status_code, status.HTTP_400_BAD_REQUEST)
+
+        agendado_para = timezone.now() + timedelta(hours=1)
+        resp = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Aviso agendado',
+            'corpo_html': '<p>Texto</p>',
+            'modo_envio': 'agendado',
+            'agendado_para': agendado_para.isoformat(),
+        })
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data['status'], Comunicado.Status.AGENDADO)
+        self.assertIsNotNone(resp.data['agendado_para_formatado'])
+
+    @patch('backend.views.admin.comunicado_view.email_service.enviar_para_lista_comunicado', return_value=3)
+    @patch('backend.views.admin.comunicado_view.email_service.get_destinatarios_comunicado', return_value=['ld@aeb.gov.br'])
+    def test_envia_comunicado_imediato(self, _destinatarios, enviar_mock):
+        resp = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Envio imediato',
+            'corpo_html': '<p>Texto</p>',
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data['status'], Comunicado.Status.ENVIADO)
+        self.assertEqual(resp.data['total_enviado'], 3)
+        enviar_mock.assert_called_once_with('Envio imediato', '<p>Texto</p>')
+
+    @patch('backend.views.admin.comunicado_view.email_service.get_destinatarios_comunicado', return_value=[])
+    def test_envio_imediato_sem_destinatario_retorna_500(self, _destinatarios):
+        resp = self.client.post('/api/admin/comunicados/', {
+            'assunto': 'Sem destino',
+            'corpo_html': '<p>Texto</p>',
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertFalse(Comunicado.objects.filter(assunto='Sem destino').exists())
+
+    def test_detalhe_atualiza_agendado_e_cancela(self):
+        comunicado = self.cria_comunicado()
+
+        resp_get = self.client.get(f'/api/admin/comunicados/{comunicado.id}/')
+        self.assertEqual(resp_get.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp_get.data['corpo_html'], comunicado.corpo_html)
+
+        novo_agendamento = timezone.now() + timedelta(hours=3)
+        resp_put = self.client.put(f'/api/admin/comunicados/{comunicado.id}/', {
+            'assunto': 'Campanha atualizada',
+            'corpo_html': '<p>Novo texto</p>',
+            'modo_envio': 'agendado',
+            'agendado_para': novo_agendamento.isoformat(),
+        })
+        self.assertEqual(resp_put.status_code, status.HTTP_200_OK)
+        comunicado.refresh_from_db()
+        self.assertEqual(comunicado.assunto, 'Campanha atualizada')
+        self.assertEqual(comunicado.status, Comunicado.Status.AGENDADO)
+
+        resp_delete = self.client.delete(f'/api/admin/comunicados/{comunicado.id}/')
+        self.assertEqual(resp_delete.status_code, status.HTTP_200_OK)
+        comunicado.refresh_from_db()
+        self.assertEqual(comunicado.status, Comunicado.Status.CANCELADO)
+        self.assertIsNotNone(comunicado.cancelado_em)
+
+    @patch('backend.views.admin.comunicado_view.email_service.enviar_para_lista_comunicado', return_value=4)
+    @patch('backend.views.admin.comunicado_view.email_service.get_destinatarios_comunicado', return_value=['ld@aeb.gov.br'])
+    def test_atualiza_agendado_para_envio_imediato(self, _destinatarios, _enviar):
+        comunicado = self.cria_comunicado(status=Comunicado.Status.CANCELADO, cancelado_em=timezone.now())
+
+        resp = self.client.put(f'/api/admin/comunicados/{comunicado.id}/', {
+            'assunto': 'Reenvio',
+            'corpo_html': '<p>Texto reenviado</p>',
+            'modo_envio': 'imediato',
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['status'], Comunicado.Status.ENVIADO)
+        self.assertEqual(resp.data['total_enviado'], 4)
+        comunicado.refresh_from_db()
+        self.assertIsNone(comunicado.agendado_para)
+        self.assertIsNone(comunicado.cancelado_em)
+
+    def test_detalhe_retorna_404_e_bloqueia_alteracoes_invalidas(self):
+        resp_get = self.client.get('/api/admin/comunicados/999/')
+        self.assertEqual(resp_get.status_code, status.HTTP_404_NOT_FOUND)
+
+        resp_put = self.client.put('/api/admin/comunicados/999/', {
+            'assunto': 'Nao existe',
+            'corpo_html': '<p>Texto</p>',
+        })
+        self.assertEqual(resp_put.status_code, status.HTTP_404_NOT_FOUND)
+
+        resp_delete = self.client.delete('/api/admin/comunicados/999/')
+        self.assertEqual(resp_delete.status_code, status.HTTP_404_NOT_FOUND)
+
+        enviado = self.cria_comunicado(status=Comunicado.Status.ENVIADO, enviado_em=timezone.now())
+        resp_put_enviado = self.client.put(f'/api/admin/comunicados/{enviado.id}/', {
+            'assunto': 'Alterar enviado',
+            'corpo_html': '<p>Texto</p>',
+        })
+        self.assertEqual(resp_put_enviado.status_code, status.HTTP_400_BAD_REQUEST)
+
+        enviando = self.cria_comunicado(status=Comunicado.Status.ENVIANDO)
+        resp_put_enviando = self.client.put(f'/api/admin/comunicados/{enviando.id}/', {
+            'assunto': 'Alterar enviando',
+            'corpo_html': '<p>Texto</p>',
+        })
+        self.assertEqual(resp_put_enviando.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp_delete_enviado = self.client.delete(f'/api/admin/comunicados/{enviado.id}/')
+        self.assertEqual(resp_delete_enviado.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 # ---------------------------------------------------------------------------

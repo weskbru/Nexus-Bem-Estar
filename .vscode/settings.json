@@ -1,0 +1,6 @@
+{
+    "sonarlint.connectedMode.project": {
+        "connectionId": "http-192-168-53-231-9000",
+        "projectKey": "sis-bem-estar"
+    }
+}
