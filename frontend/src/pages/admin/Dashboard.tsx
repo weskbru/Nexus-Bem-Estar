@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Relatorios from './Relatorios';
+import type { DashboardDTO } from '../../services/api';
 import {
   Plus,
   Calendar,
@@ -11,12 +12,6 @@ import {
   AlertCircle,
   Clock
 } from 'lucide-react';
-
-interface DashboardData {
-  total_vagas: number;
-  vagas_ocupadas: number;
-  taxa_ocupacao: number;
-}
 
 function StatSkeleton() {
   return (
@@ -39,7 +34,7 @@ function StatSkeleton() {
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 
 export default function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashboardDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
@@ -60,7 +55,7 @@ export default function Dashboard() {
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      const json: DashboardData = await res.json();
+      const json: DashboardDTO = await res.json();
       setData(json);
       setLastUpdated(new Date());
     } catch (err) {
@@ -200,7 +195,11 @@ export default function Dashboard() {
 
       {/* Seção de Relatórios */}
       <section className="mt-10 pt-10 border-t border-slate-200/60">
-        <Relatorios />
+        <Relatorios
+          dashboardData={data}
+          dashboardLoading={loading}
+          embedded
+        />
       </section>
     </div>
   );

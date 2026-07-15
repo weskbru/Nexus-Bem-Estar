@@ -158,7 +158,7 @@ describe('componentes e layouts principais', () => {
   it('renderiza notificacoes do layout admin e executa atalhos', async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes('/admin/dashboard/')) {
+      if (url.includes('/admin/notificacoes/')) {
         return Promise.resolve(jsonResponse({
           agendamentos: [{
             id: 1,
@@ -167,16 +167,14 @@ describe('componentes e layouts principais', () => {
             data_hora: '2026-08-20T10:00:00-03:00',
             status: 'OCUPADO',
           }],
+          eventos: [{
+            id: 2,
+            titulo: 'Yoga laboral',
+            data: '2026-08-21',
+            hora_inicio: '09:00:00',
+            status: 'PUBLICADO',
+          }],
         }));
-      }
-      if (url.includes('/admin/eventos/')) {
-        return Promise.resolve(jsonResponse([{
-          id: 2,
-          titulo: 'Yoga laboral',
-          data: '2026-08-21',
-          hora_inicio: '09:00:00',
-          status: 'PUBLICADO',
-        }]));
       }
       return Promise.resolve(jsonResponse({}));
     });
@@ -188,8 +186,14 @@ describe('componentes e layouts principais', () => {
     expect(screen.getByText(/gestao de usuarios|gestão de usuários/i)).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/dashboard/'), expect.any(Object));
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/notificacoes/'), expect.any(Object));
     });
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('/admin/dashboard/'), expect.any(Object),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('/admin/eventos/'), expect.any(Object),
+    );
 
     fireEvent.click(screen.getByTitle(/notificacoes|notificações/i));
 

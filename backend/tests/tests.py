@@ -542,6 +542,7 @@ class AdminComunicadoTest(APITestCase):
 
 class AdminDashboardTest(APITestCase):
     def setUp(self):
+        cache.clear()
         self.admin = cria_admin()
         self.client.force_authenticate(user=self.admin)
 
@@ -561,6 +562,53 @@ class AdminDashboardTest(APITestCase):
         resp = self.client.get('/api/admin/dashboard/')
         self.assertGreater(resp.data['taxa_ocupacao'], 0)
         self.assertGreater(resp.data['vagas_ocupadas'], 0)
+
+    def test_dashboard_nao_gera_consultas_por_agendamento(self):
+        evento = cria_evento(status_evento='publicado', capacidade_por_horario=10)
+        evento.gerar_horarios()
+        horario = evento.horarios.first()
+        for indice in range(10):
+            usuario = cria_colaborador(
+                email=f'dashboard{indice}@empresa.com.br',
+                nome=f'Usuario Dashboard {indice}',
+            )
+            Agendamento.objects.create(
+                usuario=usuario,
+                horario=horario,
+                status='confirmado',
+            )
+
+        cache.clear()
+        with self.assertNumQueries(4):
+            resp = self.client.get('/api/admin/dashboard/')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(resp.data['agendamentos_recentes']), 10)
+        self.assertNotIn(
+            'vagas_ocupadas',
+            resp.data['agendamentos_recentes'][0]['horario'],
+        )
+
+        with self.assertNumQueries(0):
+            resp_cache = self.client.get('/api/admin/dashboard/')
+        self.assertEqual(resp_cache.status_code, status.HTTP_200_OK)
+
+    def test_notificacoes_usam_endpoint_leve(self):
+        evento = cria_evento(status_evento='publicado')
+        evento.gerar_horarios()
+        Agendamento.objects.create(
+            usuario=cria_colaborador(),
+            horario=evento.horarios.first(),
+            status='confirmado',
+        )
+
+        cache.clear()
+        with self.assertNumQueries(2):
+            resp = self.client.get('/api/admin/notificacoes/')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(resp.data['agendamentos']), 1)
+        self.assertEqual(len(resp.data['eventos']), 1)
 
 
 # ---------------------------------------------------------------------------
