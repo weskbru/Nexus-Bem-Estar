@@ -124,14 +124,14 @@ export default function AdminLayout() {
     ultimaConsultaNotificacoesRef.current = agora;
 
     try {
-      const { agendamentos, eventos } = await adminNotificacoesApi.obter();
+      const { confirmacoes, eventos } = await adminNotificacoesApi.obter();
 
-      const agendamentosItens: NotificacaoItem[] = agendamentos
-        .map((a) => ({
-          id: `agendamento-${a.id}`,
-          titulo: a.colaborador_nome,
-          subtitulo: a.servico,
-          data_hora: a.data_hora,
+      const confirmacoesItens: NotificacaoItem[] = confirmacoes
+        .map((confirmacao) => ({
+          id: `agendamento-evento-${confirmacao.evento_id}`,
+          titulo: `${confirmacao.quantidade} ${confirmacao.quantidade === 1 ? 'agendamento confirmado' : 'agendamentos confirmados'}`,
+          subtitulo: confirmacao.evento_titulo,
+          data_hora: confirmacao.ultima_confirmacao,
           categoria: 'agendamento',
         }));
 
@@ -148,7 +148,7 @@ export default function AdminLayout() {
           categoria: 'evento_publicado',
         }));
 
-      const itens = [...agendamentosItens, ...eventosItens]
+      const itens = [...confirmacoesItens, ...eventosItens]
         .sort((a, b) => new Date(b.data_hora).getTime() - new Date(a.data_hora).getTime())
         .slice(0, 8);
 
@@ -274,7 +274,7 @@ export default function AdminLayout() {
                         <p className="text-sm text-slate-800 font-medium truncate">{n.titulo}</p>
                         <p className="text-xs text-slate-600 truncate">{n.subtitulo}</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                          {n.categoria === 'evento_publicado' ? 'Evento publicado' : 'Agendamento confirmado'}
+                          {n.categoria === 'evento_publicado' ? 'Evento publicado' : 'Última confirmação'}
                         </p>
                         <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(n.data_hora)}</p>
                       </li>

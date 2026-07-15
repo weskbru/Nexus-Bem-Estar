@@ -408,12 +408,11 @@ export const adminDashboardApi = {
 };
 
 export interface AdminNotificacoesDTO {
-  agendamentos: Array<{
-    id: number;
-    colaborador_nome: string;
-    servico: string;
-    data_hora: string;
-    status: 'OCUPADO';
+  confirmacoes: Array<{
+    evento_id: number;
+    evento_titulo: string;
+    quantidade: number;
+    ultima_confirmacao: string;
   }>;
   eventos: Array<{
     id: number;

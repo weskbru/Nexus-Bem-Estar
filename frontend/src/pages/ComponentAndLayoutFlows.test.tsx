@@ -160,12 +160,11 @@ describe('componentes e layouts principais', () => {
       const url = String(input);
       if (url.includes('/admin/notificacoes/')) {
         return Promise.resolve(jsonResponse({
-          agendamentos: [{
-            id: 1,
-            colaborador_nome: 'Maria Silva',
-            servico: 'Massagem',
-            data_hora: '2026-08-20T10:00:00-03:00',
-            status: 'OCUPADO',
+          confirmacoes: [{
+            evento_id: 1,
+            evento_titulo: 'Massagem',
+            quantidade: 3,
+            ultima_confirmacao: '2026-08-20T10:00:00-03:00',
           }],
           eventos: [{
             id: 2,
@@ -197,7 +196,8 @@ describe('componentes e layouts principais', () => {
 
     fireEvent.click(screen.getByTitle(/notificacoes|notificações/i));
 
-    expect(await screen.findByText('Maria Silva')).toBeInTheDocument();
+    expect(await screen.findByText('3 agendamentos confirmados')).toBeInTheDocument();
+    expect(screen.getByText('Massagem')).toBeInTheDocument();
     expect(screen.getByText('Yoga laboral')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTitle(/manual do sistema/i));

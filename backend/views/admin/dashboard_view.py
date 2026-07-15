@@ -1,8 +1,6 @@
-from datetime import datetime
-
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Count, Exists, IntegerField, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -26,7 +24,7 @@ from ..permissions import IsAdminUsuario
 
 
 DASHBOARD_CACHE_KEY = 'admin-dashboard:v3'
-NOTIFICACOES_CACHE_KEY = 'admin-notificacoes:v1'
+NOTIFICACOES_CACHE_KEY = 'admin-notificacoes:v2'
 
 
 def _cache_timeout() -> int:
@@ -207,11 +205,15 @@ class AdminNotificacoesView(APIView):
 
         hoje = timezone.localdate()
         agora = timezone.localtime().time()
-        agendamentos = (
+        confirmacoes = (
             Agendamento.objects
             .filter(status='confirmado')
-            .select_related('usuario', 'horario__evento')
-            .order_by('-criado_em')[:10]
+            .values('horario__evento_id', 'horario__evento__titulo')
+            .annotate(
+                quantidade=Count('id'),
+                ultima_confirmacao=Max('criado_em'),
+            )
+            .order_by('-ultima_confirmacao')[:5]
         )
         eventos = (
             Evento.objects
@@ -221,21 +223,14 @@ class AdminNotificacoesView(APIView):
         )
 
         data = {
-            'agendamentos': [
+            'confirmacoes': [
                 {
-                    'id': item.id,
-                    'colaborador_nome': item.usuario.nome,
-                    'servico': item.horario.evento.titulo,
-                    'data_hora': timezone.make_aware(
-                        datetime.combine(
-                            item.horario.evento.data,
-                            item.horario.hora_inicio,
-                        ),
-                        timezone.get_current_timezone(),
-                    ),
-                    'status': 'OCUPADO',
+                    'evento_id': item['horario__evento_id'],
+                    'evento_titulo': item['horario__evento__titulo'],
+                    'quantidade': item['quantidade'],
+                    'ultima_confirmacao': item['ultima_confirmacao'],
                 }
-                for item in agendamentos
+                for item in confirmacoes
             ],
             'eventos': [
                 {

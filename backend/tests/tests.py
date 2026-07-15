@@ -649,13 +649,22 @@ class AdminDashboardTest(APITestCase):
             horario=evento.horarios.first(),
             status='confirmado',
         )
+        Agendamento.objects.create(
+            usuario=cria_colaborador(
+                email='maria@empresa.com.br',
+                nome='Maria Silva',
+            ),
+            horario=evento.horarios.first(),
+            status='confirmado',
+        )
 
         cache.clear()
         with self.assertNumQueries(2):
             resp = self.client.get('/api/admin/notificacoes/')
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(resp.data['agendamentos']), 1)
+        self.assertEqual(len(resp.data['confirmacoes']), 1)
+        self.assertEqual(resp.data['confirmacoes'][0]['quantidade'], 2)
         self.assertEqual(len(resp.data['eventos']), 1)
 
 
