@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { adminNotificacoesApi } from '../services/api';
-import logoAeb from '../images/logoaeb.png';
 
 type NotificacaoItem = {
   id: string;
@@ -162,16 +161,11 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col fixed inset-y-0 left-0 z-20">
-        <div className="h-20 flex items-center px-6 border-b border-slate-200">
-          <img
-            src={logoAeb}
-            alt="Logo AEB"
-            className="h-10 w-auto mr-3"
-          />
-          <div>
-            <div className="font-semibold text-slate-900 leading-tight whitespace-nowrap">Agenda Bem-Estar</div>
-            <div className="text-xs text-slate-500">Painel Administrativo</div>
+      <aside className="w-64 min-w-[16rem] bg-white border-r border-slate-200 flex flex-col fixed inset-y-0 left-0 z-20 overflow-x-hidden">
+        <div className="h-16 flex items-center px-6 border-b border-slate-200">
+          <div className="min-w-0">
+            <div className="font-semibold text-slate-900 leading-tight truncate">Agenda Bem-Estar</div>
+            <div className="text-xs text-slate-500 truncate">Painel Administrativo</div>
           </div>
         </div>
 
@@ -190,7 +184,7 @@ export default function AdminLayout() {
               }
             >
               <Icon className="w-5 h-5 mr-3 shrink-0" />
-              {label}
+              <span className="truncate">{label}</span>
             </NavLink>
           ))}
 
@@ -207,7 +201,7 @@ export default function AdminLayout() {
               }
             >
               <ShieldCheck className="w-5 h-5 mr-3 shrink-0" />
-              Gestão de Usuários
+              <span className="truncate">Gestão de Usuários</span>
             </NavLink>
           )}
         </nav>
@@ -235,7 +229,7 @@ export default function AdminLayout() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 ml-64 flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 ml-64 flex flex-col min-h-screen">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-end px-8 sticky top-0 z-10">
           <div ref={notificacoesRef} className="relative flex items-center gap-4 text-slate-500">

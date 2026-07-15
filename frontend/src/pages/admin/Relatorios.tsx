@@ -410,9 +410,9 @@ export default function Relatorios({
         {!loading && (
           <button
             onClick={() => exportarXLSX(eventos, agendamentos)}
-            className="flex items-center justify-center w-full sm:w-auto gap-2 px-5 py-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl transition-all shadow-sm outline-none active:scale-[0.98]"
+            className="flex items-center justify-center w-full sm:w-auto gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-all shadow-sm hover:shadow-md hover:shadow-blue-500/20 outline-none active:scale-[0.98]"
           >
-            <Download className="w-4 h-4 text-slate-500" />
+            <Download className="w-4 h-4 text-white" />
             Exportar XLSX
           </button>
         )}

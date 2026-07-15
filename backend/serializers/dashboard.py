@@ -38,11 +38,32 @@ class DashboardAgendamentoSerializer(serializers.ModelSerializer):
         ]
 
 
+class ProximoEventoDashboardSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    titulo = serializers.CharField()
+    data = serializers.DateField()
+    hora_inicio = serializers.TimeField()
+    hora_fim = serializers.TimeField()
+    total_vagas = serializers.IntegerField()
+    vagas_ocupadas = serializers.IntegerField()
+    vagas_livres = serializers.IntegerField()
+
+
+class PendenciasDashboardSerializer(serializers.Serializer):
+    total = serializers.IntegerField()
+    eventos_presenca_pendente = serializers.IntegerField()
+    pessoas_fila = serializers.IntegerField()
+    falhas_email = serializers.IntegerField()
+
+
 class DashboardSerializer(serializers.Serializer):
     total_vagas = serializers.IntegerField()
     vagas_ocupadas = serializers.IntegerField()
     taxa_ocupacao = serializers.FloatField()
     total_eventos_ativos = serializers.IntegerField()
+    vagas_disponiveis = serializers.IntegerField()
+    proximo_evento = ProximoEventoDashboardSerializer(allow_null=True)
+    pendencias = PendenciasDashboardSerializer()
     agendamentos_recentes = DashboardAgendamentoSerializer(many=True)
 
 

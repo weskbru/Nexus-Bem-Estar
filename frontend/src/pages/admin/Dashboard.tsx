@@ -1,17 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Relatorios from './Relatorios';
-import type { DashboardDTO } from '../../services/api';
 import {
-  Plus,
-  Calendar,
-  Users,
-  TrendingUp,
-  BarChart3,
-  RefreshCw,
   AlertCircle,
-  Clock
+  AlertTriangle,
+  ArrowRight,
+  Calendar,
+  Clock,
+  Plus,
+  RefreshCw,
+  Users,
 } from 'lucide-react';
+import type { DashboardDTO } from '../../services/api';
+import Relatorios from './Relatorios';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 
 function StatSkeleton() {
   return (
@@ -20,18 +22,18 @@ function StatSkeleton() {
         <div className="h-3 w-24 bg-slate-200 rounded-full" />
         <div className="w-12 h-12 bg-slate-100 rounded-2xl" />
       </div>
-      <div className="flex items-end gap-3 mb-2">
-        <div className="h-10 w-20 bg-slate-200 rounded-lg" />
-        <div className="h-6 w-12 bg-slate-100 rounded-md" />
-      </div>
-      <div className="h-3 w-32 bg-slate-100 rounded-full mt-3" />
+      <div className="h-8 w-3/4 bg-slate-200 rounded-lg mb-3" />
+      <div className="h-3 w-40 bg-slate-100 rounded-full" />
     </div>
   );
 }
 
-// ─── Componente Principal ────────────────────────────────────────────────────
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
+function formatarDataEvento(data: string): string {
+  return new Date(`${data}T00:00:00`).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+  });
+}
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardDTO | null>(null);
@@ -66,32 +68,33 @@ export default function Dashboard() {
     }
   }
 
-  const taxa = data?.taxa_ocupacao ?? 0;
+  const proximoEvento = data?.proximo_evento;
+  const pendencias = data?.pendencias;
+  const ocupacaoProximo = proximoEvento?.total_vagas
+    ? Math.min((proximoEvento.vagas_ocupadas / proximoEvento.total_vagas) * 100, 100)
+    : 0;
+  const totalEventosFuturos = data?.total_eventos_ativos ?? 0;
+  const rotuloEventosFuturos = totalEventosFuturos === 1 ? 'evento' : 'eventos';
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 animate-in fade-in duration-500">
-      
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-10">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Visão Geral</h1>
           <p className="text-slate-500 font-medium mt-1.5 text-sm sm:text-base">
-            Monitoramento em tempo real de ocupação e engajamento.
+            Resumo operacional dos próximos eventos.
           </p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <Link to="/admin/eventos/novo" className="w-full sm:w-auto">
-            <button className="w-full sm:w-auto flex items-center justify-center px-5 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 shadow-sm hover:shadow-md hover:shadow-blue-500/20 transition-all active:scale-[0.98] outline-none">
-              <Plus className="w-5 h-5 mr-2" />
-              Criar Novo Evento
-            </button>
-          </Link>
-        </div>
+        <Link to="/admin/eventos/novo" className="w-full sm:w-auto">
+          <button className="w-full sm:w-auto flex items-center justify-center px-5 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 shadow-sm hover:shadow-md hover:shadow-blue-500/20 transition-all active:scale-[0.98] outline-none">
+            <Plus className="w-5 h-5 mr-2" />
+            Criar Novo Evento
+          </button>
+        </Link>
       </div>
 
-      {/* Alerta de Erro */}
       {erro && (
-        <div className="mb-8 px-5 py-4 bg-red-50 border border-red-100 text-red-800 rounded-2xl text-sm font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-pulse">
+        <div className="mb-8 px-5 py-4 bg-red-50 border border-red-100 text-red-800 rounded-2xl text-sm font-medium flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
             <span>{erro}</span>
@@ -106,7 +109,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Grid de Métricas (Stats Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 lg:gap-8 mb-6">
         {loading ? (
           <>
@@ -116,90 +118,93 @@ export default function Dashboard() {
           </>
         ) : (
           <>
-            {/* Card 1: Total de Vagas */}
             <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-blue-100 transition-all duration-300 hover:-translate-y-1">
-              <div className="flex items-start justify-between mb-6">
-                <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Total de Vagas</h3>
+              <div className="flex items-start justify-between mb-5">
+                <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Próximo Evento</h3>
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 group-hover:bg-blue-100 rounded-2xl flex items-center justify-center transition-colors">
                   <Calendar className="w-6 h-6" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-3">
-                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
-                  {data?.total_vagas.toLocaleString('pt-BR') ?? '—'}
-                </span>
-                <span className="text-xs font-bold text-emerald-700 flex items-center bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg">
-                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                  +5%
-                </span>
-              </div>
-              <p className="text-[13px] font-medium text-slate-400 mt-3">em relação ao mês anterior</p>
+              {proximoEvento ? (
+                <>
+                  <p className="text-xl font-extrabold text-slate-900 truncate" title={proximoEvento.titulo}>
+                    {proximoEvento.titulo}
+                  </p>
+                  <p className="text-sm font-semibold text-blue-700 mt-2">
+                    {formatarDataEvento(proximoEvento.data)} às {proximoEvento.hora_inicio.substring(0, 5)}
+                  </p>
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500 mt-5 mb-2">
+                    <span>{proximoEvento.vagas_ocupadas} de {proximoEvento.total_vagas} vagas</span>
+                    <span>{proximoEvento.vagas_livres} livres</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div className="bg-blue-500 h-full rounded-full transition-all" style={{ width: `${ocupacaoProximo}%` }} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xl font-extrabold text-slate-900">Nenhum evento agendado</p>
+                  <p className="text-[13px] font-medium text-slate-400 mt-3">Crie um evento para iniciar a agenda.</p>
+                </>
+              )}
             </div>
 
-            {/* Card 2: Vagas Ocupadas */}
             <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-indigo-100 transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-start justify-between mb-6">
-                <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Vagas Ocupadas</h3>
+                <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Agenda Futura</h3>
                 <div className="w-12 h-12 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 rounded-2xl flex items-center justify-center transition-colors">
                   <Users className="w-6 h-6" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-3">
+              <div className="flex items-baseline gap-2">
                 <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
-                  {data?.vagas_ocupadas.toLocaleString('pt-BR') ?? '—'}
+                  {totalEventosFuturos.toLocaleString('pt-BR')}
                 </span>
-                <span className="text-xs font-bold text-emerald-700 flex items-center bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg">
-                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                  +12%
+                <span className="text-sm font-bold text-slate-500">{rotuloEventosFuturos}</span>
+              </div>
+              <p className="text-[13px] font-medium text-slate-500 mt-3">
+                {(data?.total_vagas ?? 0).toLocaleString('pt-BR')} vagas no total da agenda
+              </p>
+              <div className="flex flex-wrap gap-2 mt-4 text-xs font-bold">
+                <span className="px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700">
+                  {(data?.vagas_disponiveis ?? 0).toLocaleString('pt-BR')} livres
+                </span>
+                <span className="px-2.5 py-1.5 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700">
+                  {(data?.vagas_ocupadas ?? 0).toLocaleString('pt-BR')} ocupadas
                 </span>
               </div>
-              <p className="text-[13px] font-medium text-slate-400 mt-3">em relação ao mês anterior</p>
             </div>
 
-            {/* Card 3: Taxa de Ocupação */}
-            <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-emerald-100 transition-all duration-300 hover:-translate-y-1 sm:col-span-2 md:col-span-1">
+            <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-amber-100 transition-all duration-300 hover:-translate-y-1 sm:col-span-2 md:col-span-1">
               <div className="flex items-start justify-between mb-6">
-                <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Taxa de Ocupação</h3>
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 rounded-2xl flex items-center justify-center transition-colors">
-                  <BarChart3 className="w-6 h-6" />
+                <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Pendências</h3>
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 group-hover:bg-amber-100 rounded-2xl flex items-center justify-center transition-colors">
+                  <AlertTriangle className="w-6 h-6" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-3 mb-5">
-                <span className="text-4xl font-extrabold text-slate-900 tracking-tight">{taxa}%</span>
-                <span className="text-xs font-bold text-emerald-700 flex items-center bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg">
-                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                  +8%
-                </span>
+              <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
+                {pendencias?.total.toLocaleString('pt-BR') ?? '—'}
+              </span>
+              <div className="space-y-1.5 mt-4 text-[13px] font-medium text-slate-500">
+                <p>{pendencias?.eventos_presenca_pendente ?? 0} eventos com presença pendente</p>
+                <p>{pendencias?.pessoas_fila ?? 0} pessoas aguardando na fila</p>
+                <p>{pendencias?.falhas_email ?? 0} falhas de envio de e-mail</p>
               </div>
-              
-              {/* Barra de Progresso com Design Premium */}
-              <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
-                <div
-                  className="bg-emerald-500 h-full rounded-full transition-all duration-1000 ease-out relative"
-                  style={{ width: `${taxa}%` }}
-                >
-                  {/* Brilho interno para dar volume (glass effect) */}
-                  <div className="absolute top-0 right-0 bottom-0 left-0 bg-gradient-to-b from-white/30 to-transparent"></div>
-                </div>
-              </div>
+              <Link to="/admin/agendamentos" className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 mt-4 hover:text-amber-800">
+                Ver eventos <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
           </>
         )}
       </div>
 
-      {/* Timestamp de Atualização */}
       <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 px-2 justify-end sm:justify-start">
         <Clock className="w-4 h-4 text-slate-300" />
         Sincronizado hoje às {lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
       </div>
 
-      {/* Seção de Relatórios */}
       <section className="mt-10 pt-10 border-t border-slate-200/60">
-        <Relatorios
-          dashboardData={data}
-          dashboardLoading={loading}
-          embedded
-        />
+        <Relatorios dashboardData={data} dashboardLoading={loading} embedded />
       </section>
     </div>
   );

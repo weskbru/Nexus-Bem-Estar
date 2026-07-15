@@ -351,6 +351,23 @@ export interface DashboardDTO {
   vagas_ocupadas: number;
   taxa_ocupacao: number;
   total_eventos_ativos: number;
+  vagas_disponiveis: number;
+  proximo_evento: {
+    id: number;
+    titulo: string;
+    data: string;
+    hora_inicio: string;
+    hora_fim: string;
+    total_vagas: number;
+    vagas_ocupadas: number;
+    vagas_livres: number;
+  } | null;
+  pendencias: {
+    total: number;
+    eventos_presenca_pendente: number;
+    pessoas_fila: number;
+    falhas_email: number;
+  };
   agendamentos_recentes: AgendamentoResumoDTO[];
 }
 

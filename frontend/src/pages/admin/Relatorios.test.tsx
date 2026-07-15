@@ -73,6 +73,9 @@ describe('Relatorios', () => {
       vagas_ocupadas: 12,
       taxa_ocupacao: 60,
       total_eventos_ativos: 1,
+      vagas_disponiveis: 8,
+      proximo_evento: null,
+      pendencias: { total: 0, eventos_presenca_pendente: 0, pessoas_fila: 0, falhas_email: 0 },
       agendamentos_recentes: [agendamentoBase],
     });
     vi.spyOn(adminEventosApi, 'listar').mockResolvedValue([
@@ -106,6 +109,9 @@ describe('Relatorios', () => {
           vagas_ocupadas: 12,
           taxa_ocupacao: 60,
           total_eventos_ativos: 1,
+          vagas_disponiveis: 8,
+          proximo_evento: null,
+          pendencias: { total: 0, eventos_presenca_pendente: 0, pessoas_fila: 0, falhas_email: 0 },
           agendamentos_recentes: [agendamentoBase],
         }}
       />,
@@ -122,6 +128,9 @@ describe('Relatorios', () => {
       vagas_ocupadas: 0,
       taxa_ocupacao: 0,
       total_eventos_ativos: 0,
+      vagas_disponiveis: 0,
+      proximo_evento: null,
+      pendencias: { total: 0, eventos_presenca_pendente: 0, pessoas_fila: 0, falhas_email: 0 },
       agendamentos_recentes: [],
     });
     vi.spyOn(adminEventosApi, 'listar').mockResolvedValue([]);

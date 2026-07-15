@@ -22,7 +22,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, Penalidade, Comunicado
+from ..models.models import Usuario, Evento, Horario, ConviteEmail, Agendamento, AgendamentoManual, ListaEspera, Penalidade, Comunicado
 from ..views.permissions import liberar_penalidades_expiradas
 from ..views.colaborador.otp_agendamento_view import cache_key_otp
 
@@ -551,6 +551,9 @@ class AdminDashboardTest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         for campo in ('total_vagas', 'vagas_ocupadas', 'taxa_ocupacao', 'total_eventos_ativos'):
             self.assertIn(campo, resp.data)
+        self.assertIn('proximo_evento', resp.data)
+        self.assertIn('vagas_disponiveis', resp.data)
+        self.assertIn('pendencias', resp.data)
 
     def test_taxa_ocupacao_calculada(self):
         evento = cria_evento(status_evento='publicado', capacidade_por_horario=2)
@@ -558,10 +561,21 @@ class AdminDashboardTest(APITestCase):
         colaborador = cria_colaborador()
         horario = evento.horarios.first()
         Agendamento.objects.create(usuario=colaborador, horario=horario, status='confirmado')
+        AgendamentoManual.objects.create(
+            evento=evento,
+            horario=horario,
+            nome='Participante Manual',
+        )
 
         resp = self.client.get('/api/admin/dashboard/')
         self.assertGreater(resp.data['taxa_ocupacao'], 0)
-        self.assertGreater(resp.data['vagas_ocupadas'], 0)
+        self.assertEqual(resp.data['vagas_ocupadas'], 2)
+        self.assertEqual(
+            resp.data['vagas_disponiveis'],
+            resp.data['total_vagas'] - 2,
+        )
+        self.assertEqual(resp.data['proximo_evento']['id'], evento.id)
+        self.assertEqual(resp.data['proximo_evento']['vagas_ocupadas'], 2)
 
     def test_dashboard_nao_gera_consultas_por_agendamento(self):
         evento = cria_evento(status_evento='publicado', capacidade_por_horario=10)
@@ -579,7 +593,7 @@ class AdminDashboardTest(APITestCase):
             )
 
         cache.clear()
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(6):
             resp = self.client.get('/api/admin/dashboard/')
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
@@ -592,6 +606,40 @@ class AdminDashboardTest(APITestCase):
         with self.assertNumQueries(0):
             resp_cache = self.client.get('/api/admin/dashboard/')
         self.assertEqual(resp_cache.status_code, status.HTTP_200_OK)
+
+    def test_dashboard_retorna_pendencias_operacionais(self):
+        futuro = cria_evento(status_evento='publicado')
+        futuro.gerar_horarios()
+        ListaEspera.objects.create(
+            horario=futuro.horarios.first(),
+            usuario=cria_colaborador(),
+            posicao=1,
+            status='aguardando',
+        )
+        encerrado = cria_evento(
+            status_evento='encerrado',
+            titulo='Evento com presenca pendente',
+        )
+        encerrado.gerar_horarios()
+        Agendamento.objects.create(
+            usuario=cria_colaborador('pendente@empresa.com.br'),
+            horario=encerrado.horarios.first(),
+            status='confirmado',
+            compareceu=None,
+        )
+        cria_evento(
+            status_evento='encerrado',
+            titulo='Evento com falha de email',
+            emails_envio_status='falhou',
+        )
+
+        cache.clear()
+        resp = self.client.get('/api/admin/dashboard/')
+
+        self.assertEqual(resp.data['pendencias']['pessoas_fila'], 1)
+        self.assertEqual(resp.data['pendencias']['eventos_presenca_pendente'], 1)
+        self.assertEqual(resp.data['pendencias']['falhas_email'], 1)
+        self.assertEqual(resp.data['pendencias']['total'], 3)
 
     def test_notificacoes_usam_endpoint_leve(self):
         evento = cria_evento(status_evento='publicado')
