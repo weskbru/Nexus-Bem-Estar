@@ -269,7 +269,7 @@ export default function Manual() {
             <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               <p className="text-sm text-amber-800">
-                Os dados do dashboard são atualizados automaticamente a cada <strong>30 segundos</strong>.
+                As notificações são atualizadas automaticamente a cada <strong>30 segundos</strong>.
                 Você também pode clicar em <strong>"Atualizar"</strong> no ícone de sino para forçar uma atualização.
               </p>
             </div>

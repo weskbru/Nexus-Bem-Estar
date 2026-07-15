@@ -130,6 +130,7 @@ describe('interacoes principais', () => {
     expect(await screen.findByText('123')).toBeInTheDocument();
     expect(screen.getByText('45')).toBeInTheDocument();
     expect(screen.getByText('37%')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('mostra erro quando dashboard falha', async () => {

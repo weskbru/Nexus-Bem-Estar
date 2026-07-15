@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   adminDashboardApi,
   adminEventosApi,
+  adminNotificacoesApi,
   adminPenalidadesApi,
   authApi,
   colaboradorApi,
@@ -184,6 +185,7 @@ describe('api service', () => {
       ausentes_manuais: [4],
     });
     await adminDashboardApi.obter();
+    await adminNotificacoesApi.obter();
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8001/api/admin/eventos/1/',
@@ -199,6 +201,10 @@ describe('api service', () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8001/api/admin/dashboard/',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/admin/notificacoes/',
       expect.objectContaining({ headers: expect.any(Object) }),
     );
   });

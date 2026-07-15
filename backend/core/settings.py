@@ -206,6 +206,9 @@ else:
 # Janela maxima para agendamento de eventos no futuro (em meses)
 EVENTO_MAX_MESES_FUTURO = config('EVENTO_MAX_MESES_FUTURO', default=6, cast=int)
 
+# Cache curto para metricas e notificacoes administrativas.
+DASHBOARD_CACHE_TIMEOUT = config('DASHBOARD_CACHE_TIMEOUT', default=15, cast=int)
+
 # Autenticação — LDAP real ou senha local (mock)
 AUTHENTICATION_BACKENDS = [
     'backend.auth_backends.LDAPOrLocalBackend',

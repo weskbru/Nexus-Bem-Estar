@@ -93,6 +93,12 @@ class Evento(models.Model):
         verbose_name = 'Evento'
         verbose_name_plural = 'Eventos'
         ordering = ['data', 'hora_inicio']
+        indexes = [
+            models.Index(
+                fields=['status', 'data', 'hora_fim'],
+                name='idx_evento_status_data_fim',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.titulo} – {self.data}'

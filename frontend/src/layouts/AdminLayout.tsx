@@ -11,23 +11,8 @@ import {
   Megaphone,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { adminNotificacoesApi } from '../services/api';
 import logoAeb from '../images/logoaeb.png';
-
-type AgendamentoNotificacao = {
-  id: number;
-  colaborador_nome: string;
-  servico: string;
-  data_hora: string;
-  status: 'DISPONIVEL' | 'OCUPADO' | 'CANCELADO';
-};
-
-type EventoResumo = {
-  id: number;
-  titulo: string;
-  data: string;
-  hora_inicio: string;
-  status: string;
-};
 
 type NotificacaoItem = {
   id: string;
@@ -37,12 +22,8 @@ type NotificacaoItem = {
   categoria: 'agendamento' | 'evento_publicado';
 };
 
-type DashboardResumo = {
-  agendamentos: AgendamentoNotificacao[];
-};
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 const NOTIFICACOES_REFRESH_MS = 30000;
+const NOTIFICACOES_DEDUP_MS = 15000;
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('pt-BR', {
@@ -66,6 +47,7 @@ export default function AdminLayout() {
   const [notificacoes, setNotificacoes] = useState<NotificacaoItem[]>([]);
   const [abrirNotificacoes, setAbrirNotificacoes] = useState(false);
   const notificacoesRef = useRef<HTMLDivElement | null>(null);
+  const ultimaConsultaNotificacoesRef = useRef(0);
 
   function handleLogout() {
     logout();
@@ -78,7 +60,7 @@ export default function AdminLayout() {
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      fetchNotificacoes();
+      if (!document.hidden) fetchNotificacoes();
     }, NOTIFICACOES_REFRESH_MS);
 
     function handleFocus() {
@@ -132,27 +114,20 @@ export default function AdminLayout() {
     };
   }, [abrirNotificacoes]);
 
-  async function fetchNotificacoes() {
+  async function fetchNotificacoes(forcar = false) {
+    const agora = Date.now();
+    if (
+      !forcar &&
+      agora - ultimaConsultaNotificacoesRef.current < NOTIFICACOES_DEDUP_MS
+    ) {
+      return;
+    }
+    ultimaConsultaNotificacoesRef.current = agora;
+
     try {
-      const token = localStorage.getItem('access_token');
-      const headers = {
-        Authorization: `Bearer ${token}`,
-      };
-
-      const [dashboardRes, eventosRes] = await Promise.all([
-        fetch(`${API_BASE}/admin/dashboard/`, { headers }),
-        fetch(`${API_BASE}/admin/eventos/`, { headers }),
-      ]);
-
-      const agendamentos: AgendamentoNotificacao[] = dashboardRes.ok
-        ? ((await dashboardRes.json()) as DashboardResumo).agendamentos ?? []
-        : [];
-      const eventos: EventoResumo[] = eventosRes.ok
-        ? await eventosRes.json()
-        : [];
+      const { agendamentos, eventos } = await adminNotificacoesApi.obter();
 
       const agendamentosItens: NotificacaoItem[] = agendamentos
-        .filter((a) => a.status === 'OCUPADO')
         .map((a) => ({
           id: `agendamento-${a.id}`,
           titulo: a.colaborador_nome,
@@ -289,7 +264,7 @@ export default function AdminLayout() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold text-slate-900">Notificações</h3>
                   <button
-                    onClick={fetchNotificacoes}
+                    onClick={() => fetchNotificacoes(true)}
                     className="text-xs text-blue-600 hover:text-blue-700"
                   >
                     Atualizar

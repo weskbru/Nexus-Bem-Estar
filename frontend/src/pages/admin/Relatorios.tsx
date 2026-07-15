@@ -1,10 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Download, Award, FileText, PieChart, BarChart2, AlertCircle, Clock } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { adminDashboardApi, adminEventosApi, type EventoDTO, type AgendamentoDTO } from '../../services/api';
+import {
+  adminDashboardApi,
+  adminEventosApi,
+  type AgendamentoResumoDTO,
+  type DashboardDTO,
+  type EventoDTO,
+} from '../../services/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function exportarXLSX(eventos: EventoDTO[], agendamentos: AgendamentoDTO[]) {
+function exportarXLSX(eventos: EventoDTO[], agendamentos: AgendamentoResumoDTO[]) {
   const wb = XLSX.utils.book_new();
 
   // ── Planilha 1: Eventos ──────────────────────────────────────────────────
@@ -142,18 +148,45 @@ function Skeleton({ className }: SkeletonProps) {
 
 // ── Página Principal ──────────────────────────────────────────────────────────
 
-export default function Relatorios() {
+type RelatoriosProps = Readonly<{
+  dashboardData?: DashboardDTO | null;
+  dashboardLoading?: boolean;
+  embedded?: boolean;
+}>;
+
+export default function Relatorios({
+  dashboardData = null,
+  dashboardLoading = false,
+  embedded = false,
+}: RelatoriosProps = {}) {
   const [eventos, setEventos] = useState<EventoDTO[]>([]);
-  const [agendamentos, setAgendamentos] = useState<AgendamentoDTO[]>([]);
+  const [agendamentos, setAgendamentos] = useState<AgendamentoResumoDTO[]>(
+    dashboardData?.agendamentos_recentes ?? [],
+  );
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
+    if (embedded && dashboardLoading) return;
+
     async function carregar() {
+      setLoading(true);
+      setErro('');
       try {
+        if (embedded) {
+          if (!dashboardData) {
+            setAgendamentos([]);
+            setEventos([]);
+            return;
+          }
+          const evts = await adminEventosApi.listar();
+          setAgendamentos(dashboardData.agendamentos_recentes ?? []);
+          setEventos(evts);
+          return;
+        }
+
         const [dash, evts] = await Promise.all([
-          adminDashboardApi.obter(),
-          adminEventosApi.listar(),
+          adminDashboardApi.obter(), adminEventosApi.listar(),
         ]);
         setAgendamentos(dash.agendamentos_recentes ?? []);
         setEventos(evts);
@@ -164,7 +197,7 @@ export default function Relatorios() {
       }
     }
     carregar();
-  }, []);
+  }, [dashboardData, dashboardLoading, embedded]);
 
   // ── Derivações Analíticas ──────────────────────────────────────────────────
 

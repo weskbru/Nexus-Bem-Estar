@@ -5,7 +5,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as XLSX from 'xlsx';
-import { adminDashboardApi, adminEventosApi, type AgendamentoDTO, type EventoDTO } from '../../services/api';
+import { adminDashboardApi, adminEventosApi, type AgendamentoResumoDTO, type EventoDTO } from '../../services/api';
 import Relatorios from './Relatorios';
 
 vi.mock('xlsx', () => ({
@@ -35,7 +35,7 @@ const eventoBase: EventoDTO = {
   horarios: [],
 };
 
-const agendamentoBase: AgendamentoDTO = {
+const agendamentoBase: AgendamentoResumoDTO = {
   id: 1,
   usuario: {
     id: 2,
@@ -51,14 +51,12 @@ const agendamentoBase: AgendamentoDTO = {
     hora_inicio: '09:00',
     hora_fim: '09:30',
     vagas_disponiveis: 2,
-    vagas_ocupadas: 1,
-    vagas_livres: 1,
-    disponivel: true,
   },
   status: 'CONFIRMADO',
   evento_titulo: 'Massagem laboral',
   evento_data: '2026-07-20',
   nome_profissional: 'Profissional AEB',
+  evento_id: 1,
   criado_em: '2026-07-10T10:00:00',
 };
 
@@ -94,6 +92,28 @@ describe('Relatorios', () => {
     expect(XLSX.utils.book_new).toHaveBeenCalled();
     expect(XLSX.utils.book_append_sheet).toHaveBeenCalledTimes(3);
     expect(XLSX.writeFile).toHaveBeenCalledWith(expect.anything(), expect.stringMatching(/^relatorio-aeb-/));
+  });
+
+  it('reutiliza o dashboard recebido quando esta embutido', async () => {
+    const dashboardSpy = vi.spyOn(adminDashboardApi, 'obter');
+    vi.spyOn(adminEventosApi, 'listar').mockResolvedValue([eventoBase]);
+
+    render(
+      <Relatorios
+        embedded
+        dashboardData={{
+          total_vagas: 20,
+          vagas_ocupadas: 12,
+          taxa_ocupacao: 60,
+          total_eventos_ativos: 1,
+          agendamentos_recentes: [agendamentoBase],
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('Maria Silva')).toBeInTheDocument();
+    expect(dashboardSpy).not.toHaveBeenCalled();
+    expect(adminEventosApi.listar).toHaveBeenCalledTimes(1);
   });
 
   it('mostra estados vazios quando nao ha dados', async () => {
