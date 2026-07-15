@@ -67,12 +67,11 @@ class DashboardSerializer(serializers.Serializer):
     agendamentos_recentes = DashboardAgendamentoSerializer(many=True)
 
 
-class AgendamentoNotificacaoSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    colaborador_nome = serializers.CharField()
-    servico = serializers.CharField()
-    data_hora = serializers.DateTimeField()
-    status = serializers.CharField()
+class ConfirmacoesNotificacaoSerializer(serializers.Serializer):
+    evento_id = serializers.IntegerField()
+    evento_titulo = serializers.CharField()
+    quantidade = serializers.IntegerField()
+    ultima_confirmacao = serializers.DateTimeField()
 
 
 class EventoNotificacaoSerializer(serializers.Serializer):
@@ -84,5 +83,5 @@ class EventoNotificacaoSerializer(serializers.Serializer):
 
 
 class AdminNotificacoesSerializer(serializers.Serializer):
-    agendamentos = AgendamentoNotificacaoSerializer(many=True)
+    confirmacoes = ConfirmacoesNotificacaoSerializer(many=True)
     eventos = EventoNotificacaoSerializer(many=True)
