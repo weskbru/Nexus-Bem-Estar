@@ -247,23 +247,23 @@ export default function Manual() {
           {/* ── Dashboard ── */}
           <Secao id="admin-dashboard" icon={LayoutDashboard} titulo="Dashboard" cor="border-blue-400">
             <p className="text-slate-600 mb-4 text-sm">
-              O Dashboard é a página inicial do painel administrativo. Ele exibe uma visão geral e em tempo real da situação dos agendamentos.
+              O Dashboard é a página inicial do painel administrativo. Ele apresenta um resumo operacional dos próximos eventos e das ações que exigem atenção.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <div className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm">
-                <p className="text-2xl font-extrabold text-slate-900">—</p>
-                <p className="text-xs font-semibold text-slate-500 mt-1">Total de Vagas</p>
-                <p className="text-xs text-slate-400 mt-1">Soma de todos os horários criados nos eventos ativos</p>
+                <p className="text-2xl font-extrabold text-slate-900">Próximo</p>
+                <p className="text-xs font-semibold text-slate-500 mt-1">Próximo Evento</p>
+                <p className="text-xs text-slate-400 mt-1">Data, horário e ocupação da próxima atividade publicada</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm">
                 <p className="text-2xl font-extrabold text-slate-900">—</p>
-                <p className="text-xs font-semibold text-slate-500 mt-1">Vagas Ocupadas</p>
-                <p className="text-xs text-slate-400 mt-1">Quantidade de agendamentos confirmados</p>
+                <p className="text-xs font-semibold text-slate-500 mt-1">Agenda Futura</p>
+                <p className="text-xs text-slate-400 mt-1">Quantidade de eventos e totais agrupados de vagas livres e ocupadas</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm">
-                <p className="text-2xl font-extrabold text-slate-900">—%</p>
-                <p className="text-xs font-semibold text-slate-500 mt-1">Taxa de Ocupação</p>
-                <p className="text-xs text-slate-400 mt-1">Percentual de vagas preenchidas</p>
+                <p className="text-2xl font-extrabold text-slate-900">—</p>
+                <p className="text-xs font-semibold text-slate-500 mt-1">Pendências</p>
+                <p className="text-xs text-slate-400 mt-1">Presenças, fila de espera e falhas de envio que precisam de ação</p>
               </div>
             </div>
             <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex gap-3">

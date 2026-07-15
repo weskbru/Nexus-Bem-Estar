@@ -113,6 +113,25 @@ describe('interacoes principais', () => {
           total_vagas: 123,
           vagas_ocupadas: 45,
           taxa_ocupacao: 37,
+          total_eventos_ativos: 2,
+          vagas_disponiveis: 78,
+          proximo_evento: {
+            id: 10,
+            titulo: 'Massagem laboral',
+            data: '2026-07-20',
+            hora_inicio: '09:00:00',
+            hora_fim: '10:00:00',
+            total_vagas: 20,
+            vagas_ocupadas: 15,
+            vagas_livres: 5,
+          },
+          pendencias: {
+            total: 7,
+            eventos_presenca_pendente: 2,
+            pessoas_fila: 4,
+            falhas_email: 1,
+          },
+          agendamentos_recentes: [],
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -127,9 +146,13 @@ describe('interacoes principais', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('123')).toBeInTheDocument();
-    expect(screen.getByText('45')).toBeInTheDocument();
-    expect(screen.getByText('37%')).toBeInTheDocument();
+    expect(await screen.findByText('Massagem laboral')).toBeInTheDocument();
+    expect(screen.getByText('123 vagas no total da agenda')).toBeInTheDocument();
+    expect(screen.getByText('78 livres')).toBeInTheDocument();
+    expect(screen.getByText('45 ocupadas')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.getByText('eventos')).toBeInTheDocument();
+    expect(screen.queryByText('+5%')).not.toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
