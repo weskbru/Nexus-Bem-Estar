@@ -50,7 +50,7 @@ describe('AuthContext', () => {
     });
     vi.stubGlobal('localStorage', localStorageMock);
 
-    let auth: ReturnType<typeof useAuth> | null = null;
+    let auth!: ReturnType<typeof useAuth>;
     function Probe() {
       auth = useAuth();
       return null;
@@ -78,7 +78,7 @@ describe('AuthContext', () => {
       usuario: usuarioAdmin,
     });
 
-    let auth: ReturnType<typeof useAuth> | null = null;
+    let auth!: ReturnType<typeof useAuth>;
     function Probe() {
       auth = useAuth();
       return null;
@@ -90,7 +90,7 @@ describe('AuthContext', () => {
       </AuthProvider>,
     );
 
-    await auth?.loginAdmin('admin@aeb.gov.br', 'senha');
+    await auth.loginAdmin('admin@aeb.gov.br', 'senha');
 
     expect(authApi.login).toHaveBeenCalledWith('admin@aeb.gov.br', 'senha');
     expect(localStorageMock.setItem).toHaveBeenCalledWith('access_token', 'access-token');
@@ -106,7 +106,7 @@ describe('AuthContext', () => {
       chave_mensagem: 'convite',
     });
 
-    let auth: ReturnType<typeof useAuth> | null = null;
+    let auth!: ReturnType<typeof useAuth>;
     function Probe() {
       auth = useAuth();
       return null;
@@ -118,12 +118,12 @@ describe('AuthContext', () => {
       </AuthProvider>,
     );
 
-    await expect(auth?.loginViaToken('abc')).resolves.toEqual({ evento_id: 45 });
+    await expect(auth.loginViaToken('abc')).resolves.toEqual({ evento_id: 45 });
     expect(localStorageMock.setItem).toHaveBeenCalledWith('access_token', 'access-token');
   });
 
   it('salva e remove sessao via metodos diretos', () => {
-    let auth: ReturnType<typeof useAuth> | null = null;
+    let auth!: ReturnType<typeof useAuth>;
     function Probe() {
       auth = useAuth();
       return null;
@@ -135,11 +135,11 @@ describe('AuthContext', () => {
       </AuthProvider>,
     );
 
-    auth?.loginViaEmail('email-token', usuarioAdmin);
+    auth.loginViaEmail('email-token', usuarioAdmin);
     expect(localStorageMock.setItem).toHaveBeenCalledWith('access_token', 'email-token');
     expect(localStorageMock.setItem).toHaveBeenCalledWith('usuario', JSON.stringify(usuarioAdmin));
 
-    auth?.logout();
+    auth.logout();
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('access_token');
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('usuario');
   });

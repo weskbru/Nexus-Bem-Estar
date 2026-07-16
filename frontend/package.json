@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:typecheck": "tsc -p tsconfig.test.json",
     "test:coverage": "vitest run --coverage && node scripts/prefix-lcov-paths.mjs"
   },
   "dependencies": {
