@@ -1,45 +1,37 @@
 import { renderToString } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthProvider } from '../contexts/AuthContext';
-import Login from './Login';
-import LoginColaborador from './LoginColaborador';
-import Dashboard from './admin/Dashboard';
-import AdminEventos from './admin/EventosAgendados';
-import NovoEvento from './admin/NovoEvento';
-import EditarEvento from './admin/EditarEvento';
-import GestaoUsuarios from './admin/GestaoUsuarios';
-import Comunicados from './admin/Comunicados';
-import Manual from './admin/Manual';
-import Penalidades from './admin/Penalidades';
-import Relatorios from './admin/Relatorios';
-import AcessoViaToken from './AcessoViaToken';
-import AcessarEvento from './AcessarEvento';
-import ConfirmarVagaListaEspera from './ConfirmarVagaListaEspera';
-import EventDetails from './colaborador/EventDetails';
-import Confirmacao from './colaborador/Confirmacao';
-import AdminLayout from '../layouts/AdminLayout';
-import ColaboradorLayout from '../layouts/ColaboradorLayout';
-import ProtectedRoute from '../components/ProtectedRoute';
+import ProtectedRoute from '../../components/ProtectedRoute';
+import { AuthProvider } from '../../contexts/AuthContext';
+import AdminLayout from '../../layouts/AdminLayout';
+import ColaboradorLayout from '../../layouts/ColaboradorLayout';
+import AcessarEvento from '../../pages/AcessarEvento';
+import AcessoViaToken from '../../pages/AcessoViaToken';
+import ConfirmarVagaListaEspera from '../../pages/ConfirmarVagaListaEspera';
+import Login from '../../pages/Login';
+import LoginColaborador from '../../pages/LoginColaborador';
+import Comunicados from '../../pages/admin/Comunicados';
+import Dashboard from '../../pages/admin/Dashboard';
+import EditarEvento from '../../pages/admin/EditarEvento';
+import AdminEventos from '../../pages/admin/EventosAgendados';
+import GestaoUsuarios from '../../pages/admin/GestaoUsuarios';
+import Manual from '../../pages/admin/Manual';
+import NovoEvento from '../../pages/admin/NovoEvento';
+import Penalidades from '../../pages/admin/Penalidades';
+import Relatorios from '../../pages/admin/Relatorios';
+import Confirmacao from '../../pages/colaborador/Confirmacao';
+import EventDetails from '../../pages/colaborador/EventDetails';
 
-vi.mock('react-quill-new', () => ({
-  default: () => null,
-}));
+vi.mock('react-quill-new', () => ({ default: () => null }));
 
 function createLocalStorageMock(initial: Record<string, string> = {}) {
   const store = new Map(Object.entries(initial));
 
   return {
     getItem: vi.fn((key: string) => store.get(key) ?? null),
-    setItem: vi.fn((key: string, value: string) => {
-      store.set(key, value);
-    }),
-    removeItem: vi.fn((key: string) => {
-      store.delete(key);
-    }),
-    clear: vi.fn(() => {
-      store.clear();
-    }),
+    setItem: vi.fn((key: string, value: string) => store.set(key, value)),
+    removeItem: vi.fn((key: string) => store.delete(key)),
+    clear: vi.fn(() => store.clear()),
   };
 }
 
@@ -63,39 +55,32 @@ function renderWithAuth(element: React.ReactNode, initialEntries = ['/admin']) {
 
 describe('renderizacao inicial das telas principais', () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      'localStorage',
-      createLocalStorageMock({
-        access_token: 'token',
-        usuario: JSON.stringify(usuarioAdmin),
-      }),
-    );
+    vi.stubGlobal('localStorage', createLocalStorageMock({
+      access_token: 'token',
+      usuario: JSON.stringify(usuarioAdmin),
+    }));
   });
 
   it('renderiza login administrativo', () => {
     const html = renderWithAuth(<Login />, ['/admin/login']);
-
     expect(html).toContain('Agenda Bem-Estar');
     expect(html).toContain('Acesso Restrito');
   });
 
   it('renderiza login do colaborador', () => {
     const html = renderToString(<LoginColaborador />);
-
     expect(html).toContain('Agenda Bem-Estar');
     expect(html).toContain('Palavra-chave');
   });
 
   it('renderiza dashboard em estado inicial', () => {
     const html = renderWithAuth(<Dashboard />);
-
     expect(html).toContain('Vis');
     expect(html).toContain('Criar Novo Evento');
   });
 
   it('renderiza layout administrativo com menu de superadmin', () => {
     const html = renderWithAuth(<AdminLayout />);
-
     expect(html).toContain('Painel Administrativo');
     expect(html).toContain('Gest');
     expect(html).toContain('Comunicados');
@@ -103,7 +88,6 @@ describe('renderizacao inicial das telas principais', () => {
 
   it('renderiza layout de colaborador autenticado', () => {
     const html = renderWithAuth(<ColaboradorLayout />, ['/colaborador/eventos']);
-
     expect(html).toContain('Agenda Bem-Estar');
     expect(html).toContain('Sistema Interno');
   });
@@ -114,7 +98,6 @@ describe('renderizacao inicial das telas principais', () => {
         <span>Conteudo protegido</span>
       </ProtectedRoute>,
     );
-
     expect(html).toContain('Conteudo protegido');
   });
 
@@ -134,7 +117,6 @@ describe('renderizacao inicial das telas principais', () => {
     ['confirmacao', <Confirmacao />, ['/colaborador/confirmacao']],
   ])('renderiza %s sem quebrar', (_nome, element, route) => {
     const html = renderWithAuth(element, route);
-
     expect(html.length).toBeGreaterThan(0);
   });
 });
