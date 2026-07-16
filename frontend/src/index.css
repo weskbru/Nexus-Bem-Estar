@@ -8,6 +8,14 @@ body {
 	font-family: var(--font-sans);
 }
 
+button:not(:disabled) {
+	cursor: pointer;
+}
+
+button:disabled {
+	cursor: not-allowed;
+}
+
 .email-editor .ql-toolbar.ql-snow {
 	border: none;
 	border-bottom: 1px solid rgb(226 232 240);

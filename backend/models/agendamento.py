@@ -38,6 +38,13 @@ class Agendamento(models.Model):
         # Um usuário pode ter apenas um agendamento ativo por evento
         unique_together = [('usuario', 'horario')]
         ordering = ['-criado_em']
+        indexes = [
+            models.Index(fields=['-criado_em'], name='idx_agendamento_criado'),
+            models.Index(
+                fields=['status', '-criado_em'],
+                name='idx_ag_status_criado',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.usuario.nome} – {self.horario} [{self.status}]'

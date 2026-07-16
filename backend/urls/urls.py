@@ -5,7 +5,7 @@ from ..views.admin.usuario_viewset import AdminUsuarioViewSet
 from ..views.admin.agendamento_viewset import AdminAgendamentoViewSet
 from ..views.admin.evento_viewset import AdminEventoViewSet
 from ..views.admin.penalidade_viewset import AdminPenalidadeViewSet
-from ..views.admin.dashboard_view import AdminDashboardView
+from ..views.admin.dashboard_view import AdminDashboardView, AdminNotificacoesView
 from ..views.admin.ldap_views import LdapSearchView, PromoverAdminView, RevogarAdminView, ListarAdminsView
 from ..views.admin.comunicado_view import AdminComunicadoView, AdminComunicadoDetailView
 from ..views.auth.login_view import AdminLoginView
@@ -39,6 +39,7 @@ urlpatterns = [
     # Admin
     # -----------------------------------------------------------------------
     path('admin/dashboard/',                          AdminDashboardView.as_view(),  name='admin-dashboard'),
+    path('admin/notificacoes/',                      AdminNotificacoesView.as_view(), name='admin-notificacoes'),
     path('admin/ldap/buscar/',                        LdapSearchView.as_view(),      name='ldap-buscar'),
     path('admin/ldap/promover/',                      PromoverAdminView.as_view(),   name='ldap-promover'),
     path('admin/ldap/revogar/<int:usuario_id>/',      RevogarAdminView.as_view(),    name='ldap-revogar'),

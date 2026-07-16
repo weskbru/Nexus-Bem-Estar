@@ -11,23 +11,7 @@ import {
   Megaphone,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import logoAeb from '../images/logoaeb.png';
-
-type AgendamentoNotificacao = {
-  id: number;
-  colaborador_nome: string;
-  servico: string;
-  data_hora: string;
-  status: 'DISPONIVEL' | 'OCUPADO' | 'CANCELADO';
-};
-
-type EventoResumo = {
-  id: number;
-  titulo: string;
-  data: string;
-  hora_inicio: string;
-  status: string;
-};
+import { adminNotificacoesApi } from '../services/api';
 
 type NotificacaoItem = {
   id: string;
@@ -37,12 +21,8 @@ type NotificacaoItem = {
   categoria: 'agendamento' | 'evento_publicado';
 };
 
-type DashboardResumo = {
-  agendamentos: AgendamentoNotificacao[];
-};
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 const NOTIFICACOES_REFRESH_MS = 30000;
+const NOTIFICACOES_DEDUP_MS = 15000;
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('pt-BR', {
@@ -66,6 +46,7 @@ export default function AdminLayout() {
   const [notificacoes, setNotificacoes] = useState<NotificacaoItem[]>([]);
   const [abrirNotificacoes, setAbrirNotificacoes] = useState(false);
   const notificacoesRef = useRef<HTMLDivElement | null>(null);
+  const ultimaConsultaNotificacoesRef = useRef(0);
 
   function handleLogout() {
     logout();
@@ -78,7 +59,7 @@ export default function AdminLayout() {
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      fetchNotificacoes();
+      if (!document.hidden) fetchNotificacoes();
     }, NOTIFICACOES_REFRESH_MS);
 
     function handleFocus() {
@@ -132,32 +113,25 @@ export default function AdminLayout() {
     };
   }, [abrirNotificacoes]);
 
-  async function fetchNotificacoes() {
+  async function fetchNotificacoes(forcar = false) {
+    const agora = Date.now();
+    if (
+      !forcar &&
+      agora - ultimaConsultaNotificacoesRef.current < NOTIFICACOES_DEDUP_MS
+    ) {
+      return;
+    }
+    ultimaConsultaNotificacoesRef.current = agora;
+
     try {
-      const token = localStorage.getItem('access_token');
-      const headers = {
-        Authorization: `Bearer ${token}`,
-      };
+      const { confirmacoes, eventos } = await adminNotificacoesApi.obter();
 
-      const [dashboardRes, eventosRes] = await Promise.all([
-        fetch(`${API_BASE}/admin/dashboard/`, { headers }),
-        fetch(`${API_BASE}/admin/eventos/`, { headers }),
-      ]);
-
-      const agendamentos: AgendamentoNotificacao[] = dashboardRes.ok
-        ? ((await dashboardRes.json()) as DashboardResumo).agendamentos ?? []
-        : [];
-      const eventos: EventoResumo[] = eventosRes.ok
-        ? await eventosRes.json()
-        : [];
-
-      const agendamentosItens: NotificacaoItem[] = agendamentos
-        .filter((a) => a.status === 'OCUPADO')
-        .map((a) => ({
-          id: `agendamento-${a.id}`,
-          titulo: a.colaborador_nome,
-          subtitulo: a.servico,
-          data_hora: a.data_hora,
+      const confirmacoesItens: NotificacaoItem[] = confirmacoes
+        .map((confirmacao) => ({
+          id: `agendamento-evento-${confirmacao.evento_id}`,
+          titulo: `${confirmacao.quantidade} ${confirmacao.quantidade === 1 ? 'agendamento confirmado' : 'agendamentos confirmados'}`,
+          subtitulo: confirmacao.evento_titulo,
+          data_hora: confirmacao.ultima_confirmacao,
           categoria: 'agendamento',
         }));
 
@@ -174,7 +148,7 @@ export default function AdminLayout() {
           categoria: 'evento_publicado',
         }));
 
-      const itens = [...agendamentosItens, ...eventosItens]
+      const itens = [...confirmacoesItens, ...eventosItens]
         .sort((a, b) => new Date(b.data_hora).getTime() - new Date(a.data_hora).getTime())
         .slice(0, 8);
 
@@ -187,16 +161,11 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col fixed inset-y-0 left-0 z-20">
-        <div className="h-20 flex items-center px-6 border-b border-slate-200">
-          <img
-            src={logoAeb}
-            alt="Logo AEB"
-            className="h-10 w-auto mr-3"
-          />
-          <div>
-            <div className="font-semibold text-slate-900 leading-tight whitespace-nowrap">Agenda Bem-Estar</div>
-            <div className="text-xs text-slate-500">Painel Administrativo</div>
+      <aside className="w-64 min-w-[16rem] bg-white border-r border-slate-200 flex flex-col fixed inset-y-0 left-0 z-20 overflow-x-hidden">
+        <div className="h-16 flex items-center px-6 border-b border-slate-200">
+          <div className="min-w-0">
+            <div className="font-semibold text-slate-900 leading-tight truncate">Agenda Bem-Estar</div>
+            <div className="text-xs text-slate-500 truncate">Painel Administrativo</div>
           </div>
         </div>
 
@@ -215,7 +184,7 @@ export default function AdminLayout() {
               }
             >
               <Icon className="w-5 h-5 mr-3 shrink-0" />
-              {label}
+              <span className="truncate">{label}</span>
             </NavLink>
           ))}
 
@@ -232,7 +201,7 @@ export default function AdminLayout() {
               }
             >
               <ShieldCheck className="w-5 h-5 mr-3 shrink-0" />
-              Gestão de Usuários
+              <span className="truncate">Gestão de Usuários</span>
             </NavLink>
           )}
         </nav>
@@ -260,7 +229,7 @@ export default function AdminLayout() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 ml-64 flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 ml-64 flex flex-col min-h-screen">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-end px-8 sticky top-0 z-10">
           <div ref={notificacoesRef} className="relative flex items-center gap-4 text-slate-500">
@@ -289,7 +258,7 @@ export default function AdminLayout() {
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold text-slate-900">Notificações</h3>
                   <button
-                    onClick={fetchNotificacoes}
+                    onClick={() => fetchNotificacoes(true)}
                     className="text-xs text-blue-600 hover:text-blue-700"
                   >
                     Atualizar
@@ -305,7 +274,7 @@ export default function AdminLayout() {
                         <p className="text-sm text-slate-800 font-medium truncate">{n.titulo}</p>
                         <p className="text-xs text-slate-600 truncate">{n.subtitulo}</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                          {n.categoria === 'evento_publicado' ? 'Evento publicado' : 'Agendamento confirmado'}
+                          {n.categoria === 'evento_publicado' ? 'Evento publicado' : 'Última confirmação'}
                         </p>
                         <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(n.data_hora)}</p>
                       </li>

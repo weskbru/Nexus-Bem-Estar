@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .agendamento import AgendamentoSerializer
+from .dashboard import DashboardSerializer
 from .usuario import UsuarioSerializer
 
 
@@ -60,14 +60,6 @@ class EventoPublicoSerializer(serializers.Serializer):
     hora_fim = serializers.TimeField()
     nome_profissional = serializers.CharField()
     requer_palavra_chave = serializers.BooleanField()
-
-
-class DashboardSerializer(serializers.Serializer):
-    total_vagas = serializers.IntegerField()
-    vagas_ocupadas = serializers.IntegerField()
-    taxa_ocupacao = serializers.FloatField()
-    total_eventos_ativos = serializers.IntegerField()
-    agendamentos_recentes = AgendamentoSerializer(many=True)
 
 
 class LdapUsuarioSerializer(serializers.Serializer):
