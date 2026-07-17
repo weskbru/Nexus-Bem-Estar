@@ -17,7 +17,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
 
 function StatSkeleton() {
   return (
-    <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 animate-pulse">
+    <div className="bg-white p-5 sm:p-6 2xl:p-8 rounded-3xl shadow-sm border border-slate-100 animate-pulse">
       <div className="flex items-center justify-between mb-6">
         <div className="h-3 w-24 bg-slate-200 rounded-full" />
         <div className="w-12 h-12 bg-slate-100 rounded-2xl" />
@@ -77,8 +77,8 @@ export default function Dashboard() {
   const rotuloEventosFuturos = totalEventosFuturos === 1 ? 'evento' : 'eventos';
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-10">
+    <div className="max-w-7xl mx-auto py-5 sm:py-8 px-0 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 sm:gap-6 mb-8 sm:mb-10">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Visão Geral</h1>
           <p className="text-slate-500 font-medium mt-1.5 text-sm sm:text-base">
@@ -109,7 +109,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 lg:gap-8 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6 xl:gap-8 mb-6">
         {loading ? (
           <>
             <StatSkeleton />
@@ -118,7 +118,7 @@ export default function Dashboard() {
           </>
         ) : (
           <>
-            <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-blue-100 transition-all duration-300 hover:-translate-y-1">
+            <div className="group bg-white p-5 sm:p-6 2xl:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-blue-100 transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-start justify-between mb-5">
                 <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Próximo Evento</h3>
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 group-hover:bg-blue-100 rounded-2xl flex items-center justify-center transition-colors">
@@ -149,7 +149,7 @@ export default function Dashboard() {
               )}
             </div>
 
-            <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-indigo-100 transition-all duration-300 hover:-translate-y-1">
+            <div className="group bg-white p-5 sm:p-6 2xl:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-indigo-100 transition-all duration-300 hover:-translate-y-1">
               <div className="flex items-start justify-between mb-6">
                 <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Agenda Futura</h3>
                 <div className="w-12 h-12 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 rounded-2xl flex items-center justify-center transition-colors">
@@ -175,7 +175,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="group bg-white p-6 md:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-amber-100 transition-all duration-300 hover:-translate-y-1 sm:col-span-2 md:col-span-1">
+            <div className="group bg-white p-5 sm:p-6 2xl:p-8 rounded-3xl shadow-sm hover:shadow-xl hover:shadow-slate-200/50 border border-slate-100 hover:border-amber-100 transition-all duration-300 hover:-translate-y-1 sm:col-span-2 xl:col-span-1">
               <div className="flex items-start justify-between mb-6">
                 <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mt-1">Pendências</h3>
                 <div className="w-12 h-12 bg-amber-50 text-amber-600 group-hover:bg-amber-100 rounded-2xl flex items-center justify-center transition-colors">
