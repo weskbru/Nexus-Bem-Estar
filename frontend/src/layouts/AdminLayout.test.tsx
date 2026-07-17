@@ -102,4 +102,30 @@ describe('AdminLayout', () => {
     fireEvent.click(screen.getByTitle(/manual do sistema/i));
     expect(await screen.findByText('Manual aberto')).toBeInTheDocument();
   });
+
+  it('abre e fecha o menu compacto sem bloquear o conteudo', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      confirmacoes: [],
+      eventos: [],
+    })));
+    renderLayout();
+
+    const botaoMenu = screen.getByRole('button', { name: /abrir menu principal/i });
+    expect(botaoMenu).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(botaoMenu);
+
+    expect(botaoMenu).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('admin-sidebar')).toHaveClass('translate-x-0', 'visible');
+    expect(document.body.style.overflow).toBe('hidden');
+
+    fireEvent.click(screen.getByRole('button', { name: /^fechar menu$/i }));
+
+    expect(screen.getByTestId('admin-sidebar')).toHaveClass('-translate-x-full', 'invisible');
+    await waitFor(() => expect(document.body.style.overflow).toBe(''));
+
+    fireEvent.click(botaoMenu);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByTestId('admin-sidebar')).toHaveClass('-translate-x-full', 'invisible');
+  });
 });
