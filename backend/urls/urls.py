@@ -2,9 +2,12 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from ..views.admin.usuario_viewset import AdminUsuarioViewSet
-from ..views.admin.evento_viewset import AdminEventoViewSet, AdminAgendamentoViewSet
-from ..views.admin.dashboard_view import AdminDashboardView
+from ..views.admin.agendamento_viewset import AdminAgendamentoViewSet
+from ..views.admin.evento_viewset import AdminEventoViewSet
+from ..views.admin.penalidade_viewset import AdminPenalidadeViewSet
+from ..views.admin.dashboard_view import AdminDashboardView, AdminNotificacoesView
 from ..views.admin.ldap_views import LdapSearchView, PromoverAdminView, RevogarAdminView, ListarAdminsView
+from ..views.admin.comunicado_view import AdminComunicadoView, AdminComunicadoDetailView
 from ..views.auth.login_view import AdminLoginView
 from ..views.auth.acesso_view import AcessoViaTokenView, EventoPublicoView, AcessarEventoView
 from ..views.auth.otp_view import SolicitarAcessoView, VerificarCodigoView
@@ -12,11 +15,13 @@ from ..views.auth.confirmar_vaga_view import ConfirmarVagaListaEsperaView
 from ..views.colaborador.evento_view import EventoListView, EventoDetailView
 from ..views.colaborador.agendamento_view import ReservarHorarioView, CancelarAgendamentoView, MeusAgendamentosView
 from ..views.colaborador.lista_espera_view import EntrarListaEsperaView, MinhaListaEsperaView
+from ..views.colaborador.otp_agendamento_view import SolicitarOTPAgendamentoView
 
 router = DefaultRouter()
-router.register(r'admin/usuarios',     AdminUsuarioViewSet,    basename='admin-usuarios')
-router.register(r'admin/eventos',      AdminEventoViewSet,     basename='admin-eventos')
-router.register(r'admin/agendamentos', AdminAgendamentoViewSet, basename='admin-agendamentos')
+router.register(r'admin/usuarios',     AdminUsuarioViewSet,      basename='admin-usuarios')
+router.register(r'admin/eventos',      AdminEventoViewSet,       basename='admin-eventos')
+router.register(r'admin/agendamentos', AdminAgendamentoViewSet,  basename='admin-agendamentos')
+router.register(r'admin/penalidades',  AdminPenalidadeViewSet,   basename='admin-penalidades')
 
 urlpatterns = [
     # -----------------------------------------------------------------------
@@ -34,10 +39,13 @@ urlpatterns = [
     # Admin
     # -----------------------------------------------------------------------
     path('admin/dashboard/',                          AdminDashboardView.as_view(),  name='admin-dashboard'),
+    path('admin/notificacoes/',                      AdminNotificacoesView.as_view(), name='admin-notificacoes'),
     path('admin/ldap/buscar/',                        LdapSearchView.as_view(),      name='ldap-buscar'),
     path('admin/ldap/promover/',                      PromoverAdminView.as_view(),   name='ldap-promover'),
     path('admin/ldap/revogar/<int:usuario_id>/',      RevogarAdminView.as_view(),    name='ldap-revogar'),
     path('admin/ldap/admins/',                        ListarAdminsView.as_view(),    name='ldap-admins'),
+    path('admin/comunicados/',                        AdminComunicadoView.as_view(),       name='admin-comunicados'),
+    path('admin/comunicados/<int:pk>/',               AdminComunicadoDetailView.as_view(),  name='admin-comunicado-detail'),
 
     # -----------------------------------------------------------------------
     # Colaborador — Eventos
@@ -63,6 +71,11 @@ urlpatterns = [
     # -----------------------------------------------------------------------
     # Colaborador — Lista de Espera
     # -----------------------------------------------------------------------
+    path(
+        'colaborador/horarios/<int:horario_id>/solicitar-otp/',
+        SolicitarOTPAgendamentoView.as_view(),
+        name='solicitar-otp-agendamento',
+    ),
     path(
         'colaborador/horarios/<int:horario_id>/lista-espera/',
         EntrarListaEsperaView.as_view(),

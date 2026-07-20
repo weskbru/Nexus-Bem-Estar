@@ -4,10 +4,19 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.utils import extend_schema
 
 from ...models.models import ConviteEmail, Evento, Usuario
+from ...serializers.api_docs import (
+    AcessarEventoRequestSerializer,
+    AcessoPalavraChaveRequestSerializer,
+    AcessoPreviewSerializer,
+    ErroSerializer,
+    EventoPublicoSerializer,
+    TokenResponseSerializer,
+)
 from ...serializers.serializers import UsuarioSerializer
-from ...services.ldap_service import email_existe_no_ad
+from ...services.ldap.service import email_existe_no_ad
 
 
 class AcessoViaTokenView(APIView):
@@ -21,6 +30,7 @@ class AcessoViaTokenView(APIView):
     Valida a palavra-chave e, se correta, retorna o JWT.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'auth_public'
 
     def _get_convite(self, token):
         try:
@@ -41,6 +51,11 @@ class AcessoViaTokenView(APIView):
             'chave_mensagem': convite.chave_mensagem,
         }
 
+    @extend_schema(
+        responses={200: TokenResponseSerializer, 404: ErroSerializer},
+        summary='Acessa evento via link magico',
+        description='Quando o evento exige palavra-chave, a resposta contem os dados de preview e requer_palavra_chave=true.',
+    )
     def get(self, request, token):
         convite = self._get_convite(token)
         if convite is None:
@@ -60,6 +75,11 @@ class AcessoViaTokenView(APIView):
 
         return Response(self._emitir_jwt(convite))
 
+    @extend_schema(
+        request=AcessoPalavraChaveRequestSerializer,
+        responses={200: TokenResponseSerializer, 400: ErroSerializer, 401: ErroSerializer, 404: ErroSerializer},
+        summary='Valida palavra-chave do link magico',
+    )
     def post(self, request, token):
         convite = self._get_convite(token)
         if convite is None:
@@ -91,13 +111,45 @@ class EventoPublicoView(APIView):
     Retorna dados públicos do evento para exibir na página de acesso (sem autenticação).
     """
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'public_read'
 
+    @extend_schema(
+        responses={200: EventoPublicoSerializer, 404: ErroSerializer, 410: ErroSerializer},
+        summary='Consulta dados publicos de um evento',
+    )
     def get(self, _request, evento_id):
         try:
-            evento = Evento.objects.get(id=evento_id, status='publicado')
+            evento = Evento.objects.get(id=evento_id)
         except Evento.DoesNotExist:
             return Response(
-                {'erro': 'Evento não encontrado ou não está disponível.'},
+                {'erro': 'Evento não encontrado.', 'codigo': 'nao_encontrado'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if evento.status == 'encerrado':
+            return Response(
+                {
+                    'erro': 'Este evento já foi encerrado.',
+                    'codigo': 'encerrado',
+                    'titulo': evento.titulo,
+                    'data': str(evento.data),
+                },
+                status=status.HTTP_410_GONE,
+            )
+
+        if evento.status == 'cancelado':
+            return Response(
+                {
+                    'erro': 'Este evento foi cancelado.',
+                    'codigo': 'cancelado',
+                    'titulo': evento.titulo,
+                },
+                status=status.HTTP_410_GONE,
+            )
+
+        if evento.status != 'publicado':
+            return Response(
+                {'erro': 'Evento não disponível.', 'codigo': 'indisponivel'},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response({
@@ -117,11 +169,18 @@ class AcessarEventoView(APIView):
     POST /api/auth/acessar-evento/  (mantido para compatibilidade)
     """
     permission_classes = [permissions.AllowAny]
+    throttle_scope = 'auth_public'
 
+    @extend_schema(
+        request=AcessarEventoRequestSerializer,
+        responses={200: TokenResponseSerializer, 400: ErroSerializer, 401: ErroSerializer, 404: ErroSerializer},
+        summary='Acessa evento por e-mail e palavra-chave',
+    )
     def post(self, request):
         evento_id     = request.data.get('evento_id')
         email         = (request.data.get('email') or '').strip().lower()
         palavra_chave = (request.data.get('palavra_chave') or '').strip()
+        ramal         = (request.data.get('ramal') or '').strip()
 
         if not evento_id or not email:
             return Response(
@@ -161,6 +220,11 @@ class AcessarEventoView(APIView):
         except Usuario.DoesNotExist:
             nome_padrao = email.split('@')[0].replace('.', ' ').replace('-', ' ').title()
             usuario = Usuario.objects.create_user(email=email, nome=nome_padrao, password=None)
+
+        # Atualiza o ramal se informado (campo opcional)
+        if ramal and usuario.ramal != ramal:
+            usuario.ramal = ramal
+            usuario.save(update_fields=['ramal'])
 
         refresh = RefreshToken.for_user(usuario)
         return Response({

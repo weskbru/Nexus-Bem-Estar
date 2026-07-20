@@ -12,6 +12,7 @@ import {
   User,
   Mail,
   ClipboardList,
+  ListOrdered,
   ArrowRight,
   AlertTriangle
 } from 'lucide-react';
@@ -65,6 +66,7 @@ type EventActionsModalProps = Readonly<{
   onEnviarEmails: () => void;
   onRegistrar: () => void;
   onListaPresenca: () => void;
+  onFilaHistorico: () => void;
   onClose: () => void;
 }>
 export function SkeletonCard() {
@@ -101,6 +103,7 @@ export function EventActionsModal({
   onEnviarEmails,
   onRegistrar,
   onListaPresenca,
+  onFilaHistorico,
   onClose,
 }: EventActionsModalProps) {
   const status = normalizeStatus(evento.status);
@@ -145,12 +148,27 @@ export function EventActionsModal({
                 <ClipboardList className="w-5 h-5" />
                 Lista de Presença
               </button>
-              
+
+              <button
+                onClick={onFilaHistorico}
+                className="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+              >
+                <ListOrdered className="w-5 h-5" />
+                Fila e Cancelamentos
+              </button>
+
               {evento.emails_enviados_em ? (
                 <div className="w-full py-3 px-4 bg-emerald-50 border border-emerald-100 rounded-xl text-sm text-center flex items-center justify-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                   <span className="text-emerald-800 font-medium">
                     Notificações enviadas em {new Date(evento.emails_enviados_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ) : evento.emails_envio_status === 'agendado' && evento.emails_agendado_para ? (
+                <div className="w-full py-3 px-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-center flex items-center justify-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-500 shrink-0" />
+                  <span className="text-blue-800 font-medium">
+                    Notificacoes agendadas para {new Date(evento.emails_agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               ) : (
@@ -179,6 +197,13 @@ export function EventActionsModal({
                 <ClipboardList className="w-5 h-5" />
                 Ver Inscritos
               </button>
+              <button
+                onClick={onFilaHistorico}
+                className="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+              >
+                <ListOrdered className="w-5 h-5" />
+                Fila e Cancelamentos
+              </button>
             </>
           )}
 
@@ -190,6 +215,13 @@ export function EventActionsModal({
               >
                 <ClipboardList className="w-5 h-5" />
                 Ver Lista de Presença
+              </button>
+              <button
+                onClick={onFilaHistorico}
+                className="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+              >
+                <ListOrdered className="w-5 h-5" />
+                Fila e Cancelamentos
               </button>
               <div className="w-full py-3 px-4 bg-slate-100 text-slate-500 rounded-xl font-medium text-sm text-center border border-slate-200 mt-3">
                 Evento concluído

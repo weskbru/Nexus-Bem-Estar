@@ -27,14 +27,19 @@ function getToken(): string | null {
   return localStorage.getItem('access_token');
 }
 
+// Rotas públicas que não devem enviar token nem redirecionar ao receber 401
+const ROTAS_PUBLICAS = ['/auth/evento-publico/', '/auth/acessar-evento/', '/auth/acesso/', '/auth/login/'];
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
+  const ehRotaPublica = ROTAS_PUBLICAS.some(r => path.startsWith(r));
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    // Não envia token em rotas públicas para evitar 401 por token expirado
+    ...(!ehRotaPublica && token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers ?? {}),
   };
 
@@ -43,16 +48,21 @@ async function request<T>(
   if (res.status === 401) {
     localStorage.removeItem('access_token');
     localStorage.removeItem('usuario');
-    window.location.href = '/admin/login';
+    // Só redireciona para login em rotas protegidas (não em páginas públicas)
+    if (!ehRotaPublica) {
+      window.location.href = '/admin/login';
+    }
     throw new Error('Sessão expirada. Faça login novamente.');
   }
 
   if (!res.ok) {
     const erro = await safeJson(res);
-    throw new Error(
+    const err = new Error(
       (erro?.erro as string) ?? (erro?.detail as string) ??
       'Não foi possível completar a operação. Tente novamente.'
     );
+    if (erro) Object.assign(err, { data: erro });
+    throw err;
   }
 
   const body = await safeJson(res);
@@ -102,6 +112,12 @@ export interface EventoPublicoDTO {
   requer_palavra_chave: boolean;
 }
 
+export interface EventoIndisponivelDTO {
+  codigo: 'encerrado' | 'cancelado' | 'nao_encontrado' | 'indisponivel';
+  titulo?: string;
+  data?: string;
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     request<LoginResponse>('/auth/login/', {
@@ -123,15 +139,27 @@ export const authApi = {
       { method: 'POST', body: JSON.stringify({ palavra_chave }) }
     ),
 
-  eventoPublico: (eventoId: number) =>
-    request<EventoPublicoDTO>(`/auth/evento-publico/${eventoId}/`),
+  eventoPublico: async (eventoId: number): Promise<EventoPublicoDTO> => {
+    const res = await fetch(`${BASE_URL}/auth/evento-publico/${eventoId}/`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(body.erro ?? 'Evento não disponível.');
+      (err as Error & { indisponivel: EventoIndisponivelDTO }).indisponivel = {
+        codigo: body.codigo ?? 'nao_encontrado',
+        titulo: body.titulo,
+        data: body.data,
+      };
+      throw err;
+    }
+    return body as EventoPublicoDTO;
+  },
 
-  acessarEvento: (eventoId: number, email: string, palavraChave?: string) =>
+  acessarEvento: (eventoId: number, email: string, palavraChave?: string, ramal?: string) =>
     request<LoginResponse & { evento_id: number }>(
       '/auth/acessar-evento/',
       {
         method: 'POST',
-        body: JSON.stringify({ evento_id: eventoId, email, palavra_chave: palavraChave ?? '' }),
+        body: JSON.stringify({ evento_id: eventoId, email, palavra_chave: palavraChave ?? '', ramal: ramal ?? '' }),
       }
     ),
 };
@@ -155,7 +183,14 @@ export interface EventoDTO {
   horarios: HorarioDTO[];
   total_agendamentos?: number;
   emails_enviados_em?: string | null;
+  emails_envio_status?: string;
+  emails_agendado_para?: string | null;
+  emails_tentativas_envio?: number;
+  emails_erro_envio?: string;
+  presenca_pendente?: boolean;
 }
+
+export type ApiError = Error & { data?: Record<string, unknown> };
 
 export interface HorarioDTO {
   id: number;
@@ -178,27 +213,40 @@ export const adminEventosApi = {
     request<{ mensagem: string; horarios_gerados: number }>(`/admin/eventos/${id}/publicar/`, { method: 'POST' }),
   cancelar: (id: number) =>
     request<{ mensagem: string }>(`/admin/eventos/${id}/cancelar/`, { method: 'POST' }),
-  enviarEmails: (id: number) =>
-    request<{ mensagem: string; enviados: number; erros: unknown[] }>(`/admin/eventos/${id}/enviar-emails/`, { method: 'POST' }),
-  registrarParticipanteManual: (id: number, dados: { horario_id: number; nome: string; matricula?: string; departamento?: string }) =>
-    request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
+  enviarEmails: (id: number, data?: { modo_envio?: 'imediato' | 'agendado'; agendado_para?: string }) =>
+    request<{ mensagem: string; destinatario?: string[]; agendado_para?: string }>(
+      `/admin/eventos/${id}/enviar-emails/`,
+      { method: 'POST', body: data ? JSON.stringify(data) : undefined }
+    ),
+  registrarParticipanteManual: (id: number, dados: { horario_id: number; nome: string; departamento?: string; email_verificacao?: string }) =>
+    request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string; aviso_penalidade?: { id: number; usuario_nome: string } }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
   adicionarParticipantePendente: (id: number, dados: { nome: string; matricula?: string; departamento?: string }) =>
     request<{ id: number; nome: string; horario_info: string; matricula: string; departamento: string }>(`/admin/eventos/${id}/registrar-participante/`, { method: 'POST', body: JSON.stringify(dados) }),
   listaPresenca: (id: number) =>
     request<ListaPresencaDTO>(`/admin/eventos/${id}/lista-presenca/`),
+  filaHistorico: (id: number) =>
+    request<FilaHistoricoDTO>(`/admin/eventos/${id}/fila-historico/`),
   removerParticipante: (eventoId: number, participanteId: number) =>
     request<void>(`/admin/eventos/${eventoId}/remover-participante/${participanteId}/`, { method: 'DELETE' }),
+  marcarPresenca: (eventoId: number, dados: { presentes: number[]; ausentes: number[]; presentes_manuais: number[]; ausentes_manuais: number[] }) =>
+    request<{ mensagem: string; penalidades_criadas: number }>(
+      `/admin/eventos/${eventoId}/marcar-presenca/`,
+      { method: 'POST', body: JSON.stringify(dados) }
+    ),
 };
 
 // ── Lista de presença ─────────────────────────────────────────────────────────
 
 export interface ParticipantePresencaDTO {
   participante_id?: number;
+  agendamento_id?: number;
   nome: string;
   email: string;
+  ramal?: string;
   hora_inicio: string;
   hora_fim: string;
   tipo: 'email' | 'manual';
+  compareceu?: boolean | null;
 }
 
 export interface HorarioPresencaDTO {
@@ -222,6 +270,80 @@ export interface ListaPresencaDTO {
   total: number;
 }
 
+export interface ParticipanteFilaDTO {
+  id: number;
+  posicao: number;
+  status: 'aguardando' | 'notificado';
+  nome: string;
+  email: string;
+  ramal?: string | null;
+  matricula?: string | null;
+  departamento?: string | null;
+  criado_em: string;
+  notificado_em?: string | null;
+  expira_em?: string | null;
+}
+
+export interface HorarioFilaDTO {
+  horario_id: number;
+  hora_inicio: string;
+  hora_fim: string;
+  total_na_fila: number;
+  participantes: ParticipanteFilaDTO[];
+}
+
+export interface CancelamentoEventoDTO {
+  agendamento_id: number;
+  nome: string;
+  email: string;
+  ramal?: string | null;
+  matricula?: string | null;
+  departamento?: string | null;
+  hora_inicio: string;
+  hora_fim: string;
+  agendado_em: string;
+  cancelado_em: string;
+}
+
+export interface FilaHistoricoDTO {
+  evento: {
+    id: number;
+    titulo: string;
+    data: string;
+    status: string;
+  };
+  horarios: HorarioFilaDTO[];
+  total_fila: number;
+  cancelamentos: CancelamentoEventoDTO[];
+  total_cancelamentos: number;
+}
+
+// ── Admin — Penalidades ───────────────────────────────────────────────────
+
+export interface PenalidadeDTO {
+  id: number;
+  usuario: UsuarioDTO;
+  ativa: boolean;
+  evento_origem_titulo: string | null;
+  evento_punicao_titulo: string | null;
+  evento_punicao_status: string | null;
+  criada_em: string;
+  revogada_em: string | null;
+  motivo_revogacao: string;
+}
+
+export const adminPenalidadesApi = {
+  listar: (params?: { ativa?: boolean }) => {
+    const qs = params?.ativa !== undefined ? `?ativa=${params.ativa}` : '';
+    return request<PenalidadeDTO[]>(`/admin/penalidades/${qs}`);
+  },
+  revogar: (id: number, motivo: string) =>
+    request<PenalidadeDTO>(`/admin/penalidades/${id}/revogar/`, {
+      method: 'POST',
+      body: JSON.stringify({ motivo }),
+    }),
+};
+
 // ── Admin — Dashboard ─────────────────────────────────────────────────────
 
 export interface DashboardDTO {
@@ -229,7 +351,45 @@ export interface DashboardDTO {
   vagas_ocupadas: number;
   taxa_ocupacao: number;
   total_eventos_ativos: number;
-  agendamentos_recentes: AgendamentoDTO[];
+  vagas_disponiveis: number;
+  proximo_evento: {
+    id: number;
+    titulo: string;
+    data: string;
+    hora_inicio: string;
+    hora_fim: string;
+    total_vagas: number;
+    vagas_ocupadas: number;
+    vagas_livres: number;
+  } | null;
+  pendencias: {
+    total: number;
+    eventos_presenca_pendente: number;
+    pessoas_fila: number;
+    falhas_email: number;
+  };
+  agendamentos_recentes: AgendamentoResumoDTO[];
+}
+
+export interface HorarioResumoDTO {
+  id: number;
+  hora_inicio: string;
+  hora_fim: string;
+  vagas_disponiveis: number;
+}
+
+export interface AgendamentoResumoDTO {
+  id: number;
+  usuario: UsuarioDTO;
+  horario: HorarioResumoDTO;
+  status: string;
+  compareceu?: boolean | null;
+  evento_id: number;
+  evento_titulo: string;
+  evento_data: string;
+  nome_profissional: string;
+  criado_em: string;
+  atualizado_em?: string;
 }
 
 export interface AgendamentoDTO {
@@ -245,6 +405,26 @@ export interface AgendamentoDTO {
 
 export const adminDashboardApi = {
   obter: () => request<DashboardDTO>('/admin/dashboard/'),
+};
+
+export interface AdminNotificacoesDTO {
+  confirmacoes: Array<{
+    evento_id: number;
+    evento_titulo: string;
+    quantidade: number;
+    ultima_confirmacao: string;
+  }>;
+  eventos: Array<{
+    id: number;
+    titulo: string;
+    data: string;
+    hora_inicio: string;
+    status: string;
+  }>;
+}
+
+export const adminNotificacoesApi = {
+  obter: () => request<AdminNotificacoesDTO>('/admin/notificacoes/'),
 };
 
 // ── SuperAdmin (CTI) — Gestão de Usuários LDAP ────────────────────────────

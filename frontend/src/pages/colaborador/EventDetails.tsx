@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronRight, Calendar as CalendarIcon, Clock, Users, ArrowLeft, CheckCircle2, User, RefreshCw, AlertCircle, Info, Ticket } from 'lucide-react';
+import { ChevronRight, Calendar as CalendarIcon, Clock, Users, CheckCircle2, User, RefreshCw, AlertCircle, Info, Ticket } from 'lucide-react';
 import { parseFetchError } from '../../services/api';
 import ModalDetalhesAgendamento, { type AgendamentoDetalhes } from '../../components/ModalDetalhesAgendamento';
 
@@ -15,6 +15,7 @@ interface HorarioData {
   vagas_livres: number;
   vagas_ocupadas: number;
   disponivel: boolean;
+  reservado_para_fila: boolean;
 }
 
 interface EventoData {
@@ -49,12 +50,14 @@ export default function EventDetails() {
   const [modoModal, setModoModal] = useState<'detalhes' | 'confirmacao' | 'sucesso'>('detalhes');
   const [reservando, setReservando] = useState(false);
   const [erroReserva, setErroReserva] = useState('');
+  const [erroPenalidade, setErroPenalidade] = useState('');
   const [agendamentoExistente, setAgendamentoExistente] = useState<AgendamentoDetalhes | null>(null);
   const [alterando, setAlterando] = useState(false);
 
   // Lista de espera
   const [listaEsperaMap, setListaEsperaMap] = useState<Record<number, ListaEsperaInfo>>({});
   const [entrandoFila, setEntrandoFila] = useState<number | null>(null);
+  const [saiindoFila, setSaiindoFila] = useState<number | null>(null);
 
   useEffect(() => {
     carregarEvento();
@@ -122,7 +125,7 @@ export default function EventDetails() {
     }
   }
 
-  async function handleReservar() {
+  async function handleReservar(otp: string) {
     if (!horarioSelecionado || !evento) return;
     setReservando(true);
     setErroReserva('');
@@ -132,11 +135,26 @@ export default function EventDetails() {
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ alterar: alterando }),
+          body: JSON.stringify({ alterar: alterando, otp }),
         }
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.erro ?? 'Erro ao reservar.');
+      if (!res.ok) {
+        if (data.penalidade) {
+          setModalAgendamento(null);
+          setModoModal('detalhes');
+          setErroPenalidade(data.erro);
+          return;
+        }
+        if (data.na_fila) {
+          setModalAgendamento(null);
+          setModoModal('detalhes');
+          setErroReserva(data.erro);
+          await carregarEvento();
+          return;
+        }
+        throw new Error(data.erro ?? 'Erro ao reservar.');
+      }
       setModoModal('sucesso');
       await carregarEvento();
       setTimeout(() => {
@@ -147,6 +165,31 @@ export default function EventDetails() {
       setErroReserva(parseFetchError(err, 'Não foi possível reservar o horário. Tente novamente.'));
     } finally {
       setReservando(false);
+    }
+  }
+
+  async function handleSairFila(e: React.MouseEvent, horarioId: number) {
+    e.stopPropagation();
+    setSaiindoFila(horarioId);
+    try {
+      const res = await fetch(
+        `${API}/colaborador/horarios/${horarioId}/lista-espera/`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro ?? 'Erro ao sair da fila.');
+      setListaEsperaMap(prev => {
+        const novo = { ...prev };
+        delete novo[horarioId];
+        return novo;
+      });
+    } catch (err) {
+      setErroReserva(parseFetchError(err, 'Não foi possível sair da fila de espera.'));
+    } finally {
+      setSaiindoFila(null);
     }
   }
 
@@ -163,15 +206,15 @@ export default function EventDetails() {
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro ?? 'Erro ao entrar na fila.');
-      setListaEsperaMap(prev => ({
-        ...prev,
+      // Substitui todo o mapa: apenas uma fila ativa por evento
+      setListaEsperaMap({
         [horarioId]: {
           horario_id: horarioId,
           posicao: data.posicao,
           total_na_fila: data.total_na_fila,
           status: data.status,
         },
-      }));
+      });
     } catch (err) {
       setErroReserva(parseFetchError(err, 'Não foi possível entrar na lista de espera.'));
     } finally {
@@ -216,6 +259,11 @@ export default function EventDetails() {
   const horariosDisponiveis = evento.horarios.filter(h => h.disponivel);
   const qtdHorariosDisponiveis = horariosDisponiveis.length;
 
+  // Usuário está na fila de espera ativa (aguardando ou notificado) em qualquer slot deste evento
+  const naFilaAtiva = Object.values(listaEsperaMap).some(
+    e => e.status === 'aguardando' || e.status === 'notificado'
+  );
+
   function abrirModalDetalhes(ag: AgendamentoDetalhes) {
     setModalAgendamento(ag);
     setModoModal('detalhes');
@@ -248,25 +296,48 @@ export default function EventDetails() {
     h: HorarioData,
     filaInfo: ListaEsperaInfo | undefined,
     carregandoFila: boolean,
-    existeAgendamento: boolean
+    existeAgendamento: boolean,
+    bloqueadoPorFila = false,
   ): ReactNode {
+    // Usuário já está nesta fila — mostra posição + botão sair
     if (filaInfo) {
       return (
-        <div className="bg-amber-100/80 text-amber-800 rounded-lg py-1.5 px-2 flex flex-col items-center">
-          <span className="text-[10px] font-bold uppercase tracking-wider">Na fila</span>
-          <span className="text-xs font-semibold">{filaInfo.posicao}º lugar</span>
+        <div className="flex flex-col gap-1.5 items-center w-full">
+          <div className="bg-amber-100/80 text-amber-800 rounded-lg py-1.5 px-2 flex flex-col items-center w-full">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Na fila</span>
+            <span className="text-xs font-semibold">{filaInfo.posicao}º lugar</span>
+          </div>
+          <button
+            onClick={(e) => handleSairFila(e, h.id)}
+            disabled={saiindoFila === h.id}
+            className="w-full bg-white border border-red-200 hover:bg-red-50 hover:border-red-300 hover:text-red-700 text-red-400 text-[10px] font-bold py-1 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {saiindoFila === h.id ? 'Saindo...' : 'Sair da fila'}
+          </button>
         </div>
       );
     }
 
+    // Slot reservado para confirmação de outro usuário — não permite entrar
+    if (bloqueadoPorFila) {
+      return <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Aguardando confirmação</span>;
+    }
+
     if (!existeAgendamento) {
+      const migrando = naFilaAtiva;
       return (
         <button
           onClick={(e) => handleEntrarFila(e, h.id)}
           disabled={carregandoFila}
-          className="w-full bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 text-slate-500 text-xs font-bold py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          className={`w-full bg-white border text-xs font-bold py-1.5 rounded-lg transition-colors disabled:opacity-50
+            ${migrando
+              ? 'border-amber-200 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 text-amber-600'
+              : 'border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 text-slate-500'
+            }`}
         >
-          {carregandoFila ? 'Entrando...' : 'Entrar na fila'}
+          {carregandoFila
+            ? (migrando ? 'Migrando...' : 'Entrando...')
+            : (migrando ? 'Migrar para esta fila' : 'Entrar na fila')}
         </button>
       );
     }
@@ -279,7 +350,8 @@ export default function EventDetails() {
     selecionado: boolean,
     existeAgendamento: boolean,
     filaInfo: ListaEsperaInfo | undefined,
-    carregandoFila: boolean
+    carregandoFila: boolean,
+    bloqueadoPorFila = false,
   ): ReactNode {
     const isMeuHorarioAtual = selecionado && existeAgendamento && !alterando;
 
@@ -292,6 +364,11 @@ export default function EventDetails() {
             Seu Horário
           </div>
         )}
+        {bloqueadoPorFila && !isMeuHorarioAtual && (
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap shadow-sm">
+            Reservado — fila
+          </div>
+        )}
 
         <p className={`text-base font-extrabold tracking-tight ${isMeuHorarioAtual ? 'text-emerald-800' : 'text-slate-400'}`}>
           {h.hora_inicio.substring(0, 5)}
@@ -302,7 +379,7 @@ export default function EventDetails() {
 
         {!isMeuHorarioAtual && (
           <div className="mt-auto pt-2 border-t border-slate-200">
-            {renderAcaoHorarioLotado(h, filaInfo, carregandoFila, existeAgendamento)}
+            {renderAcaoHorarioLotado(h, filaInfo, carregandoFila, existeAgendamento, bloqueadoPorFila)}
           </div>
         )}
       </div>
@@ -348,10 +425,15 @@ export default function EventDetails() {
     const filaInfo = listaEsperaMap[h.id];
     const carregandoFila = entrandoFila === h.id;
     const existeAgendamento = Boolean(agendamentoExistente);
-    const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando);
+    const naFilaDesteSlot = Boolean(filaInfo && (filaInfo.status === 'aguardando' || filaInfo.status === 'notificado'));
 
-    if (!h.disponivel) {
-      return renderCardHorarioLotado(h, selecionado, existeAgendamento, filaInfo, carregandoFila);
+    // Slot disponível mas reservado para confirmação de outro usuário da fila
+    const bloqueadoPorFila = h.disponivel && h.reservado_para_fila && !naFilaDesteSlot;
+
+    const selecaoBloqueada = !h.disponivel || (existeAgendamento && !alterando) || naFilaDesteSlot;
+
+    if (!h.disponivel || bloqueadoPorFila) {
+      return renderCardHorarioLotado(h, selecionado, existeAgendamento, filaInfo, carregandoFila, bloqueadoPorFila);
     }
 
     return renderCardHorarioDisponivel(h, selecionado, selecaoBloqueada);
@@ -359,7 +441,15 @@ export default function EventDetails() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 animate-in fade-in duration-300">
-      
+
+      {/* Banner de penalidade ativa */}
+      {erroPenalidade && (
+        <div className="mb-6 flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 text-sm text-rose-800 shadow-sm">
+          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-rose-500" />
+          <span>{erroPenalidade}</span>
+        </div>
+      )}
+
       {/* Breadcrumb Padrão */}
       <div className="flex items-center text-xs sm:text-sm text-slate-500 mb-6 font-medium">
         <CalendarIcon className="w-4 h-4 mr-1.5 text-slate-400" />
@@ -494,11 +584,38 @@ export default function EventDetails() {
 
         {/* The Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-          {evento.horarios.map(h => renderCardHorario(h))}
+          {evento.horarios.flatMap((h, i, arr) => {
+            const cards: React.ReactNode[] = [renderCardHorario(h)];
+            const next = arr[i + 1];
+            if (next && h.hora_fim.substring(0, 5) < next.hora_inicio.substring(0, 5)) {
+              cards.push(
+                <div
+                  key={`almoco-${h.id}`}
+                  className="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-5 flex items-center gap-3 px-4 py-2.5 bg-orange-50 border border-orange-200 rounded-xl text-orange-700 text-sm font-semibold"
+                >
+                  <span className="text-base">🍽️</span>
+                  <span>Intervalo de Almoço</span>
+                  <span className="font-bold">{h.hora_fim.substring(0, 5)} – {next.hora_inicio.substring(0, 5)}</span>
+                </div>
+              );
+            }
+            return cards;
+          })}
         </div>
 
         {/* Aviso Fila de Espera Ativa */}
-        {Object.keys(listaEsperaMap).length > 0 && (
+        {naFilaAtiva && (
+          <div className="mt-8 flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-2xl p-5 shadow-sm">
+            <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-amber-900 mb-1">Você está na fila de espera</p>
+              <p className="text-sm font-medium text-amber-800 leading-relaxed">
+                O horário em que você está na fila permanece bloqueado. Caso surja outro horário disponível, você pode reservá-lo normalmente — isso cancela sua posição na fila automaticamente. Quando sua vez chegar, você receberá um e-mail e terá <strong>5 minutos</strong> para confirmar.
+              </p>
+            </div>
+          </div>
+        )}
+        {!naFilaAtiva && Object.keys(listaEsperaMap).length > 0 && (
           <div className="mt-8 flex items-start sm:items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4">
             <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5 sm:mt-0" />
             <p className="text-sm font-medium text-blue-800 leading-relaxed">
@@ -516,18 +633,6 @@ export default function EventDetails() {
         </div>
       )}
 
-      {/* Botão Voltar (Apenas se não tiver agendamento e não estiver alterando) */}
-      {!agendamentoExistente && !alterando && (
-        <div className="flex justify-center mt-8">
-          <Link
-            to="/login"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 rounded-xl font-bold transition-all shadow-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Voltar para o Menu
-          </Link>
-        </div>
-      )}
 
       {/* Modal Reutilizável de Confirmação/Sucesso */}
       {modalAgendamento && (
@@ -538,6 +643,7 @@ export default function EventDetails() {
             setModalAgendamento(null);
             setModoModal('detalhes');
           }}
+          horarioId={horarioSelecionado ?? undefined}
           onConfirmarReserva={modoModal === 'confirmacao' ? handleReservar : undefined}
           confirmandoReserva={modoModal === 'confirmacao' ? reservando : false}
           textoConfirmar={alterando ? 'Confirmar Novo Horário' : 'Confirmar Reserva'}

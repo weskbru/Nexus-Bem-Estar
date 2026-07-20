@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -6,10 +6,11 @@ import {
   AlertCircle,
   ArrowLeft,
   Save,
-  Lock} from 'lucide-react';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
+  Lock,
+  Info,
+} from 'lucide-react';
 import { adminEventosApi, type EventoDTO } from '../../services/api';
+import EditorEmailConvite from '../../components/EditorEmailConvite';
 import {
   dataAposLimite,
   dataNoPassado,
@@ -257,36 +258,6 @@ function validarFormEvento(form: FormState): FormErrors {
   return e;
 }
 
-function inserirImagemNoEditor(file: File, quillRef: RefObject<ReactQuill | null>): void {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const editor = quillRef.current?.getEditor();
-    if (!editor || typeof reader.result !== 'string') return;
-    const range = editor.getSelection(true);
-    const index = range ? range.index : editor.getLength();
-    editor.insertEmbed(index, 'image', reader.result, 'user');
-    editor.setSelection(index + 1);
-  };
-  reader.readAsDataURL(file);
-}
-
-function abrirSeletorImagem(quillRef: RefObject<ReactQuill | null>): void {
-  const input = document.createElement('input');
-  input.setAttribute('type', 'file');
-  input.setAttribute('accept', 'image/png,image/jpeg,image/jpg,image/webp');
-  input.click();
-
-  input.onchange = () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      globalThis.alert('A imagem deve ter no máximo 5MB.');
-      return;
-    }
-    inserirImagemNoEditor(file, quillRef);
-  };
-}
-
 type StatusBadgeInfo = Readonly<{ label: string; className: string }>;
 
 function getStatusBadgeInfo(status: string): StatusBadgeInfo {
@@ -299,36 +270,16 @@ function getStatusBadgeInfo(status: string): StatusBadgeInfo {
   return { label: 'Encerrado', className: 'bg-slate-100 text-slate-700 border border-slate-200/60' };
 }
 
-const EMAIL_FORMATS = [
-  'header', 'bold', 'italic', 'underline', 'strike',
-  'list', 'bullet', 'align', 'link', 'image',
-];
-
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function EditarEvento() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const quillRef = useRef<ReactQuill | null>(null);
-
-  const emailModules = useMemo(() => ({
-    toolbar: {
-      container: [
-        [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        [{ align: [] }],
-        ['link', 'image', 'clean'],
-      ],
-      handlers: {
-        image: () => abrirSeletorImagem(quillRef),
-      },
-    },
-  }), []);
 
   const [carregando, setCarregando] = useState(true);
   const [erroCarregar, setErroCarregar] = useState('');
   const [statusEvento, setStatusEvento] = useState('');
+  const [emailEnviadoEm, setEmailEnviadoEm] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
     titulo: '', tipo: '', data: '', hora_inicio: '', hora_fim: '',
@@ -343,6 +294,7 @@ export default function EditarEvento() {
     adminEventosApi.obter(Number(id))
       .then((evento) => {
         setStatusEvento(evento.status);
+        setEmailEnviadoEm(evento.emails_enviados_em ?? null);
         setForm(mapEventoToForm(evento));
       })
       .catch(() => setErroCarregar('Não foi possível carregar o evento.'))
@@ -422,9 +374,16 @@ export default function EditarEvento() {
   const normalizedStatus = statusEvento.toUpperCase() === 'PUBLICADO' ? 'ATIVO' : statusEvento.toUpperCase();
   const isCancelado = normalizedStatus === 'CANCELADO';
   const isEncerrado = normalizedStatus === 'ENCERRADO';
+  const isEmailEnviado = Boolean(emailEnviadoEm) && !isEncerrado;
   const statusBadgeInfo = getStatusBadgeInfo(normalizedStatus);
 
-  if (isEncerrado || isCancelado) {
+  if (isEncerrado || isCancelado || isEmailEnviado) {
+    const motivo = isEncerrado
+      ? { titulo: 'Evento Encerrado', descricao: 'Por questões de histórico e auditoria, as informações deste evento estão bloqueadas para edição. Para realizar uma nova atividade, crie um novo evento.' }
+      : isCancelado
+      ? { titulo: 'Evento Cancelado', descricao: 'Por questões de histórico e auditoria, as informações deste evento estão bloqueadas para edição. Para realizar uma nova atividade, crie um novo evento.' }
+      : { titulo: 'E-mail já disparado', descricao: `O e-mail de divulgação foi enviado em ${emailEnviadoEm}. Para garantir a consistência das informações recebidas pelos colaboradores, o evento não pode mais ser editado.` };
+
     return (
       <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6">
         <div className="flex items-center gap-4 mb-8">
@@ -433,7 +392,7 @@ export default function EditarEvento() {
           </Link>
           <div>
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Editar Evento</h1>
-            <p className="text-slate-500 text-sm mt-1 font-medium">Eventos cancelados ou encerrados não podem ser alterados.</p>
+            <p className="text-slate-500 text-sm mt-1 font-medium">Este evento não pode ser alterado.</p>
           </div>
         </div>
 
@@ -441,9 +400,9 @@ export default function EditarEvento() {
           <div className="w-16 h-16 bg-white border border-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-sm">
             <Lock className="w-8 h-8 text-slate-400" />
           </div>
-          <h2 className="text-xl font-bold text-slate-800 mb-2">Evento {isEncerrado ? 'Encerrado' : 'Cancelado'}</h2>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">{motivo.titulo}</h2>
           <p className="text-slate-500 font-medium max-w-md mx-auto mb-6">
-            Por questões de histórico e auditoria, as informações deste evento estão bloqueadas para edição. Para realizar uma nova atividade, crie um novo evento.
+            {motivo.descricao}
           </p>
           <Link to="/admin/agendamentos" className="inline-flex items-center justify-center px-6 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm focus:ring-4 focus:ring-slate-100 outline-none">
             Voltar para Agendamentos
@@ -534,15 +493,10 @@ export default function EditarEvento() {
                   Mensagem do E-mail Convite
                 </p>
                 <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm focus-within:ring-4 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all duration-200">
-                  <ReactQuill
-                    ref={quillRef}
-                    className="email-editor border-none"
-                    aria-labelledby="mensagem-email-label"
+                  <EditorEmailConvite
                     value={form.corpo_email}
-                    onChange={(value: string) => update('corpo_email', value)}
-                    theme="snow"
-                    modules={emailModules}
-                    formats={EMAIL_FORMATS}
+                    onChange={(value) => update('corpo_email', value)}
+                    disabled={isEmailEnviado || isEncerrado || isCancelado}
                   />
                 </div>
               </div>
@@ -582,6 +536,17 @@ export default function EditarEvento() {
                     <FieldError msg={erros.hora_fim} />
                   </div>
                 </div>
+
+                {/* Aviso de bloqueio do almoço */}
+                {form.hora_inicio && form.hora_fim && form.hora_fim > form.hora_inicio &&
+                  form.hora_inicio < '13:30' && form.hora_fim > '12:00' && (
+                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 font-medium">
+                    <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <span>
+                      O intervalo de almoço <strong>(12:00 – 13:30)</strong> é bloqueado automaticamente. Sessões que coincidam com esse período serão descartadas ao salvar.
+                    </span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -636,6 +601,7 @@ export default function EditarEvento() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }

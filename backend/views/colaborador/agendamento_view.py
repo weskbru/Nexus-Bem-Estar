@@ -1,14 +1,29 @@
+from datetime import datetime, timedelta
+
+from django.core.cache import cache
 from django.db import transaction
+from django.utils import timezone
 
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
-from ...models.models import Agendamento, ConviteEmail, Horario, ListaEspera
+from ...models.models import Agendamento, ConviteEmail, Horario, ListaEspera, Penalidade
+from ...serializers.api_docs import ErroSerializer, MensagemSerializer, ReservarHorarioRequestSerializer
 from ...serializers.serializers import AgendamentoSerializer
 from ...services import email_service
-from ...services.lista_espera_service import notificar_proximo_na_fila
-from ..permissions import encerrar_eventos_expirados
+from ...services.lista_espera.service import notificar_proximo_na_fila
+from ..permissions import encerrar_eventos_expirados, liberar_penalidades_expiradas
+from .otp_agendamento_view import cache_key_otp, segundos_restantes_otp
+
+
+CANCELAMENTO_MINUTOS_ANTECEDENCIA = 30
+
+
+def _inicio_agendamento(horario):
+    inicio = datetime.combine(horario.evento.data, horario.hora_inicio)
+    return timezone.make_aware(inicio, timezone.get_current_timezone())
 
 
 class ReservarHorarioView(APIView):
@@ -20,8 +35,68 @@ class ReservarHorarioView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=ReservarHorarioRequestSerializer,
+        responses={
+            201: AgendamentoSerializer,
+            400: ErroSerializer,
+            401: ErroSerializer,
+            403: ErroSerializer,
+            404: ErroSerializer,
+            409: ErroSerializer,
+            429: ErroSerializer,
+        },
+        summary='Reserva horario de evento',
+    )
     @transaction.atomic
     def post(self, request, evento_id, horario_id):
+        # Validar OTP antes de qualquer operação no banco
+        otp_informado = (request.data.get('otp') or '').strip()
+        if not otp_informado:
+            return Response(
+                {'erro': 'Informe o código de confirmação enviado ao seu e-mail.', 'requer_otp': True},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        key = cache_key_otp(request.user.id, horario_id)
+        dados_otp = cache.get(key)
+
+        if not dados_otp:
+            return Response(
+                {'erro': 'Código expirado. Solicite um novo código e tente novamente.', 'otp_expirado': True},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        segundos_restantes = segundos_restantes_otp(dados_otp)
+        if segundos_restantes <= 0:
+            cache.delete(key)
+            return Response(
+                {'erro': 'Código expirado. Solicite um novo código e tente novamente.', 'otp_expirado': True},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if dados_otp['tentativas'] >= 3:
+            cache.delete(key)
+            return Response(
+                {'erro': 'Número máximo de tentativas atingido. Solicite um novo código.', 'otp_expirado': True},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        if otp_informado != dados_otp['codigo']:
+            dados_otp['tentativas'] += 1
+            cache.set(key, dados_otp, timeout=segundos_restantes)
+            restantes = 3 - dados_otp['tentativas']
+            return Response(
+                {
+                    'erro': f'Código incorreto. {restantes} tentativa{"s" if restantes != 1 else ""} restante{"s" if restantes != 1 else ""}.',
+                    'otp_incorreto': True,
+                },
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # OTP válido — invalida para uso único
+        cache.delete(key)
+
         encerrar_eventos_expirados()
 
         try:
@@ -41,6 +116,77 @@ class ReservarHorarioView(APIView):
             return Response(
                 {'erro': 'Este horário está lotado. Escolha outro horário disponível.'},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Limpa notificações vencidas antes de verificar o bloqueio.
+        # Sem isso, se o prazo de 5 min expirou e ninguém cancelou,
+        # o slot fica bloqueado indefinidamente com reservado_para_fila=True.
+        notificar_proximo_na_fila(horario.id)
+
+        # Recarrega disponivel após possível limpeza de expirados
+        horario.refresh_from_db(fields=['vagas_disponiveis'])
+
+        liberar_penalidades_expiradas()
+
+        # Bloqueia reserva direta se outro usuário já foi notificado e está dentro do prazo de confirmação
+        reservado_para_outro = ListaEspera.objects.filter(
+            horario=horario,
+            status='notificado',
+        ).exclude(usuario=request.user).exists()
+
+        if reservado_para_outro:
+            return Response(
+                {
+                    'erro': (
+                        'Este horário está reservado para confirmação de um colaborador da fila de espera. '
+                        'Aguarde — se ele não confirmar em 5 minutos, a vaga será liberada novamente.'
+                    ),
+                    'reservado_para_fila': True,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Verificar penalidade ativa por falta em evento anterior
+        penalidade = (
+            Penalidade.objects
+            .select_related('evento_punicao')
+            .filter(usuario=request.user, ativa=True)
+            .first()
+        )
+        if penalidade:
+            # Primeiro acesso após a falta: registra este evento como o de punição
+            if penalidade.evento_punicao is None:
+                penalidade.evento_punicao = horario.evento
+                penalidade.save(update_fields=['evento_punicao'])
+            return Response(
+                {
+                    'erro': (
+                        'Você possui uma penalidade ativa por não comparecimento em evento anterior. '
+                        'Seu acesso será liberado após o encerramento do evento atual.'
+                    ),
+                    'penalidade': True,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Bloquear agendamento direto apenas se o usuário está na fila deste slot específico.
+        # Permite que o usuário reserve outro slot disponível mesmo estando na fila de um slot lotado.
+        na_fila = ListaEspera.objects.filter(
+            usuario=request.user,
+            horario_id=horario_id,
+            status__in=['aguardando', 'notificado'],
+        ).exists()
+
+        if na_fila:
+            return Response(
+                {
+                    'erro': (
+                        'Você está na fila de espera deste horário. '
+                        'Aguarde ser chamado por e-mail — você terá 5 minutos para confirmar sua vaga.'
+                    ),
+                    'na_fila': True,
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         agendamento_existente = (
@@ -96,9 +242,18 @@ class CancelarAgendamentoView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=None,
+        responses={200: MensagemSerializer, 400: ErroSerializer, 404: ErroSerializer},
+        summary='Cancela agendamento do colaborador',
+    )
     def post(self, request, agendamento_id):
         try:
-            agendamento = Agendamento.objects.get(id=agendamento_id, usuario=request.user)
+            agendamento = (
+                Agendamento.objects
+                .select_related('horario__evento')
+                .get(id=agendamento_id, usuario=request.user)
+            )
         except Agendamento.DoesNotExist:
             return Response(
                 {'erro': 'Agendamento não encontrado.'},
@@ -112,6 +267,20 @@ class CancelarAgendamentoView(APIView):
             )
 
         horario = agendamento.horario
+        limite_cancelamento = _inicio_agendamento(horario) - timedelta(
+            minutes=CANCELAMENTO_MINUTOS_ANTECEDENCIA
+        )
+        if timezone.now() > limite_cancelamento:
+            return Response(
+                {
+                    'erro': (
+                        'Cancelamento permitido apenas ate 30 minutos antes '
+                        'do horario agendado.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         agendamento.status = 'cancelado'
         agendamento.save(update_fields=['status', 'atualizado_em'])
 
@@ -127,6 +296,14 @@ class MeusAgendamentosView(generics.ListAPIView):
     """
     serializer_class = AgendamentoSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        parameters=[OpenApiParameter(name='evento_id', type=int, required=False)],
+        responses={200: AgendamentoSerializer(many=True)},
+        summary='Lista meus agendamentos',
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
         qs = (

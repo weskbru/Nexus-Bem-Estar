@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
   Save,
+  Send,
+  Clock,
+  X,
   Info,
   CalendarDays,
+  ShieldAlert,
 } from 'lucide-react';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
-import { adminEventosApi } from '../../services/api';
+import { adminEventosApi, type ApiError } from '../../services/api';
+import EditorEmailConvite from '../../components/EditorEmailConvite';
 import {
   MAX_MESES_FUTURO,
   dataAposLimite,
@@ -163,6 +166,7 @@ interface FormState {
 }
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
+type ModoEnvioEvento = 'somente_criar' | 'imediato' | 'agendado';
 
 const TIPOS = [
   { value: 'massagem',   label: '💆  Massagem' },
@@ -185,94 +189,6 @@ function FieldError({ msg }: FieldErrorProps) {
   );
 }
 
-function minutosParaHora(totalMinutos: number): string {
-  const horas = Math.floor(totalMinutos / 60);
-  const minutos = totalMinutos % 60;
-  return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
-}
-
-const HORARIOS_OPCOES = Array.from({ length: 24 * 12 }, (_, index) => minutosParaHora(index * 5));
-
-type TimePickerSelectProps = Readonly<{
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-  placeholder?: string;
-}>;
-
-function TimePickerSelect({
-  value,
-  onChange,
-  error,
-  placeholder,
-}: TimePickerSelectProps) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, []);
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(prev => !prev)}
-        className={`w-full px-4 py-3 rounded-xl border text-sm text-left outline-none transition-all duration-200 bg-white shadow-sm
-          hover:border-emerald-300 hover:bg-slate-50
-          focus-visible:ring-4 focus-visible:ring-emerald-500/20 focus-visible:border-emerald-500
-          ${error ? 'border-red-400 bg-red-50/30' : 'border-slate-200'}`}
-      >
-        <span className={value ? 'text-slate-800 font-medium' : 'text-slate-400'}>{value || placeholder || 'Selecione...'}</span>
-      </button>
-
-      {open && (
-        <div className="absolute z-30 mt-2 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-100">
-          <div className="max-h-56 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-            {HORARIOS_OPCOES.map((horario) => {
-              const isSelected = value === horario;
-              return (
-                <button
-                  key={horario}
-                  type="button"
-                  onClick={() => {
-                    onChange(horario);
-                    setOpen(false);
-                  }}
-                  className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors mb-0.5 last:mb-0
-                    ${isSelected
-                      ? 'bg-emerald-600 text-white font-semibold shadow-sm'
-                      : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'
-                    }`}
-                >
-                  {horario}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const EMAIL_FORMATS = [
-  'header', 'bold', 'italic', 'underline', 'strike',
-  'list', 'bullet', 'align', 'link', 'image',
-];
 
 function validarCamposBasicos(form: FormState, e: FormErrors): void {
   if (!form.titulo.trim()) e.titulo = 'Nome do evento é obrigatório.';
@@ -328,56 +244,23 @@ function validarFormEvento(form: FormState): FormErrors {
   return e;
 }
 
-function inserirImagemNoEditor(file: File, quillRef: RefObject<ReactQuill | null>): void {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const editor = quillRef.current?.getEditor();
-    if (!editor || typeof reader.result !== 'string') return;
-    const range = editor.getSelection(true);
-    const index = range ? range.index : editor.getLength();
-    editor.insertEmbed(index, 'image', reader.result, 'user');
-    editor.setSelection(index + 1);
-  };
-  reader.readAsDataURL(file);
+const AGENDAMENTO_ENVIO_MINIMO_MINUTOS = 5;
+
+function hojeInputDate(): string {
+  const hoje = new Date();
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
 }
 
-function abrirSeletorImagem(quillRef: RefObject<ReactQuill | null>): void {
-  const input = document.createElement('input');
-  input.setAttribute('type', 'file');
-  input.setAttribute('accept', 'image/png,image/jpeg,image/jpg,image/webp');
-  input.click();
-
-  input.onchange = () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      globalThis.alert('A imagem deve ter no máximo 5MB.');
-      return;
-    }
-    inserirImagemNoEditor(file, quillRef);
-  };
+function montarDataHoraEnvio(data: string, hora: string): Date | null {
+  if (!data || !hora) return null;
+  const dataHora = new Date(`${data}T${hora}:00`);
+  return Number.isNaN(dataHora.getTime()) ? null : dataHora;
 }
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function NovoEvento() {
   const navigate = useNavigate();
-  const quillRef = useRef<ReactQuill | null>(null);
-
-  const emailModules = useMemo(() => ({
-    toolbar: {
-      container: [
-        [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        [{ align: [] }],
-        ['link', 'image', 'clean'],
-      ],
-      handlers: {
-        image: () => abrirSeletorImagem(quillRef),
-      },
-    },
-  }), []);
 
   const [form, setForm] = useState<FormState>({
     titulo: '', tipo: '', data: '',
@@ -388,6 +271,10 @@ export default function NovoEvento() {
   const [erros, setErros] = useState<FormErrors>({});
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [presencaBloqueio, setPresencaBloqueio] = useState<{ titulo: string } | null>(null);
+  const [modalAgendamentoAberto, setModalAgendamentoAberto] = useState(false);
+  const [dataEnvio, setDataEnvio] = useState(hojeInputDate());
+  const [horaEnvio, setHoraEnvio] = useState('08:00');
 
   function update(field: keyof FormState, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -402,12 +289,37 @@ export default function NovoEvento() {
     return Object.keys(e).length === 0;
   }
 
-  async function handleSalvar() {
+  function abrirModalAgendamento() {
     if (!validar()) return;
+    setErroGeral('');
+    setModalAgendamentoAberto(true);
+  }
+
+  function validarAgendamentoEnvio(): Date | null {
+    const dataHora = montarDataHoraEnvio(dataEnvio, horaEnvio);
+    if (!dataHora) {
+      setErroGeral('Informe a data e o horario do envio.');
+      return null;
+    }
+
+    const minimo = Date.now() + AGENDAMENTO_ENVIO_MINIMO_MINUTOS * 60 * 1000;
+    if (dataHora.getTime() < minimo) {
+      setErroGeral(`Agende o envio para pelo menos ${AGENDAMENTO_ENVIO_MINIMO_MINUTOS} minutos no futuro.`);
+      return null;
+    }
+
+    return dataHora;
+  }
+
+  async function handleSalvar(modoEnvio: ModoEnvioEvento) {
+    if (!validar()) return;
+    const dataHoraAgendada = modoEnvio === 'agendado' ? validarAgendamentoEnvio() : null;
+    if (modoEnvio === 'agendado' && !dataHoraAgendada) return;
+
     setSalvando(true);
     setErroGeral('');
     try {
-      await adminEventosApi.criar({
+      const evento = await adminEventosApi.criar({
         titulo:                 form.titulo.trim(),
         tipo:                   form.tipo,
         data:                   form.data,
@@ -420,9 +332,27 @@ export default function NovoEvento() {
         corpo_email:            form.corpo_email.trim(),
         status:                 'publicado',
       });
+
+      if (modoEnvio === 'imediato') {
+        await adminEventosApi.enviarEmails(evento.id, { modo_envio: 'imediato' });
+      }
+
+      if (modoEnvio === 'agendado' && dataHoraAgendada) {
+        await adminEventosApi.enviarEmails(evento.id, {
+          modo_envio: 'agendado',
+          agendado_para: dataHoraAgendada.toISOString(),
+        });
+      }
+
       navigate('/admin/agendamentos');
     } catch (err) {
-      setErroGeral(err instanceof Error ? err.message : 'Erro ao salvar evento.');
+      const apiErr = err as ApiError;
+      if (apiErr.data?.codigo === 'lista_presenca_pendente') {
+        setPresencaBloqueio({ titulo: apiErr.data.evento_titulo as string });
+        globalThis.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setErroGeral(err instanceof Error ? err.message : 'Erro ao salvar evento.');
+      }
     } finally {
       setSalvando(false);
     }
@@ -445,6 +375,24 @@ export default function NovoEvento() {
 
       {/* Card Principal */}
       <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100 p-6 md:p-10">
+
+        {presencaBloqueio && (
+          <div className="mb-8 flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm font-medium animate-in slide-in-from-top-2">
+            <ShieldAlert className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+            <div>
+              <p className="font-bold mb-1">Lista de presença pendente</p>
+              <p>
+                Confirme a presença dos participantes no evento <strong>"{presencaBloqueio.titulo}"</strong> antes de criar um novo evento.
+              </p>
+              <Link
+                to="/admin/agendamentos"
+                className="inline-block mt-2 text-xs font-bold text-amber-700 underline hover:text-amber-900"
+              >
+                Ir para Eventos e confirmar presença →
+              </Link>
+            </div>
+          </div>
+        )}
 
         {erroGeral && (
           <div className="mb-8 flex items-start gap-3 bg-red-50/50 border border-red-200 text-red-800 rounded-xl p-4 text-sm font-medium animate-in slide-in-from-top-2">
@@ -524,20 +472,43 @@ export default function NovoEvento() {
               <div className="lg:col-span-7 space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="block text-sm font-semibold text-slate-700 mb-2">
+                    <label htmlFor="hora_inicio" className="block text-sm font-semibold text-slate-700 mb-2">
                       Início <span className="text-red-500">*</span>
-                    </span>
-                    <TimePickerSelect value={form.hora_inicio} onChange={(v) => update('hora_inicio', v)} error={erros.hora_inicio} />
+                    </label>
+                    <input
+                      id="hora_inicio"
+                      type="time"
+                      value={form.hora_inicio}
+                      onChange={e => update('hora_inicio', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.hora_inicio ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                    />
                     <FieldError msg={erros.hora_inicio} />
                   </div>
                   <div>
-                    <span className="block text-sm font-semibold text-slate-700 mb-2">
+                    <label htmlFor="hora_fim" className="block text-sm font-semibold text-slate-700 mb-2">
                       Término <span className="text-red-500">*</span>
-                    </span>
-                    <TimePickerSelect value={form.hora_fim} onChange={(v) => update('hora_fim', v)} error={erros.hora_fim} />
+                    </label>
+                    <input
+                      id="hora_fim"
+                      type="time"
+                      value={form.hora_fim}
+                      onChange={e => update('hora_fim', e.target.value)}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm ${erros.hora_fim ? 'border-red-400 bg-red-50/30' : 'border-slate-200 hover:border-slate-300'}`}
+                    />
                     <FieldError msg={erros.hora_fim} />
                   </div>
                 </div>
+
+                {/* Aviso de bloqueio do almoço */}
+                {form.hora_inicio && form.hora_fim && form.hora_fim > form.hora_inicio &&
+                  form.hora_inicio < '13:30' && form.hora_fim > '12:00' && (
+                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 font-medium">
+                    <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <span>
+                      O intervalo de almoço <strong>(12:00 – 13:30)</strong> é bloqueado automaticamente. Sessões que coincidam com esse período serão descartadas ao salvar.
+                    </span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -590,22 +561,15 @@ export default function NovoEvento() {
               <label htmlFor="corpo_email" className="block text-sm font-semibold text-slate-700 mb-2">
                 Mensagem do E-mail Convite
               </label>
-              <input id="corpo_email" type="hidden" value={form.corpo_email} />
               <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm focus-within:ring-4 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all duration-200">
-                <ReactQuill
-                  ref={quillRef}
-                  className="email-editor border-none"
+                <EditorEmailConvite
                   value={form.corpo_email}
                   onChange={(value) => update('corpo_email', value)}
-                  placeholder="Escreva os detalhes que os convidados precisam saber..."
-                  theme="snow"
-                  modules={emailModules}
-                  formats={EMAIL_FORMATS}
                 />
               </div>
               <p className="mt-2 text-[13px] text-slate-500 flex items-center gap-1.5">
                 <Info className="w-3.5 h-3.5" />
-                Suporta formatação rica e imagens (PNG, JPG, WEBP até 5MB).
+                Suporta formatação rica e imagens (PNG, JPG, WEBP até 10 MB). Clique numa imagem inserida para redimensioná-la.
               </p>
             </div>
           </div>
@@ -620,13 +584,27 @@ export default function NovoEvento() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <button type="button" onClick={handleSalvar} disabled={salvando}
-              className="w-full sm:w-auto flex-1 py-3.5 px-6 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 disabled:hover:bg-emerald-600 text-white rounded-xl font-bold text-sm tracking-wide transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus:ring-4 focus:ring-emerald-500/30 outline-none">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <button type="button" onClick={() => handleSalvar('somente_criar')} disabled={salvando}
+              className="w-full py-3.5 px-5 bg-white hover:bg-slate-50 disabled:opacity-70 text-slate-700 border border-slate-200 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-sm focus:ring-4 focus:ring-slate-500/20 outline-none">
               {salvando
                 ? <><svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg> Processando...</>
-                : <><Save className="w-5 h-5" /> Salvar e Publicar Evento</>
+                : <><Save className="w-5 h-5" /> Criar evento</>
               }
+            </button>
+
+            <button type="button" onClick={() => handleSalvar('imediato')} disabled={salvando}
+              className="w-full py-3.5 px-5 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:hover:bg-blue-600 text-white rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus:ring-4 focus:ring-blue-500/30 outline-none">
+              {salvando
+                ? <><svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg> Processando...</>
+                : <><Send className="w-5 h-5" /> Criar e enviar agora</>
+              }
+            </button>
+
+            <button type="button" onClick={abrirModalAgendamento} disabled={salvando}
+              className="w-full py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 disabled:hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg focus:ring-4 focus:ring-emerald-500/30 outline-none">
+              <Clock className="w-5 h-5" />
+              Criar e agendar envio
             </button>
           </div>
 
@@ -637,8 +615,89 @@ export default function NovoEvento() {
             </p>
           </div>
         </div>
-        
+
       </div>
+
+      {modalAgendamentoAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Agendar envio do convite</h2>
+                <p className="mt-1 text-sm text-slate-500">Escolha quando o e-mail sera enviado.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalAgendamentoAberto(false)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              {erroGeral && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{erroGeral}</span>
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="data_envio_evento" className="block text-sm font-semibold text-slate-700 mb-2">
+                  Data do envio
+                </label>
+                <input
+                  id="data_envio_evento"
+                  type="date"
+                  min={hojeInputDate()}
+                  value={dataEnvio}
+                  onChange={(e) => setDataEnvio(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="hora_envio_evento" className="block text-sm font-semibold text-slate-700 mb-2">
+                  Horario do envio
+                </label>
+                <input
+                  id="hora_envio_evento"
+                  type="time"
+                  value={horaEnvio}
+                  onChange={(e) => setHoraEnvio(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                />
+              </div>
+
+              <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-sm text-emerald-800">
+                O evento sera criado e o convite ficara aguardando ate a data e horario definidos.
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 border-t border-slate-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setModalAgendamentoAberto(false)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSalvar('agendado')}
+                disabled={salvando}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-70 flex items-center justify-center gap-2"
+              >
+                <Clock className="w-4 h-4" />
+                {salvando ? 'Processando...' : 'Criar e agendar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

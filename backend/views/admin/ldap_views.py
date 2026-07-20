@@ -1,10 +1,13 @@
 from rest_framework import generics, status
+from django.conf import settings
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from ...models.models import Usuario
+from ...serializers.api_docs import ErroSerializer, LdapUsuarioSerializer, MensagemSerializer, PromoverAdminRequestSerializer
 from ...serializers.serializers import UsuarioSerializer
-from ...services.ldap_service import buscar_usuarios as ldap_buscar, MOCK_SENHA_PADRAO
+from ...services.ldap.service import buscar_usuarios as ldap_buscar
 from ..permissions import IsSuperAdmin
 
 
@@ -17,6 +20,11 @@ class LdapSearchView(APIView):
     """
     permission_classes = [IsSuperAdmin]
 
+    @extend_schema(
+        parameters=[OpenApiParameter(name='q', type=str, required=True, description='Termo de busca com ao menos 2 caracteres.')],
+        responses={200: LdapUsuarioSerializer(many=True), 400: ErroSerializer},
+        summary='Busca usuarios no LDAP',
+    )
     def get(self, request):
         q = request.query_params.get('q', '').strip()
         if len(q) < 2:
@@ -51,6 +59,11 @@ class PromoverAdminView(APIView):
     """
     permission_classes = [IsSuperAdmin]
 
+    @extend_schema(
+        request=PromoverAdminRequestSerializer,
+        responses={200: UsuarioSerializer, 201: UsuarioSerializer, 400: ErroSerializer},
+        summary='Promove usuario a administrador de eventos',
+    )
     def post(self, request):
         email        = request.data.get('email', '').strip().lower()
         nome         = request.data.get('nome', '').strip()
@@ -74,6 +87,9 @@ class PromoverAdminView(APIView):
                 'is_active': True,
             },
         )
+        if criado and getattr(settings, 'USUARIO_BUSCA_BACKEND', 'mock').lower() == 'mock':
+            usuario.set_password('aeb@2026')
+            usuario.save(update_fields=['password'])
 
         if not criado:
             usuario.is_admin = True
@@ -85,11 +101,6 @@ class PromoverAdminView(APIView):
             if departamento:
                 usuario.departamento = departamento
             usuario.save(update_fields=['is_admin', 'is_staff', 'nome', 'matricula', 'departamento'])
-
-        if criado:
-            # TODO (LDAP): Remover quando autenticação via AD estiver implementada.
-            usuario.set_password(MOCK_SENHA_PADRAO)
-            usuario.save(update_fields=['password'])
 
         return Response(
             UsuarioSerializer(usuario).data,
@@ -105,6 +116,11 @@ class RevogarAdminView(APIView):
     """
     permission_classes = [IsSuperAdmin]
 
+    @extend_schema(
+        request=None,
+        responses={200: MensagemSerializer, 400: ErroSerializer, 404: ErroSerializer},
+        summary='Revoga acesso administrativo de usuario',
+    )
     def post(self, request, usuario_id):
         try:
             usuario = Usuario.objects.get(id=usuario_id)

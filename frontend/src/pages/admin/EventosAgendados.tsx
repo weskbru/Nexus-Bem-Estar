@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Calendar, AlertTriangle, X, CheckCircle2 } from 'lucide-react';
-import { adminEventosApi, type EventoDTO } from '../../services/api';
+import { Plus, Calendar, AlertTriangle, X, CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
+import { adminEventosApi, type EventoDTO, type ApiError } from '../../services/api';
 import {
   EventCard,
   EventActionsModal,
@@ -11,8 +11,10 @@ import {
 import {
   ConfirmDeleteModal,
   ConfirmActionModal,
+  FilaHistoricoModal,
   ListaPresencaModal,
   RegistrarParticipanteModal,
+  ErroPresencaModal,
 } from './EventosAgendadosModals';
 
 export default function AdminEventos() {
@@ -25,10 +27,13 @@ export default function AdminEventos() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [filtro, setFiltro] = useState<'todos' | 'ATIVO' | 'CANCELADO' | 'ENCERRADO'>('todos');
   const [registrarTarget, setRegistrarTarget] = useState<EventoDTO | null>(null);
+  const [registrarLoadingId, setRegistrarLoadingId] = useState<number | null>(null);
   const [listaPresencaId, setListaPresencaId] = useState<number | null>(null);
+  const [filaHistoricoId, setFilaHistoricoId] = useState<number | null>(null);
   const [actionTarget, setActionTarget] = useState<EventoDTO | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ evento: EventoDTO; tipo: 'emails' | 'cancelar' } | null>(null);
   const [toast, setToast] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null);
+  const [erroPresenca, setErroPresenca] = useState<{ msg: string; eventoId: number; codigo?: string } | null>(null);
 
   useEffect(() => { carregarEventos(); }, []);
 
@@ -38,11 +43,34 @@ export default function AdminEventos() {
     try {
       const lista = await adminEventosApi.listar();
       setEventos(lista);
-      setRegistrarTarget(prev => prev ? (lista.find(e => e.id === prev.id) ?? null) : null);
     } catch {
       setErro('Não foi possível carregar os eventos. Tente novamente.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function abrirRegistroManual(evento: EventoDTO) {
+    setActionTarget(null);
+    setRegistrarLoadingId(evento.id);
+    try {
+      const detalhe = await adminEventosApi.obter(evento.id);
+      setRegistrarTarget(detalhe);
+    } catch (err) {
+      mostrarToast('erro', err instanceof Error ? err.message : 'Nao foi possivel carregar os horarios do evento.');
+    } finally {
+      setRegistrarLoadingId(null);
+    }
+  }
+
+  async function atualizarAposRegistroManual(eventoId: number) {
+    await carregarEventos();
+    try {
+      const detalhe = await adminEventosApi.obter(eventoId);
+      setRegistrarTarget(detalhe);
+    } catch {
+      setRegistrarTarget(null);
+      mostrarToast('erro', 'Inscricao criada, mas nao foi possivel recarregar os horarios do evento.');
     }
   }
 
@@ -68,8 +96,15 @@ export default function AdminEventos() {
     try {
       await adminEventosApi.enviarEmails(evento.id);
       mostrarToast('sucesso', 'E-mail enviado com sucesso para a lista de distribuição.');
+      await carregarEventos();
     } catch (err) {
-      mostrarToast('erro', err instanceof Error ? err.message : 'Erro ao enviar e-mails.');
+      const apiErr = err as ApiError;
+      if (apiErr.data?.codigo === 'lista_presenca_pendente') {
+        setConfirmAction(null);
+        setListaPresencaId(apiErr.data.evento_id as number);
+      } else {
+        mostrarToast('erro', err instanceof Error ? err.message : 'Erro ao enviar e-mails.');
+      }
     } finally {
       setEmailLoadingId(null);
     }
@@ -84,6 +119,16 @@ export default function AdminEventos() {
         `${import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api'}/admin/eventos/${deleteTarget.id}/`,
         { method: 'DELETE', headers: { Authorization: `Bearer ${token ?? ''}` } }
       );
+      if (res.status === 409) {
+        const data = await res.json();
+        setDeleteTarget(null);
+        setErroPresenca({
+          msg: data.erro ?? 'Não foi possível excluir o evento.',
+          eventoId: data.evento_id,
+          codigo: data.codigo,
+        });
+        return;
+      }
       if (!res.ok) throw new Error('Falha ao deletar o evento');
       setEventos(prev => prev.filter(e => e.id !== deleteTarget.id));
       setDeleteTarget(null);
@@ -175,6 +220,31 @@ export default function AdminEventos() {
         </Link>
       </div>
 
+      {/* Banner: presença pendente */}
+      {eventos.some(e => e.presenca_pendente) && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+          <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-amber-800 mb-1">Lista de presença pendente</p>
+            <p className="text-xs text-amber-700 mb-3">
+              Confirme a presença dos participantes nos eventos abaixo antes de criar ou disparar um novo evento.
+            </p>
+            <div className="flex flex-col gap-2">
+              {eventos.filter(e => e.presenca_pendente).map(e => (
+                <button
+                  key={e.id}
+                  onClick={() => setListaPresencaId(e.id)}
+                  className="flex items-center gap-2 w-fit px-3 py-1.5 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors group"
+                >
+                  <span className="text-xs font-bold text-amber-900">{e.titulo}</span>
+                  <span className="text-xs text-amber-600 group-hover:text-amber-800 transition-colors">→ Confirmar presença</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filtros Estilo "Chips" */}
       <div className="flex gap-2.5 mb-8 flex-wrap">
         {FILTROS.map(f => {
@@ -226,6 +296,15 @@ export default function AdminEventos() {
       )}
 
       {/* Modais */}
+      {registrarLoadingId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl px-6 py-5 flex items-center gap-3 text-sm font-bold text-slate-700">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+            Carregando horarios do evento...
+          </div>
+        </div>
+      )}
+
       {actionTarget && (
         <EventActionsModal
           evento={actionTarget}
@@ -234,8 +313,9 @@ export default function AdminEventos() {
           onCancelar={() => { setConfirmAction({ evento: actionTarget, tipo: 'cancelar' }); setActionTarget(null); }}
           onDelete={() => { setDeleteTarget(actionTarget); setActionTarget(null); }}
           onEnviarEmails={() => { setConfirmAction({ evento: actionTarget, tipo: 'emails' }); setActionTarget(null); }}
-          onRegistrar={() => { setRegistrarTarget(actionTarget); setActionTarget(null); }}
+          onRegistrar={() => abrirRegistroManual(actionTarget)}
           onListaPresenca={() => { setListaPresencaId(actionTarget.id); setActionTarget(null); }}
+          onFilaHistorico={() => { setFilaHistoricoId(actionTarget.id); setActionTarget(null); }}
           onClose={() => setActionTarget(null)}
         />
       )}
@@ -274,14 +354,37 @@ export default function AdminEventos() {
         <RegistrarParticipanteModal
           evento={registrarTarget}
           onClose={() => setRegistrarTarget(null)}
-          onSuccess={carregarEventos}
+          onSuccess={() => atualizarAposRegistroManual(registrarTarget.id)}
         />
       )}
 
       {listaPresencaId !== null && (
         <ListaPresencaModal
           eventoId={listaPresencaId}
-          onClose={() => setListaPresencaId(null)}
+          onClose={() => { setListaPresencaId(null); carregarEventos(); }}
+        />
+      )}
+
+      {filaHistoricoId !== null && (
+        <FilaHistoricoModal
+          eventoId={filaHistoricoId}
+          onClose={() => setFilaHistoricoId(null)}
+        />
+      )}
+
+      {erroPresenca && (
+        <ErroPresencaModal
+          mensagem={erroPresenca.msg}
+          codigo={erroPresenca.codigo}
+          onClose={() => setErroPresenca(null)}
+          onVerPresenca={
+            erroPresenca.codigo === 'lista_presenca_pendente'
+              ? () => {
+                  setListaPresencaId(erroPresenca.eventoId);
+                  setErroPresenca(null);
+                }
+              : undefined
+          }
         />
       )}
     </div>

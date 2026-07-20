@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Calendar, Clock, CheckCircle2, XCircle, AlertCircle, User, X, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { parseFetchError } from '../services/api';
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api';
+const CANCELAMENTO_MINUTOS_ANTECEDENCIA = 30;
 
 export interface AgendamentoDetalhes {
   id: number;
@@ -28,11 +29,12 @@ interface ModalDetalhesAgendamentoProps {
   onCancelado: (id: number) => void;
   onAlterarHorario?: (agendamento: AgendamentoDetalhes) => void;
   modo?: 'detalhes' | 'confirmacao' | 'sucesso';
-  onConfirmarReserva?: () => void;
+  onConfirmarReserva?: (otp: string) => void;
   confirmandoReserva?: boolean;
   textoConfirmar?: string;
   textoSucesso?: string;
   descricaoSucesso?: string;
+  horarioId?: number;
 }
 
 export default function ModalDetalhesAgendamento({
@@ -46,6 +48,7 @@ export default function ModalDetalhesAgendamento({
   textoConfirmar = 'Confirmar Agendamento',
   textoSucesso = 'Reserva Confirmada!',
   descricaoSucesso = 'Seu horário foi reservado com sucesso.',
+  horarioId,
 }: Readonly<ModalDetalhesAgendamentoProps>) {
   const { token } = useAuth();
   const cfg = statusConfig[ag.status] ?? statusConfig.pendente;
@@ -53,11 +56,121 @@ export default function ModalDetalhesAgendamento({
   const [confirmando, setConfirmando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [erro, setErro] = useState('');
-  
+
+  // Etapa OTP dentro do modo confirmacao
+  const [etapa, setEtapa] = useState<'confirmar' | 'otp'>('confirmar');
+  const [enviandoOtp, setEnviandoOtp] = useState(false);
+  const [otp, setOtp] = useState(['', '', '', '']);
+  const [segundosRestantes, setSegundosRestantes] = useState(0);
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Reset etapa quando modo muda (ex: ao reabrir o modal)
+  useEffect(() => {
+    if (modo !== 'confirmacao') {
+      setEtapa('confirmar');
+      setOtp(['', '', '', '']);
+      setErro('');
+    }
+  }, [modo]);
+
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  function iniciarContagem(segundos = 300) {
+    setSegundosRestantes(segundos);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setSegundosRestantes(s => {
+        if (s <= 1) { clearInterval(timerRef.current!); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+  }
+
+  function formatarTempo(s: number) {
+    const m = Math.floor(s / 60);
+    const seg = s % 60;
+    return `${m}:${String(seg).padStart(2, '0')}`;
+  }
+
+  function dataHoraInicioAgendamento() {
+    const horaInicio = ag.horario.hora_inicio.length === 5 ? `${ag.horario.hora_inicio}:00` : ag.horario.hora_inicio;
+    return new Date(`${ag.evento_data}T${horaInicio}`);
+  }
+
+  function limiteCancelamento() {
+    return new Date(dataHoraInicioAgendamento().getTime() - CANCELAMENTO_MINUTOS_ANTECEDENCIA * 60 * 1000);
+  }
+
+  const cancelamentoBloqueadoPorHorario = (
+    modo === 'detalhes' &&
+    ag.status === 'confirmado' &&
+    Date.now() > limiteCancelamento().getTime()
+  );
+  const limiteCancelamentoFormatado = limiteCancelamento().toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  async function handleSolicitarOtp(reenviar = false) {
+    if (!horarioId) return;
+    setEnviandoOtp(true);
+    setErro('');
+    try {
+      const res = await fetch(`${API}/colaborador/horarios/${horarioId}/solicitar-otp/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reenviar }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro ?? 'Erro ao enviar código.');
+      setOtp(['', '', '', '']);
+      setEtapa('otp');
+      iniciarContagem(data.segundos_restantes ?? 300);
+      setTimeout(() => inputsRef.current[0]?.focus(), 100);
+    } catch (err) {
+      setErro(parseFetchError(err, 'Não foi possível enviar o código. Tente novamente.'));
+    } finally {
+      setEnviandoOtp(false);
+    }
+  }
+
+  function handleOtpInput(index: number, valor: string) {
+    const digito = valor.replace(/\D/g, '').slice(-1);
+    const novo = [...otp];
+    novo[index] = digito;
+    setOtp(novo);
+    setErro('');
+    if (digito && index < 3) inputsRef.current[index + 1]?.focus();
+  }
+
+  function handleOtpKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      inputsRef.current[index - 1]?.focus();
+    }
+  }
+
+  function handleConfirmarComOtp() {
+    const codigo = otp.join('');
+    if (codigo.length < 4) { setErro('Digite os 4 dígitos do código.'); return; }
+    onConfirmarReserva?.(codigo);
+  }
+
   const emModoSucesso = modo === 'sucesso';
   const emModoConfirmacao = modo === 'confirmacao';
 
   async function handleCancelar() {
+    if (cancelamentoBloqueadoPorHorario) {
+      setErro('Cancelamento permitido apenas ate 30 minutos antes do horario agendado.');
+      setConfirmando(false);
+      return;
+    }
+
     setCancelando(true);
     setErro('');
     try {
@@ -81,6 +194,12 @@ export default function ModalDetalhesAgendamento({
     nutricao: '🥗', pilates: '🤸', acupuntura: '🪡',
   };
 
+  function tituloHeader() {
+    if (emModoConfirmacao && etapa === 'otp') return 'Confirmar com Código';
+    if (emModoConfirmacao) return 'Confirmar Reserva';
+    return 'Detalhes do Agendamento';
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm transition-all">
       <button
@@ -89,10 +208,10 @@ export default function ModalDetalhesAgendamento({
         onClick={onClose}
         className="absolute inset-0 cursor-default"
       />
-      
+
       <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        
-        {/* Header (Muda se for Sucesso) */}
+
+        {/* Header */}
         {emModoSucesso ? (
           <div className="bg-emerald-500 pt-8 pb-6 px-6 text-center text-white relative">
             <button onClick={onClose} className="absolute top-4 right-4 text-emerald-100 hover:text-white hover:bg-emerald-600 p-1.5 rounded-full transition-colors">
@@ -106,9 +225,7 @@ export default function ModalDetalhesAgendamento({
           </div>
         ) : (
           <div className="flex items-center justify-between p-5 sm:p-6 border-b border-slate-100 bg-slate-50/50">
-            <h2 className="font-extrabold text-slate-900 text-lg tracking-tight">
-              {emModoConfirmacao ? 'Confirmar Reserva' : 'Detalhes do Agendamento'}
-            </h2>
+            <h2 className="font-extrabold text-slate-900 text-lg tracking-tight">{tituloHeader()}</h2>
             <button onClick={onClose} className="p-2 -mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
               <X className="w-5 h-5" />
             </button>
@@ -116,7 +233,7 @@ export default function ModalDetalhesAgendamento({
         )}
 
         <div className="p-6 space-y-6">
-          
+
           {/* Título do Evento e Status */}
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-3xl shadow-sm shrink-0">
@@ -198,25 +315,91 @@ export default function ModalDetalhesAgendamento({
             </div>
           )}
 
+          {cancelamentoBloqueadoPorHorario && (
+            <div className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 px-4 py-3 rounded-xl border border-amber-200">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <p>
+                O prazo para cancelamento encerrou em {limiteCancelamentoFormatado}. Cancelamentos sao permitidos apenas ate 30 minutos antes do horario agendado.
+              </p>
+            </div>
+          )}
+
           {/* Botões de Ação Dinâmicos */}
           <div className="pt-2">
-            {emModoConfirmacao && onConfirmarReserva && (
+
+            {/* Etapa 1: Confirmar → envia o OTP */}
+            {emModoConfirmacao && onConfirmarReserva && etapa === 'confirmar' && (
               <div className="flex gap-3">
                 <button
                   onClick={onClose}
-                  disabled={confirmandoReserva}
+                  disabled={enviandoOtp}
                   className="flex-1 py-3 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-all disabled:opacity-50"
                 >
                   Voltar
                 </button>
                 <button
-                  onClick={onConfirmarReserva}
-                  disabled={confirmandoReserva}
+                  onClick={() => handleSolicitarOtp(false)}
+                  disabled={enviandoOtp}
                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 shadow-sm hover:shadow-md hover:shadow-blue-500/20 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                 >
-                  {confirmandoReserva && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {confirmandoReserva ? 'Confirmando...' : textoConfirmar}
+                  {enviandoOtp
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando código...</>
+                    : textoConfirmar}
                 </button>
+              </div>
+            )}
+
+            {/* Etapa 2: Digitar o OTP */}
+            {emModoConfirmacao && onConfirmarReserva && etapa === 'otp' && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-800 font-medium text-center">
+                  Enviamos um código de <strong>4 dígitos</strong> para o seu e-mail corporativo.<br />
+                  Digite-o abaixo para confirmar a reserva.
+                  {segundosRestantes > 0 && (
+                    <span className="block mt-1 text-blue-600 font-bold">
+                      Expira em {formatarTempo(segundosRestantes)}
+                    </span>
+                  )}
+                  {segundosRestantes === 0 && (
+                    <span className="block mt-1 text-red-600 font-bold">Código expirado.</span>
+                  )}
+                </div>
+
+                {/* Inputs OTP */}
+                <div className="flex justify-center gap-3">
+                  {otp.map((digito, i) => (
+                    <input
+                      key={i}
+                      ref={el => { inputsRef.current[i] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digito}
+                      onChange={e => handleOtpInput(i, e.target.value)}
+                      onKeyDown={e => handleOtpKeyDown(i, e)}
+                      className="w-14 h-14 text-center text-2xl font-bold border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all bg-slate-50 focus:bg-white text-slate-900"
+                    />
+                  ))}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleSolicitarOtp(true)}
+                    disabled={confirmandoReserva || enviandoOtp}
+                    className="flex-1 py-3 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 rounded-xl font-bold text-sm transition-all disabled:opacity-50"
+                  >
+                    {enviandoOtp ? 'Reenviando...' : 'Reenviar código'}
+                  </button>
+                  <button
+                    onClick={handleConfirmarComOtp}
+                    disabled={confirmandoReserva || otp.join('').length < 4 || segundosRestantes === 0}
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 shadow-sm hover:shadow-md hover:shadow-blue-500/20 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {confirmandoReserva
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Confirmando...</>
+                      : 'Confirmar'}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -240,9 +423,10 @@ export default function ModalDetalhesAgendamento({
                   </button>
                   <button
                     onClick={() => setConfirmando(true)}
-                    className="flex-1 py-3 bg-white hover:bg-red-50 text-red-600 border-2 border-red-100 hover:border-red-200 rounded-xl font-bold text-sm transition-all"
+                    disabled={cancelamentoBloqueadoPorHorario}
+                    className="flex-1 py-3 bg-white hover:bg-red-50 text-red-600 border-2 border-red-100 hover:border-red-200 rounded-xl font-bold text-sm transition-all disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-red-100"
                   >
-                    Cancelar Agendamento
+                    {cancelamentoBloqueadoPorHorario ? 'Cancelamento Indisponivel' : 'Cancelar Agendamento'}
                   </button>
                 </div>
               </div>

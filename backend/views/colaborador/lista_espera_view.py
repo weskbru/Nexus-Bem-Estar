@@ -1,17 +1,47 @@
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from ...models.models import Agendamento, Horario, ListaEspera
+from ...serializers.api_docs import ErroSerializer, ListaEsperaResponseSerializer, MensagemSerializer, MinhaListaEsperaSerializer
 
 
 class EntrarListaEsperaView(APIView):
     """
     POST /api/colaborador/horarios/<horario_id>/lista-espera/
     Insere o colaborador autenticado na lista de espera do horário lotado.
+
+    DELETE /api/colaborador/horarios/<horario_id>/lista-espera/
+    Remove o colaborador da fila de espera do horário.
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=None,
+        responses={200: MensagemSerializer, 404: ErroSerializer},
+        summary='Sai da lista de espera de um horario',
+    )
+    def delete(self, request, horario_id):
+        atualizado = ListaEspera.objects.filter(
+            usuario=request.user,
+            horario_id=horario_id,
+            status__in=['aguardando', 'notificado'],
+        ).update(status='expirado')
+
+        if not atualizado:
+            return Response(
+                {'erro': 'Você não está na fila deste horário.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response({'mensagem': 'Você saiu da fila de espera com sucesso.'})
+
+    @extend_schema(
+        request=None,
+        responses={200: ListaEsperaResponseSerializer, 201: ListaEsperaResponseSerializer, 400: ErroSerializer, 404: ErroSerializer, 409: ErroSerializer},
+        summary='Entra na lista de espera de um horario',
+    )
     def post(self, request, horario_id):
         try:
             horario = Horario.objects.select_related('evento').get(
@@ -39,17 +69,27 @@ class EntrarListaEsperaView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        if ListaEspera.objects.filter(horario=horario, usuario=request.user).exists():
-            entrada = ListaEspera.objects.get(horario=horario, usuario=request.user)
+        entrada_existente = ListaEspera.objects.filter(
+            horario=horario, usuario=request.user
+        ).first()
+        if entrada_existente:
             total = ListaEspera.objects.filter(
                 horario=horario, status__in=['aguardando', 'notificado']
             ).count()
             return Response({
-                'posicao':       entrada.posicao,
+                'posicao':       entrada_existente.posicao,
                 'total_na_fila': total,
-                'status':        entrada.status,
+                'status':        entrada_existente.status,
                 'ja_inscrito':   True,
             })
+
+        # Cancela qualquer posição ativa do usuário em outro slot deste mesmo evento.
+        # Garante que o usuário esteja em apenas uma fila por vez.
+        ListaEspera.objects.filter(
+            usuario=request.user,
+            horario__evento=horario.evento,
+            status__in=['aguardando', 'notificado'],
+        ).exclude(horario=horario).update(status='expirado')
 
         proxima_posicao = ListaEspera.objects.filter(horario=horario).count() + 1
         entrada = ListaEspera.objects.create(
@@ -77,6 +117,11 @@ class MinhaListaEsperaView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        parameters=[OpenApiParameter(name='evento_id', type=int, required=False)],
+        responses={200: MinhaListaEsperaSerializer(many=True)},
+        summary='Lista minhas entradas ativas na lista de espera',
+    )
     def get(self, request):
         evento_id = request.query_params.get('evento_id')
         qs = ListaEspera.objects.filter(

@@ -1,0 +1,15 @@
+[run]
+relative_files = True
+source = backend
+omit =
+    backend/migrations/*
+    backend/tests/*
+    backend/core/asgi.py
+    backend/core/wsgi.py
+
+[report]
+skip_empty = True
+show_missing = True
+
+[xml]
+output = coverage.xml
